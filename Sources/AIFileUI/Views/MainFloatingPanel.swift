@@ -67,7 +67,7 @@ public struct MainFloatingPanel: View {
             DiffPreviewView(
                 plan: $viewModel.currentPlan,
                 onConfirm: { viewModel.confirmExecution() },
-                onCancel: { viewModel.isShowingDiffPreview = false }
+                onCancel: { viewModel.cancelCurrentExecution() }
             )
         }
         .sheet(isPresented: $viewModel.isShowingConsentModal) {
@@ -336,7 +336,7 @@ public struct MainFloatingPanel: View {
                 HStack(spacing: 6) {
                     ForEach(viewModel.smartSuggestions) { suggestion in
                         Button(action: {
-                            viewModel.submitInstruction(suggestion.promptText)
+                            viewModel.applySuggestion(suggestion.promptText)
                         }) {
                             HStack(spacing: 4) {
                                 Image(systemName: suggestion.icon)
@@ -369,37 +369,80 @@ public struct MainFloatingPanel: View {
                     .padding(.horizontal, 14)
             }
             
-            HStack(spacing: 8) {
-                TextField("输入自然语言指令（如：统一改为800x600、转为PDF、批量重命名）...", text: $viewModel.inputText)
+            VStack(spacing: 4) {
+                // 双行自然语言输入卡片
+                HStack(alignment: .top, spacing: 8) {
+                    TextField(
+                        "输入自然语言指令（如：把这里的ppt转成pdf、统一改为1920x1080、批量重命名）...",
+                        text: $viewModel.inputText,
+                        axis: .vertical
+                    )
+                    .lineLimit(2...3)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
-                    .padding(8)
-                    .background(Color(nsColor: .textBackgroundColor).opacity(0.95))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.primary.opacity(0.15), lineWidth: 1)
-                    )
-                    .cornerRadius(6)
+                    .frame(minHeight: 38, alignment: .topLeading)
                     .onSubmit {
                         viewModel.submitInstruction()
                     }
+                    
+                    VStack(spacing: 6) {
+                        if viewModel.isThinking {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                                .frame(width: 26, height: 26)
+                        } else {
+                            Button(action: { viewModel.submitInstruction() }) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                            .keyboardShortcut(.defaultAction)
+                        }
+                    }
+                }
+                .padding(8)
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.95))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.primary.opacity(0.15), lineWidth: 1)
+                )
+                .cornerRadius(6)
                 
-                if viewModel.isThinking {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 28, height: 28)
-                } else {
-                    Button(action: { viewModel.submitInstruction() }) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.accentColor)
+                // 输入框下方状态行：左侧提示，右侧显示当前模型服务名称与跳转快捷入口
+                HStack(spacing: 6) {
+                    Text("回车发送指令 • 随时 ⌘Z 撤销")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary.opacity(0.8))
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.currentPage = .modelSettings
+                        }
+                    }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "cpu")
+                                .font(.system(size: 9))
+                            Text(viewModel.activeModelDisplayName)
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 7))
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.accentColor.opacity(0.1))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(4)
                     }
                     .buttonStyle(.plain)
-                    .keyboardShortcut(.defaultAction)
+                    .help("点击切换或配置当前 AI 模型服务")
                 }
+                .padding(.horizontal, 2)
             }
             .padding(.horizontal, 14)
-            .padding(.bottom, 12)
+            .padding(.bottom, 10)
         }
     }
     

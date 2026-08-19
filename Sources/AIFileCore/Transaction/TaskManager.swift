@@ -73,6 +73,15 @@ public actor TaskManager {
         try? FileManager.default.removeItem(at: fileURL)
     }
     
+    /// 取消/放弃指定进行中的任务
+    public func cancelTask(id: UUID) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[index].status = .failed
+        tasks[index].completedAt = Date()
+        tasks[index].errorMessage = "用户取消了执行确认"
+        persistTask(tasks[index])
+    }
+    
     /// 获取所有任务
     public var allTasks: [TaskExecutionRecord] {
         return tasks
@@ -120,7 +129,12 @@ private func loadPersistedTasks(from directory: URL) -> [TaskExecutionRecord] {
     for file in files where file.hasSuffix(".json") {
         let fileURL = directory.appendingPathComponent(file)
         if let data = try? Data(contentsOf: fileURL),
-           let task = try? decoder.decode(TaskExecutionRecord.self, from: data) {
+           var task = try? decoder.decode(TaskExecutionRecord.self, from: data) {
+            // 如果冷启动发现之前是 inProgress（由于退出/崩溃未完成），自动收敛为已中断
+            if task.status == .inProgress {
+                task.status = .failed
+                task.errorMessage = "任务未确认或意外中断"
+            }
             loaded.append(task)
         }
     }

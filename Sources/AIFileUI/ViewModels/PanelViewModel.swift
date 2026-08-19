@@ -252,6 +252,40 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             }
         }
     }
+    public func cancelCurrentExecution() {
+        isShowingDiffPreview = false
+        if let task = activeTask {
+            Task {
+                await TaskManager.shared.cancelTask(id: task.id)
+            }
+        }
+        currentPlan = nil
+        activeTask = nil
+        statusMessage = "已取消执行"
+    }
+    
+    /// 点击推荐胶囊：填充指令文本，避免直接静默提交
+    public func applySuggestion(_ text: String) {
+        if text == "__PICK_FILES__" {
+            pickFilesManually()
+        } else if text == "__REFRESH_FINDER__" {
+            fetchFromFinder()
+        } else {
+            self.inputText = text
+        }
+    }
+    
+    /// 当前启用的模型服务名称展示
+    public var activeModelDisplayName: String {
+        let s = ModelSettingsManager.shared.settings
+        if s.providerId.starts(with: "cli_") {
+            let toolName = s.providerId.replacingOccurrences(of: "cli_", with: "")
+            return "\(toolName) · \(s.modelName)"
+        } else if !s.providerId.isEmpty {
+            return "\(s.providerId) · \(s.modelName)"
+        }
+        return "本地内置"
+    }
     
     /// 撤销上一次事务操作
     public func undoLastOperation() {
