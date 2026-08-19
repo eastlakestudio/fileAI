@@ -1,22 +1,24 @@
-# 格式兼容性严格校验与防系统弹窗总结 (Walkthrough)
+# 再次执行任务目标文件精准恢复总结 (Walkthrough)
 
-## 1. 核心改进与问题根因
+## 1. 修复的 BUG 根因与改进
 
-### 1.1 为什么会弹出「Choose Application - Where is Microsoft Excel?」窗口？
-- **根因**：macOS 的 AppleScript 引擎在编译或执行 `tell application "Microsoft Excel"` 时，如果当前系统**未安装 Microsoft Excel**，macOS 会自动阻断进程并弹出一个系统级的 Application Picker 窗口，向用户询问“Excel 在哪里？”；
-- **彻底解决**：在调用任何 AppleScript（包括 Excel、Numbers、Keynote、PowerPoint）前，系统先通过 `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` 静默探测是否已安装该软件，未安装时**直接优雅跳过**或切换备选引擎（如 Numbers / LibreOffice / 文本排版），**100% 杜绝触发 macOS 系统级弹窗**！
+### 1.1 问题根因
+- 之前在任务看板中点击「再次执行」时，仅简单将 `task.prompt` 回填到输入框，随后调用 `submitInstruction`；
+- 该调用默认读取了当前的 `self.fileItems`（即 Finder 最新选中的文件），**丢失了原任务关联的目标文件集合**，导致再次执行时误操作了当前选中的其他文件。
 
-### 1.2 「不支持就不能选这个 Skill，还应该给正确反馈」
-- **智能推荐引擎（SmartSkillSuggester）增强**：
-  - 选中 Excel/表格 (`.xlsx`/`.xls`/`.numbers`/`.csv`) ➔ 智能推荐 **`📊 电子表格转为 PDF`**；
-  - 选中 PPT/Keynote (`.pptx`/`.ppt`/`.key`) ➔ 智能推荐 **`📽️ 演示文稿转为 PDF`**；
-  - 选中 PDF ➔ 智能推荐 **`📑 合并 PDF`** / **`✂️ 拆分 PDF`** / **`📐 重构为 A3 横版 PDF`**；
-- **全 Skill 增加格式严格校验与支持格式清单提示**：
-  - 当选中的文件不属于该 Skill 的支持范围时，严禁输出无意义的“将 0 个文件转换”，而是立即抛出清晰指引：
-    `"⚠️ 当前选中的文件 (.zip) 无法转为 PDF。转 PDF 支持：Excel 表格 (.xlsx/.xls/.csv)、Word (.docx)、PPT (.pptx)、图片 (.png/.jpg) 等。"`
+### 1.2 解决方案
+1. **任务持久化模型增强 (`TaskExecutionRecord`)**：
+   - 增加 `targetFilePaths: [String]` 字段，在任务创建和规划时持久化绑定当时的目标文件路径；
+2. **专属 `rerunTask` 流程 (`PanelViewModel`)**：
+   - 提取原任务的 `targetFilePaths`，自动校验文件在本地磁盘的存在性；
+   - 自动调用 `setTargetURLs(...)` 将面板上下文精准恢复为**原任务的目标文件**；
+   - 回填 prompt 并立即针对原文件重新规划执行；
+3. **任务看板交互升级 (`TaskBoardView`)**：
+   - 「再次执行」按钮传递完整的 `TaskExecutionRecord` 实体，确保文件上下文与指令的一致性。
 
 ---
 
 ## 2. 自动化测试
 
-- 新增 `SkillValidationFeedbackTests` 与 `SmartSkillSuggesterTests` 测试，全量 **46 个单元测试 100% 全部通过**。
+- 更新 `TaskBoardRerunTests`，通过模拟不同的当前文件与历史任务目标文件，验证再次执行时是否 100% 恢复了历史任务的目标文件。
+- 全量 **46 个单元测试全部通过（100% Pass）**。

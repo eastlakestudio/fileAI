@@ -1,49 +1,45 @@
-# Skill 文件兼容性严格校验与精准反馈实施方案 (Implementation Plan)
+# 再次执行任务目标文件精准重绑实施方案 (Implementation Plan)
 
-## 1. 现状与用户诉求
+## 1. 问题描述与根因分析
 
 ### 1.1 用户反馈
-> *"不支持就不能选这个 skill ，然后还应该给正确反馈啊"*
+> *"有个BUG，再次执行任务时，没有针对目标中的文件/文件夹，而是错误地使用了当前识别的选择文件内容"*
 
-### 1.2 现状问题
-1. **未校验文件类型直接输出「将 0 个文件转换」**：
-   - 之前当用户选中的文件格式与 Skill 不匹配时（例如选中了未知文件却执行转 PDF/改图片尺寸），Skill 返回了 `actions: []`，并生成了冷冰冰的文案 `"将 0 个文件转换为 PDF"`；
-2. **缺乏明确的不支持原因与指引**：
-   - 用户无法知道为什么没执行、哪些文件不支持、以及该 Skill 到底支持哪些格式；
-3. **推荐胶囊（Smart Suggestions）未覆盖表格与演示文稿**：
-   - 推荐引擎此前缺少对 Excel (`.xlsx`/`.xls`)、PPT (`.pptx`) 的感知，导致选中表格时未优先推荐表格类 Skill。
+### 1.2 根因分析
+- 之前在 `TaskBoardView` 中点击「再次执行」时，仅将 `task.prompt` 回填到了输入框并触发 `submitInstruction`；
+- 此时 `PanelViewModel` 直接使用了当前实时的 `self.fileItems`（即此时 Finder 最新选中的文件，或者空白文件），**丢失了原任务关联的目标文件集合**；
+- 导致再次执行时操作了错误的文件对象，甚至因为当前选中的文件类型不符而报错。
 
 ---
 
-## 2. 改进方案
+## 2. 解决方案设计
 
-### 2.1 智能推荐引擎强化 (`SmartSkillSuggester`)
-- 扩展识别分类：
-  - 电子表格：`.xlsx`, `.xls`, `.numbers`, `.csv` ➔ 推荐 **`📊 电子表格转为 PDF`**
-  - 演示文稿：`.ppt`, `.pptx`, `.key` ➔ 推荐 **`📽️ 演示文稿转为 PDF`**
-  - 文档类：`.docx`, `.doc`, `.pages`, `.txt`, `.md` ➔ 推荐 **`📄 文档批量转 PDF`**
-  - 图片类：`.png`, `.jpg`, `.heic` ➔ 推荐尺寸与格式转换
-  - PDF 类：`.pdf` ➔ 推荐合并与拆分
+### 2.1 任务模型记录目标文件路径 (`TaskExecutionRecord`)
+- 在 `TaskExecutionRecord` 中增加字段：
+  ```swift
+  public var targetFilePaths: [String] = []
+  ```
+- 在 `TaskManager.createTask` 以及 `updateTaskPlan` 时，完整记录任务涉及的所有原始输入文件路径与 Plan 中的 `sourceURL` 路径。
 
-### 2.2 各 Skill 增加格式不匹配友好异常抛出
-- 当 `items` 非空但 `targetItems` 为空时，**严禁返回 0 项的假计划**，必须立即抛出清晰明确的异常：
-  - `DocToPDFSkill`：`"⚠️ 当前选中的文件 (.xyz) 不支持直接转为 PDF。支持的格式包括：Excel 表格 (.xlsx/.xls)、Word 文档 (.docx)、PPT 演示 (.pptx)、图片 (.png/.jpg) 等。"`
-  - `ImageResizeSkill` / `ImageConvertSkill`：`"⚠️ 当前选中的文件 (.xyz) 不是支持的图片格式。图片操作仅支持 .png, .jpg, .heic, .webp 等。"`
-  - `PDFMergeSplitSkill`：`"⚠️ 当前选中的文件 (.xyz) 中没有 PDF 文件。合并/拆分仅支持 .pdf 格式。"`
+### 2.2 PanelViewModel 增加专用 `rerunTask` 流程
+- 新增 `public func rerunTask(_ task: TaskExecutionRecord)`：
+  1. 从 `task.targetFilePaths`（或 fallback 到 `task.plan.actions.map { $0.sourceURL.path }`）提取原任务的目标文件路径；
+  2. 校验文件在磁盘上的存在性；若文件不存在则弹出清晰的警告提示；
+  3. 自动将上下文目标文件切换回原任务的目标文件（`setTargetURLs(targetURLs)` 并刷新 `fileItems`）；
+  4. 回填 `inputText = task.prompt`；
+  5. 切换回主视图并自动触发针对该文件集合的 `submitInstruction`。
 
-### 2.3 状态栏与任务看板反馈增强
-- 主界面顶部即时显示醒目的 ⚠️ 格式不兼容提示；
-- 任务看板记录清晰的失败原因，避免用户产生“到底有没有执行”的疑惑。
+### 2.3 TaskBoardView 与 MainFloatingPanel 重构
+- 将 `onRerunTask` 回调入参从单纯的 `String` 升级为完整的 `TaskExecutionRecord`，确保上下文完整性。
 
 ---
 
 ## 3. 待修改文件清单
 
-1. `Sources/AIFileCore/Engine/SmartSkillSuggester.swift` [MODIFY]
-2. `Sources/AIFileSkills/DocumentSkills/DocToPDFSkill.swift` [MODIFY]
-3. `Sources/AIFileSkills/ImageSkills/ImageResizeSkill.swift` [MODIFY]
-4. `Sources/AIFileSkills/ImageSkills/ImageConvertSkill.swift` [MODIFY]
-5. `Sources/AIFileSkills/DocumentSkills/PDFMergeSplitSkill.swift` [MODIFY]
-6. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]
-7. `Tests/AIFileCoreTests/SmartSkillSuggesterTests.swift` [MODIFY]
-8. `Tests/AIFileSkillsTests/SkillValidationFeedbackTests.swift` [NEW]
+1. `Sources/AIFileCore/Models/TaskExecutionRecord.swift` [MODIFY]
+2. `Sources/AIFileCore/Transaction/TaskManager.swift` [MODIFY]
+3. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]
+4. `Sources/AIFileUI/Views/TaskBoardView.swift` [MODIFY]
+5. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]
+6. `Tests/AIFileUITests/TaskBoardRerunTests.swift` [MODIFY]
+7. `Tests/AIFileCoreTests/TaskManagerTests.swift` [MODIFY]

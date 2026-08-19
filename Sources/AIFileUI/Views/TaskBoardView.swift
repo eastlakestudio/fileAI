@@ -24,9 +24,9 @@ public struct TaskBoardView: View {
     @State private var tasks: [TaskExecutionRecord] = []
     @State private var selectedDetailTask: TaskExecutionRecord? = nil
     public let onBack: () -> Void
-    public var onRerunTask: ((String) -> Void)?
+    public var onRerunTask: ((TaskExecutionRecord) -> Void)?
     
-    public init(onBack: @escaping () -> Void, onRerunTask: ((String) -> Void)? = nil) {
+    public init(onBack: @escaping () -> Void, onRerunTask: ((TaskExecutionRecord) -> Void)? = nil) {
         self.onBack = onBack
         self.onRerunTask = onRerunTask
     }
@@ -239,7 +239,7 @@ public struct TaskBoardView: View {
             
             // 独立「再次执行」按钮
             Button(action: {
-                onRerunTask?(task.prompt)
+                onRerunTask?(task)
             }) {
                 HStack(spacing: 3) {
                     Image(systemName: "arrow.clockwise")
@@ -254,7 +254,7 @@ public struct TaskBoardView: View {
                 .cornerRadius(5)
             }
             .buttonStyle(.plain)
-            .help("以此指令对当前文件重新发起执行")
+            .help("以此指令对原目标文件重新发起执行")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -287,9 +287,9 @@ public struct TaskBoardView: View {
                 
                 // 再次执行按钮
                 Button(action: {
-                    let promptToRun = task.prompt
+                    let taskToRun = task
                     selectedDetailTask = nil
-                    onRerunTask?(promptToRun)
+                    onRerunTask?(taskToRun)
                 }) {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.clockwise")

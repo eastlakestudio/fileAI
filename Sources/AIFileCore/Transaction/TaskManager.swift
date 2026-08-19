@@ -19,11 +19,12 @@ public actor TaskManager {
     }
     
     /// 创建并记录新任务（进行中）
-    public func createTask(prompt: String, plan: ExecutionPlan) -> TaskExecutionRecord {
+    public func createTask(prompt: String, plan: ExecutionPlan, targetFilePaths: [String] = []) -> TaskExecutionRecord {
         let task = TaskExecutionRecord(
             prompt: prompt,
             status: .inProgress,
-            plan: plan
+            plan: plan,
+            targetFilePaths: targetFilePaths
         )
         tasks.insert(task, at: 0)
         persistTask(task)
@@ -31,9 +32,14 @@ public actor TaskManager {
     }
     
     /// 更新任务的执行计划与摘要
-    public func updateTaskPlan(id: UUID, plan: ExecutionPlan) {
+    public func updateTaskPlan(id: UUID, plan: ExecutionPlan, targetFilePaths: [String]? = nil) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[index].plan = plan
+        if let paths = targetFilePaths, !paths.isEmpty {
+            tasks[index].targetFilePaths = paths
+        } else if tasks[index].targetFilePaths.isEmpty {
+            tasks[index].targetFilePaths = plan.actions.map { $0.sourceURL.path }
+        }
         persistTask(tasks[index])
     }
     

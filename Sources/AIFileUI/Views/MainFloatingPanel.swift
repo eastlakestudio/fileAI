@@ -24,11 +24,9 @@ public struct MainFloatingPanel: View {
                             viewModel.currentPage = .main
                         }
                     },
-                    onRerunTask: { prompt in
+                    onRerunTask: { task in
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.currentPage = .main
-                            viewModel.inputText = prompt
-                            viewModel.submitInstruction(prompt)
+                            viewModel.rerunTask(task)
                         }
                     }
                 )

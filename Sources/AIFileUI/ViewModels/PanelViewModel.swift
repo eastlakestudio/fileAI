@@ -193,9 +193,10 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             }
         
         Task {
-            // 1. 任务提交瞬间立即持久化记录为【进行中】
+            // 1. 任务提交瞬间立即持久化记录为【进行中】，绑定目标文件路径
+            let targetPaths = self.fileItems.map { $0.url.path }
             let initialPlan = ExecutionPlan(summary: "正在规划意图...", actions: [])
-            let taskRecord = await TaskManager.shared.createTask(prompt: prompt, plan: initialPlan)
+            let taskRecord = await TaskManager.shared.createTask(prompt: prompt, plan: initialPlan, targetFilePaths: targetPaths)
             self.activeTask = taskRecord
             
             do {
@@ -207,7 +208,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 self.statusMessage = nil
                 
                 // 更新持久化任务中的 plan
-                await TaskManager.shared.updateTaskPlan(id: taskRecord.id, plan: plan)
+                await TaskManager.shared.updateTaskPlan(id: taskRecord.id, plan: plan, targetFilePaths: targetPaths)
                 
                 if !plan.actions.isEmpty {
                     self.isShowingDiffPreview = true
@@ -328,6 +329,26 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         } else {
             self.inputText = text
         }
+    }
+    
+    /// 针对指定历史任务重新绑定其原本的目标文件并再次执行
+    public func rerunTask(_ task: TaskExecutionRecord) {
+        var targetPaths = task.targetFilePaths
+        if targetPaths.isEmpty {
+            targetPaths = task.plan.actions.map { $0.sourceURL.path }
+        }
+        
+        let existingURLs = targetPaths.map { URL(fileURLWithPath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
+        
+        if !existingURLs.isEmpty {
+            self.setTargetURLs(existingURLs)
+        } else if !targetPaths.isEmpty {
+            self.statusMessage = "⚠️ 原任务的目标文件已不存在或已被移除"
+        }
+        
+        self.currentPage = .main
+        self.inputText = task.prompt
+        self.submitInstruction(task.prompt)
     }
     
     /// 当前启用的模型服务名称展示

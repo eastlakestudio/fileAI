@@ -25,6 +25,9 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
     // 关联的底层可撤销事务 ID
     public var transactionId: UUID?
     
+    // 任务绑定的目标文件/文件夹路径集合
+    public var targetFilePaths: [String]
+    
     public var errorMessage: String?
     
     public init(
@@ -36,6 +39,7 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         plan: ExecutionPlan,
         walkthroughReport: String? = nil,
         transactionId: UUID? = nil,
+        targetFilePaths: [String] = [],
         errorMessage: String? = nil
     ) {
         self.id = id
@@ -46,6 +50,7 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         self.plan = plan
         self.walkthroughReport = walkthroughReport
         self.transactionId = transactionId
+        self.targetFilePaths = targetFilePaths
         self.errorMessage = errorMessage
     }
     
