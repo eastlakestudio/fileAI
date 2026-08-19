@@ -30,8 +30,9 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         let convertibleExtensions: Set<String> = [
             "ppt", "pptx", "key",
             "doc", "docx", "pages",
+            "xlsx", "xls", "numbers", "csv",
             "txt", "md", "markdown", "rtf", "html",
-            "png", "jpg", "jpeg", "heic", "webp",
+            "png", "jpg", "jpeg", "heic", "webp", "tiff", "bmp",
             "pdf"
         ]
         
@@ -71,10 +72,13 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         if ["ppt", "pptx", "key"].contains(ext) {
             // 演示文稿转 PDF (优先 AppleScript 静默调用 Keynote / PowerPoint / LibreOffice)
             try convertPresentationToPDF(sourceURL: action.sourceURL, targetURL: targetURL)
+        } else if ["xlsx", "xls", "numbers", "csv"].contains(ext) {
+            // 电子表格转 PDF (优先 AppleScript 静默调用 Excel / Numbers / LibreOffice / CSV 矢量排版)
+            try convertSpreadsheetToPDF(sourceURL: action.sourceURL, targetURL: targetURL)
         } else if ext == "pdf" {
             // PDF 格式重构为 A3 横版标准
             try reformatPDFToA3Landscape(sourceURL: action.sourceURL, targetURL: targetURL)
-        } else if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext) {
+        } else if ["png", "jpg", "jpeg", "heic", "webp", "tiff", "bmp"].contains(ext) {
             // 图片转 PDF
             guard let image = NSImage(contentsOf: action.sourceURL),
                   let pdfData = imageToPDFData(image: image) else {
@@ -143,6 +147,71 @@ public final class DocToPDFSkill: FileSkill, Sendable {
                 open POSIX file "\(sourceURL.path)"
                 save active presentation in POSIX file "\(targetURL.path)" as save as PDF
                 close active presentation saving no
+                return "SUCCESS"
+            on error
+                return "FAIL"
+            end try
+        end tell
+        """
+        return runAppleScript(scriptSource)
+    }
+    
+    // MARK: - 电子表格 (Excel / Numbers / CSV) 转换
+    
+    private func convertSpreadsheetToPDF(sourceURL: URL, targetURL: URL) throws {
+        // 1. 尝试使用 Microsoft Excel 后台导出
+        if convertViaExcelAppleScript(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 2. 尝试使用 Apple Numbers 后台导出
+        if convertViaNumbersAppleScript(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 3. 尝试使用 LibreOffice (soffice) 导出
+        if convertViaSofficeCLI(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 4. CSV 或纯文本表格尝试作为文本矢量排版
+        if sourceURL.pathExtension.lowercased() == "csv" {
+            let content = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
+            let pdfData = try textToPDFData(text: content)
+            try pdfData.write(to: targetURL)
+            return
+        }
+        
+        throw NSError(
+            domain: "DocToPDFSkill",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "Excel 表格转换需要系统安装有 Microsoft Excel、Apple Numbers 或 LibreOffice。请确认已安装上述任一应用。"]
+        )
+    }
+    
+    private func convertViaExcelAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        let scriptSource = """
+        tell application "Microsoft Excel"
+            try
+                open POSIX file "\(sourceURL.path)"
+                save active workbook in POSIX file "\(targetURL.path)" as PDF file format
+                close active workbook saving no
+                return "SUCCESS"
+            on error
+                return "FAIL"
+            end try
+        end tell
+        """
+        return runAppleScript(scriptSource)
+    }
+    
+    private func convertViaNumbersAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        let scriptSource = """
+        tell application "Numbers"
+            try
+                set theDoc to open POSIX file "\(sourceURL.path)"
+                export theDoc to POSIX file "\(targetURL.path)" as PDF
+                close theDoc saving no
                 return "SUCCESS"
             on error
                 return "FAIL"

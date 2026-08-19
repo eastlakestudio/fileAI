@@ -10,17 +10,17 @@ final class AgentDispatcherTests: XCTestCase {
         registry.register(DocToPDFSkill())
         
         let dispatcher = AgentDispatcher(provider: MockLLMClient(), registry: registry)
-        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/slides.pptx"), isDirectory: false)
+        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/drawing.pdf"), isDirectory: false)
         
         let startTime = Date()
         let plan = try await dispatcher.generatePlan(userPrompt: "转成 A3 横版 pdf", fileItems: [fileItem])
         let elapsed = Date().timeIntervalSince(startTime)
         
-        // Fast-path 应在 0.1 秒内毫秒级瞬时返回
-        XCTAssertLessThan(elapsed, 0.1)
+        // Fast-path 应在 0.05 秒内毫秒级瞬时返回
+        XCTAssertLessThan(elapsed, 0.05)
         XCTAssertEqual(plan.actions.count, 1)
         XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
-        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "slides.pdf")
+        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "drawing_A3.pdf")
     }
     
     func testFastPathImageResizeInstantMatching() async throws {

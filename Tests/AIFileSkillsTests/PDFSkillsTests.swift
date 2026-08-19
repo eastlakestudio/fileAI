@@ -48,4 +48,17 @@ final class PDFSkillsTests: XCTestCase {
         XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "presentation.pdf")
         XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
     }
+    
+    func testExcelToPDFPlanGeneration() throws {
+        let xlsxURL = tempDirectory.appendingPathComponent("标段1-硬件清单.xlsx")
+        try "fake xlsx content".write(to: xlsxURL, atomically: true, encoding: .utf8)
+        
+        let fileItem = FileMetadataEngine.shared.createFileItem(url: xlsxURL, isDirectory: false)
+        let skill = DocToPDFSkill()
+        
+        let plan = try skill.generatePlan(from: [fileItem], parameters: [:])
+        XCTAssertEqual(plan.actions.count, 1)
+        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "标段1-硬件清单.pdf")
+        XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
+    }
 }
