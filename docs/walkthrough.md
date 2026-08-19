@@ -1,15 +1,14 @@
-# 窗口背景不透明度与文字高对比度优化总结 (Walkthrough)
+# CLI 模型库全面升级与自由编辑支持总结 (Walkthrough)
 
-## 1. 核心改进与视觉抗干扰优化
+## 1. 核心升级清单
 
-### 1.1 复合防干扰材质背景架构
-- **升级材质底色**：由原本易透色的 `.ultraThinMaterial` 升级为 **高密度 `.thickMaterial` + 90% 不透明度 `windowBackgroundColor` 双层复合背景**；
-- **消除底层透色干扰**：即使在底层软件为全黑窗口（如黑底终端、VSCode 黑色主题、深色网页）的场景下，深色软件的背景也不会透过并干扰当前界面的字体辨识；
-- **保留原生 macOS 质感**：既具备现代 macOS 原生应用的高级磨砂质感与边缘发光微边框，又确保了 100% 的文字对比度与可读性。
+### 1.1 覆盖前沿主流模型系列
+- **Google Antigravity CLI (`agy`)**：更新推荐模型矩阵为 `gemini-2.5-flash`、`gemini-2.0-flash`、`gemini-1.5-pro`、`gemini-1.5-flash`、`claude-3-7-sonnet`、`claude-3-5-sonnet`、`claude-3-5-haiku` 与 `auto`；
+- **Claude / AIChat / GitHub Copilot**：全面更新包含 `claude-3-7-sonnet`、`claude-3-5-sonnet`、`deepseek-r1`、`deepseek-chat`、`gpt-4o`。
 
-### 1.2 卡片与输入框高对比度增强
-- 文件列表项、任务看板卡片、技能卡片的底色不透明度统一提升至 **85%**；
-- 输入框底色采用 `textBackgroundColor.opacity(0.95)` 并增强微边框，确保光标与文字极致清晰。
+### 1.2 CLI 卡片支持自由键盘输入任意 Model ID
+- 在 CLI 工具卡片中新增 **「指定模型 (可自由输入)」** 的可编辑文本框；
+- 用户既可以一键点击下方常用预设胶囊快速填入，也可以直接键盘输入任意自定义新模型（如新版本 Flash / 微调模型），即刻生效并保存。
 
 ---
 

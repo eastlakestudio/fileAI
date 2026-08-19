@@ -48,23 +48,44 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
         
         switch type {
         case .antigravity:
-            models = ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash", "auto"]
+            models = [
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-pro",
+                "gemini-1.5-flash",
+                "claude-3-7-sonnet",
+                "claude-3-5-sonnet",
+                "claude-3-5-haiku",
+                "auto"
+            ]
         case .ollama:
             models = await fetchOllamaModels(executablePath: path)
             if models.isEmpty {
                 models = ["qwen2.5:7b", "deepseek-r1:8b", "llama3.2:3b"]
             }
         case .claude:
-            models = ["claude-3-5-sonnet", "claude-3-5-haiku"]
+            models = [
+                "claude-3-7-sonnet",
+                "claude-3-5-sonnet",
+                "claude-3-5-haiku",
+                "claude-3-opus"
+            ]
         case .llm:
             models = await fetchLLMModels(executablePath: path)
             if models.isEmpty {
-                models = ["gemini-1.5-flash", "gpt-4o-mini", "claude-3.5-sonnet"]
+                models = ["gemini-2.0-flash", "gpt-4o-mini", "claude-3.5-sonnet"]
             }
         case .aichat:
-            models = ["openai", "gemini", "claude", "deepseek"]
+            models = [
+                "deepseek-r1",
+                "deepseek-chat",
+                "claude-3-7-sonnet",
+                "claude-3-5-sonnet",
+                "gemini-2.0-flash",
+                "gpt-4o"
+            ]
         case .ghCopilot:
-            models = ["copilot-gpt-4o", "copilot-claude-3.5"]
+            models = ["copilot-gpt-4o", "copilot-claude-3.7", "copilot-claude-3.5", "o3-mini"]
         case .llamaCli:
             models = ["local-gguf-model"]
         }

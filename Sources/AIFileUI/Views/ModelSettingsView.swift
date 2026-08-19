@@ -426,39 +426,58 @@ public struct ModelSettingsView: View {
                 }
             }
             
-            // 若已选定且有发现的模型，展示模型切换胶囊
-            if isSelected && cli.isInstalled && !cli.availableModels.isEmpty {
+            // 若已选定且有发现的模型，展示可自由编辑的输入框与模型切换胶囊
+            if isSelected && cli.isInstalled {
                 Divider().opacity(0.15)
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("当前 CLI 已发现/支持的模型列表 (点击切换):")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text("指定模型 (可自由输入):")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.secondary)
+                        
+                        TextField("输入 Model 标识符 (如 gemini-2.5-flash, claude-3-7-sonnet 等)", text: $settings.modelName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 11, design: .monospaced))
+                            .padding(6)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
+                            .cornerRadius(5)
+                    }
                     
-                    HStack(spacing: 6) {
-                        ForEach(cli.availableModels, id: \.self) { model in
-                            let isCur = settings.modelName == model
-                            Button(action: {
-                                settings.modelName = model
-                            }) {
-                                HStack(spacing: 3) {
-                                    if isCur {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 8, weight: .bold))
+                    if !cli.availableModels.isEmpty {
+                        HStack(spacing: 6) {
+                            Text("常用推荐:")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                            
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 5) {
+                                    ForEach(cli.availableModels, id: \.self) { model in
+                                        let isCur = settings.modelName == model
+                                        Button(action: {
+                                            settings.modelName = model
+                                        }) {
+                                            HStack(spacing: 3) {
+                                                if isCur {
+                                                    Image(systemName: "checkmark")
+                                                        .font(.system(size: 8, weight: .bold))
+                                                }
+                                                Text(model)
+                                                    .font(.system(size: 10, design: .monospaced))
+                                            }
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(isCur ? Color.accentColor.opacity(0.2) : Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 4)
+                                                    .stroke(isCur ? Color.accentColor : Color.clear, lineWidth: 1)
+                                            )
+                                            .cornerRadius(4)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    Text(model)
-                                        .font(.system(size: 11, design: .monospaced))
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(isCur ? Color.accentColor.opacity(0.18) : Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .stroke(isCur ? Color.accentColor : Color.clear, lineWidth: 1)
-                                )
-                                .cornerRadius(4)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
