@@ -88,10 +88,7 @@ public struct MainFloatingPanel: View {
             
             Divider().opacity(0.2)
             
-            // 3. 智能关联 Skill 推荐胶囊
-            smartSkillRecommendationSection
-            
-            // 4. 底部自然语言交互栏
+            // 3. 底部自然语言交互栏 (内置 + 号 Skill 呼出菜单)
             bottomChatInputBar
         }
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
@@ -310,46 +307,6 @@ public struct MainFloatingPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    private var smartSkillRecommendationSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 10))
-                    .foregroundColor(.accentColor)
-                Text("智能推荐 Skill (已结合当前 \(viewModel.fileItems.count) 个文件动态过滤):")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 14)
-            .padding(.top, 6)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(viewModel.smartSuggestions) { suggestion in
-                        Button(action: {
-                            viewModel.applySuggestion(suggestion.promptText)
-                        }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: suggestion.icon)
-                                    .font(.system(size: 10))
-                                Text(suggestion.title)
-                                    .font(.system(size: 11))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.15))
-                            .foregroundColor(.accentColor)
-                            .cornerRadius(6)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 6)
-            }
-        }
-    }
-    
     private var bottomChatInputBar: some View {
         VStack(spacing: 4) {
             if let msg = viewModel.statusMessage {
@@ -361,8 +318,11 @@ public struct MainFloatingPanel: View {
             }
             
             VStack(spacing: 4) {
-                // 双行自然语言输入卡片
+                // 双行自然语言输入卡片 (集成 + 号 Skill 呼出菜单)
                 HStack(alignment: .top, spacing: 8) {
+                    // + 号 Skill 呼出菜单
+                    skillPlusMenu
+                    
                     TextField(
                         "输入自然语言指令（如：把这里的ppt转成pdf、统一改为1920x1080、批量重命名）...",
                         text: $viewModel.inputText,
@@ -435,6 +395,73 @@ public struct MainFloatingPanel: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 10)
         }
+    }
+    
+    private var skillPlusMenu: some View {
+        Menu {
+            if !viewModel.smartSuggestions.isEmpty {
+                Section("✨ 智能推荐 (已结合所选 \(viewModel.fileItems.count) 项文件)") {
+                    ForEach(viewModel.smartSuggestions) { suggestion in
+                        Button(action: {
+                            viewModel.applySuggestion(suggestion.promptText)
+                        }) {
+                            Label(suggestion.title, systemImage: suggestion.icon)
+                        }
+                    }
+                }
+            }
+            
+            Section("🧩 常用文件 Skill") {
+                Button(action: { viewModel.applySuggestion("统一将图片分辨率调整为 1920x1080") }) {
+                    Label("图片尺寸智能调整", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
+                }
+                Button(action: { viewModel.applySuggestion("将选中的图片批量转换为 JPG 格式") }) {
+                    Label("图片格式批量转换", systemImage: "arrow.triangle.2.circlepath.circle.fill")
+                }
+                Button(action: { viewModel.applySuggestion("将选中的所有文档转为标准 PDF") }) {
+                    Label("文档一键转 PDF", systemImage: "doc.richtext.fill")
+                }
+                Button(action: { viewModel.applySuggestion("将选中的 PDF 文件按顺序合并为一个") }) {
+                    Label("PDF 合并与拆分", systemImage: "doc.on.doc.fill")
+                }
+                Button(action: { viewModel.applySuggestion("在文件名最前面统一加上前缀") }) {
+                    Label("智能批量重命名与编号", systemImage: "character.cursor.ibeam")
+                }
+                Button(action: { viewModel.applySuggestion("清除照片中的 GPS 拍摄定位与 EXIF 隐私") }) {
+                    Label("隐私与 EXIF 清理", systemImage: "wand.and.rays")
+                }
+            }
+            
+            Section("🏢 企业协同") {
+                Button(action: { viewModel.applySuggestion("把整理好的文件同步上传到飞书云文档") }) {
+                    Label("飞书生态协同", systemImage: "paperplane.fill")
+                }
+                Button(action: { viewModel.applySuggestion("将选中的文件归档到企业微信微盘并通知群聊") }) {
+                    Label("企业微信协同", systemImage: "bubble.left.and.bubble.right.fill")
+                }
+                Button(action: { viewModel.applySuggestion("把选中的文件上传钉盘并自动发起审批流") }) {
+                    Label("钉钉云文档与审批", systemImage: "bell.badge.fill")
+                }
+            }
+            
+            Divider()
+            
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    viewModel.currentPage = .settings(initialTab: .skills)
+                }
+            }) {
+                Label("打开 Skill 管理中心...", systemImage: "puzzlepiece.extension")
+            }
+        } label: {
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: 22))
+                .foregroundColor(.accentColor)
+                .padding(.top, 2)
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 24, height: 26)
+        .help("点击选择或调用 Skill 技能")
     }
     
     private func fileIcon(for ext: String) -> String {
