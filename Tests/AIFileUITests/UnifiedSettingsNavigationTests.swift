@@ -17,8 +17,11 @@ final class UnifiedSettingsNavigationTests: XCTestCase {
         let viewModel = PanelViewModel()
         XCTAssertEqual(viewModel.currentPage, .main)
         
-        viewModel.currentPage = .settings(initialTab: .model)
-        XCTAssertEqual(viewModel.currentPage, .settings(initialTab: .model))
+        viewModel.currentPage = .settings(initialTab: .cloudModel)
+        XCTAssertEqual(viewModel.currentPage, .settings(initialTab: .cloudModel))
+        
+        viewModel.currentPage = .settings(initialTab: .cliModel)
+        XCTAssertEqual(viewModel.currentPage, .settings(initialTab: .cliModel))
         
         viewModel.currentPage = .settings(initialTab: .skills)
         XCTAssertEqual(viewModel.currentPage, .settings(initialTab: .skills))

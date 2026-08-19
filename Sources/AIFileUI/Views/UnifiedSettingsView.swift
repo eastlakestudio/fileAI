@@ -1,9 +1,10 @@
 import SwiftUI
 import AIFileCore
 
-/// 配置管理主导航 Tab 枚举
+/// 配置管理主导航 Tab 枚举 (云端 API 与本地 CLI 明确解耦二选一)
 public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
-    case model = "AI 模型与引擎"
+    case cloudModel = "云端 API 引擎"
+    case cliModel = "本地 CLI 引擎"
     case skills = "Skill 技能库"
     case marketplace = "云端扩展市场"
     case general = "偏好与系统"
@@ -12,7 +13,8 @@ public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
     
     public var icon: String {
         switch self {
-        case .model: return "cpu.fill"
+        case .cloudModel: return "network"
+        case .cliModel: return "terminal.fill"
         case .skills: return "puzzlepiece.extension.fill"
         case .marketplace: return "icloud.and.arrow.down.fill"
         case .general: return "gearshape.fill"
@@ -20,13 +22,12 @@ public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// 统一配置管理页面：整合模型设置、Skill 技能管理、云端市场与系统偏好
+/// 统一配置管理页面：整合云端/本地模型设置、Skill 技能管理、云端市场与系统偏好
 public struct UnifiedSettingsView: View {
     @State private var selectedTab: SettingsNavTab
     
     // Model Settings 状态
     @State private var modelSettings: ModelSettings
-    @State private var modelSubTab: Int = 0 // 0: 云端 API, 1: 本地 CLI
     @State private var availableProviders: [ProviderDefinition] = []
     @State private var discoveredCLIs: [DiscoveredCLITool] = []
     @State private var isScanningCLIs: Bool = false
@@ -47,12 +48,19 @@ public struct UnifiedSettingsView: View {
     public var onSelectPrompt: ((String) -> Void)? = nil
     
     public init(
-        initialTab: SettingsNavTab = .model,
+        initialTab: SettingsNavTab = .cloudModel,
         onBack: @escaping () -> Void,
         onSelectPrompt: ((String) -> Void)? = nil
     ) {
-        self._selectedTab = State(initialValue: initialTab)
-        self._modelSettings = State(initialValue: ModelSettingsManager.shared.settings)
+        let initialSettings = ModelSettingsManager.shared.settings
+        self._modelSettings = State(initialValue: initialSettings)
+        
+        // 若未显式指定，根据当前活跃 Provider 自动定位到云端或本地 CLI 导航
+        let activeTab: SettingsNavTab = {
+            if initialTab != .cloudModel { return initialTab }
+            return initialSettings.providerId.starts(with: "cli_") ? .cliModel : .cloudModel
+        }()
+        self._selectedTab = State(initialValue: activeTab)
         self.onBack = onBack
         self.onSelectPrompt = onSelectPrompt
     }
@@ -65,6 +73,10 @@ public struct UnifiedSettingsView: View {
         availableProviders.first(where: { $0.id == modelSettings.providerId }) ?? cloudProviders.first
     }
     
+    private var isUsingLocalCLI: Bool {
+        modelSettings.providerId.starts(with: "cli_")
+    }
+    
     private var displayedLocalSkills: [SkillMetadata] {
         if selectedSkillCategory == .all {
             return localSkills
@@ -74,7 +86,7 @@ public struct UnifiedSettingsView: View {
     
     public var body: some View {
         VStack(spacing: 0) {
-            // 1. 顶部贴顶导航条
+            // 1. 顶部贴顶纯净导航条 (无多余杂乱按钮)
             topNavigationBar
             
             Divider().opacity(0.3)
@@ -118,7 +130,7 @@ public struct UnifiedSettingsView: View {
         }
     }
     
-    // MARK: - 1. Top Navigation Bar
+    // MARK: - 1. Top Navigation Bar (极简纯净)
     
     private var topNavigationBar: some View {
         HStack(spacing: 10) {
@@ -134,7 +146,7 @@ public struct UnifiedSettingsView: View {
             .controlSize(.small)
             .keyboardShortcut(.cancelAction)
             
-            HStack(spacing: 4) {
+            HStack(spacing: 6) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.accentColor)
@@ -143,16 +155,6 @@ public struct UnifiedSettingsView: View {
             }
             
             Spacer()
-            
-            if selectedTab == .model {
-                Picker("", selection: $modelSubTab) {
-                    Text("🌐 云端 API").tag(0)
-                    Text("💻 本地 CLI (\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪)").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 220)
-                .controlSize(.small)
-            }
         }
         .padding(.leading, 78) // 预留交通灯
         .padding(.trailing, 14)
@@ -164,24 +166,33 @@ public struct UnifiedSettingsView: View {
     
     private var leftSidebarNavigation: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("配置项目")
-                .font(.system(size: 11, weight: .bold))
+            Text("AI 引擎模式 (二选一)")
+                .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
             
-            ForEach(SettingsNavTab.allCases) { tab in
-                let badgeText: String = {
-                    switch tab {
-                    case .model: return "\(discoveredCLIs.filter { $0.isInstalled }.count) CLI"
-                    case .skills: return "\(localSkills.count)"
-                    case .marketplace: return "云端 \(cloudSkills.count)"
-                    case .general: return "⌥M"
-                    }
-                }()
-                
-                tabNavRow(tab: tab, badge: badgeText)
-            }
+            // 引擎 1：云端 API
+            tabNavRow(
+                tab: .cloudModel,
+                badge: !isUsingLocalCLI ? "当前使用" : "\(cloudProviders.count) 个"
+            )
+            
+            // 引擎 2：本地 CLI
+            tabNavRow(
+                tab: .cliModel,
+                badge: isUsingLocalCLI ? "当前使用" : "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
+            )
+            
+            Text("功能扩展与系统")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            
+            tabNavRow(tab: .skills, badge: "\(localSkills.count)")
+            tabNavRow(tab: .marketplace, badge: "云端 \(cloudSkills.count)")
+            tabNavRow(tab: .general, badge: "⌥M")
             
             Spacer()
             
@@ -223,8 +234,11 @@ public struct UnifiedSettingsView: View {
     @ViewBuilder
     private func tabNavRow(tab: SettingsNavTab, badge: String) -> some View {
         let isSelected = selectedTab == tab
+        let isCurrentEngine = (tab == .cloudModel && !isUsingLocalCLI) || (tab == .cliModel && isUsingLocalCLI)
+        
         Button(action: {
             selectedTab = tab
+            testStatus = nil
         }) {
             HStack(spacing: 8) {
                 Image(systemName: tab.icon)
@@ -239,11 +253,11 @@ public struct UnifiedSettingsView: View {
                 Spacer()
                 
                 Text(badge)
-                    .font(.system(size: 9, design: .monospaced))
+                    .font(.system(size: 9, weight: isCurrentEngine ? .bold : .regular, design: .monospaced))
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
-                    .background(isSelected ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06))
-                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .background(isCurrentEngine ? Color.green.opacity(0.18) : (isSelected ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06)))
+                    .foregroundColor(isCurrentEngine ? .green : (isSelected ? .accentColor : .secondary))
                     .cornerRadius(3)
             }
             .padding(.horizontal, 10)
@@ -260,8 +274,16 @@ public struct UnifiedSettingsView: View {
     private var rightContentArea: some View {
         Group {
             switch selectedTab {
-            case .model:
-                modelSettingsContentView
+            case .cloudModel:
+                ScrollView {
+                    cloudAPISection
+                        .padding(14)
+                }
+            case .cliModel:
+                ScrollView {
+                    localCLIDiscoverySection
+                        .padding(14)
+                }
             case .skills:
                 skillLibraryContentView
             case .marketplace:
@@ -272,23 +294,21 @@ public struct UnifiedSettingsView: View {
         }
     }
     
-    // MARK: - Tab: AI 模型与引擎
-    
-    private var modelSettingsContentView: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                if modelSubTab == 0 {
-                    cloudAPISection
-                } else {
-                    localCLIDiscoverySection
-                }
-            }
-            .padding(14)
-        }
-    }
+    // MARK: - Tab 1: 云端 API 配置区
     
     private var cloudAPISection: some View {
         VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("云端 API 模型服务商配置:")
+                    .font(.system(size: 12, weight: .bold))
+                Spacer()
+                if !isUsingLocalCLI {
+                    Text("● 正在作为活跃 AI 引擎")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.green)
+                }
+            }
+            
             VStack(spacing: 10) {
                 // 1. 服务商
                 HStack(spacing: 10) {
@@ -420,17 +440,24 @@ public struct UnifiedSettingsView: View {
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                    .stroke(!isUsingLocalCLI ? Color.accentColor.opacity(0.4) : Color.primary.opacity(0.12), lineWidth: 1)
             )
             .cornerRadius(8)
         }
     }
     
+    // MARK: - Tab 2: 本地 CLI 配置区
+    
     private var localCLIDiscoverySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("本地已安装 AI CLI 工具 (自动检测无需 API Key):")
-                    .font(.system(size: 12, weight: .bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("本地已安装 AI CLI 工具 (自动检测无需 API Key):")
+                        .font(.system(size: 12, weight: .bold))
+                    Text("选择下方任意已就绪的 CLI 工具，将自动切换为本地终端引擎：")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
                 
                 Spacer()
                 
@@ -509,7 +536,7 @@ public struct UnifiedSettingsView: View {
                         .controlSize(.mini)
                     } else {
                         Button(action: { selectCLITool(cli) }) {
-                            Text("选用此 CLI")
+                            Text("切换为此 CLI")
                                 .font(.system(size: 10, weight: .medium))
                         }
                         .buttonStyle(.bordered)
@@ -877,7 +904,7 @@ public struct UnifiedSettingsView: View {
     
     private var bottomActionBar: some View {
         HStack(spacing: 10) {
-            if selectedTab == .model {
+            if selectedTab == .cloudModel || selectedTab == .cliModel {
                 Button(action: testConnection) {
                     HStack(spacing: 4) {
                         if isTesting {
@@ -908,9 +935,7 @@ public struct UnifiedSettingsView: View {
             Spacer()
             
             Button("保存并返回") {
-                if selectedTab == .model {
-                    ModelSettingsManager.shared.updateSettings(modelSettings)
-                }
+                ModelSettingsManager.shared.updateSettings(modelSettings)
                 onBack()
             }
             .buttonStyle(.borderedProminent)
@@ -1012,7 +1037,7 @@ public struct UnifiedSettingsView: View {
         if let defModel = provider.defaultModel {
             modelSettings.modelName = defModel.id
         }
-        testStatus = nil
+        testStatus = "✅ 已选用 \(provider.name)"
     }
     
     private func selectCLITool(_ tool: DiscoveredCLITool) {

@@ -97,12 +97,12 @@ public struct MainFloatingPanel: View {
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
     }
     
-    // MARK: - Single Unified Top Bar (与 TaskBoard 100% 结构一致)
+    // MARK: - Single Unified Top Bar (极简纯净顶栏)
     
     private var unifiedTopBar: some View {
         HStack(spacing: 8) {
             // App 标志与名称
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Image(systemName: "wand.and.stars")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -112,20 +112,6 @@ public struct MainFloatingPanel: View {
             }
             
             Spacer()
-            
-            // 递归扫描开关
-            Toggle("递归", isOn: $viewModel.isRecursive)
-                .toggleStyle(.checkbox)
-                .font(.system(size: 10))
-            
-            // 视图切换 (平铺列表 / 路径树状)
-            Picker("", selection: $viewModel.viewMode) {
-                Image(systemName: "list.bullet").tag(FileListViewMode.list)
-                Image(systemName: "list.triangle").tag(FileListViewMode.tree)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 52)
-            .controlSize(.mini)
             
             // 任务看板全页切换
             Button(action: {
@@ -142,10 +128,10 @@ public struct MainFloatingPanel: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             
-            // 统一配置管理全页切换 (整合模型与 Skill)
+            // 统一配置管理全页切换
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    viewModel.currentPage = .settings(initialTab: .model)
+                    viewModel.currentPage = .settings(initialTab: .cloudModel)
                 }
             }) {
                 HStack(spacing: 3) {
@@ -166,24 +152,6 @@ public struct MainFloatingPanel: View {
             .controlSize(.small)
             .help("撤销上次操作 (⌘Z)")
             .keyboardShortcut("z", modifiers: .command)
-            
-            // 手动拾取文件
-            Button(action: { viewModel.pickFilesManually() }) {
-                Image(systemName: "folder.badge.plus")
-                    .font(.system(size: 10))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("手动选择文件或文件夹")
-            
-            // 刷新 Finder
-            Button(action: { viewModel.fetchFromFinder() }) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 10))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("从当前前台 Finder 重新抓取")
             
             // 退出应用
             Button(action: {
@@ -206,24 +174,55 @@ public struct MainFloatingPanel: View {
     
     private var mainContentArea: some View {
         VStack(spacing: 0) {
-            // 当前操作路径与文件统计面包屑栏 (不拥挤，更清晰)
-            HStack(spacing: 4) {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text("当前路径:")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
-                Text(viewModel.commonParentDirectoryPath)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.primary.opacity(0.8))
-                    .lineLimit(1)
+            // 当前操作路径与文件控制快捷工具栏
+            HStack(spacing: 8) {
+                HStack(spacing: 4) {
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    Text(viewModel.commonParentDirectoryPath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(.primary.opacity(0.8))
+                        .lineLimit(1)
+                    
+                    Text("(\(viewModel.fileItems.count) 项)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
                 
                 Spacer()
                 
-                Text("已选 \(viewModel.fileItems.count) 项")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary)
+                // 递归开关
+                Toggle("递归", isOn: $viewModel.isRecursive)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 10))
+                
+                // 视图切换 (平铺列表 / 路径树状)
+                Picker("", selection: $viewModel.viewMode) {
+                    Image(systemName: "list.bullet").tag(FileListViewMode.list)
+                    Image(systemName: "list.triangle").tag(FileListViewMode.tree)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 48)
+                .controlSize(.mini)
+                
+                // 手动拾取文件
+                Button(action: { viewModel.pickFilesManually() }) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 9))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help("手动选取文件")
+                
+                // 重新抓取 Finder
+                Button(action: { viewModel.fetchFromFinder() }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 9))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .help("重新抓取前台 Finder 选中项")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 5)
@@ -411,7 +410,7 @@ public struct MainFloatingPanel: View {
                     
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.currentPage = .settings(initialTab: .model)
+                            viewModel.currentPage = .settings(initialTab: .cloudModel)
                         }
                     }) {
                         HStack(spacing: 3) {

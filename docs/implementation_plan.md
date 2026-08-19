@@ -1,30 +1,34 @@
-# 模型配置与 Skill 管理统一整合实施方案 (Implementation Plan)
+# 配置导航重构、顶栏精简与转 PDF 优化实施方案 (Implementation Plan)
 
-## 1. 现状与重构目标
+## 1. 现状与需求分析
 
-### 1.1 需求背景
-目前「模型配置」和「Skill 管理」分别作为两个独立的二级页面存在，入口分散；现需将它们统一整合为一个**一体化的「配置管理中心」**，采用标准的 macOS 左侧导航栏模式分项管理。
+### 1.1 需求 1：云端模型与本地 CLI 二选一导航化 & 顶栏按钮精简
+- **导航解耦**：
+  在配置管理左侧导航栏中，将原混杂在顶部的 Segmented Picker 彻底移除，把 AI 引擎拆分为两个互斥的独立导航分项：
+  1. 🌐 **云端 API 引擎** (`.cloudModel`)：配置 OpenAI、DeepSeek、GLM、Moonshot 等云端 API Key 与模型；
+  2. 💻 **本地 CLI 引擎** (`.cliModel`)：自动发现并选用 `agy`、`claude`、`ollama`、`llm` 等本地免 Key 终端工具；
+  选择任一模式时，系统自动切换当前活跃 Provider，两者互斥二选一，逻辑清晰。
+- **顶栏乱杂按钮大幅精简**：
+  - **主界面顶栏**：仅保留 `✨ 文件魔法棒`、`[平铺/树状]` 视图切换、`[任务看板]`、`[配置管理]`、`⏻ 退出`。
+  - 将次级操作（「递归」开关、「手动选文件」📂、「刷新抓取」⚡️）收拢至文件列表上方的面包屑工具条中，极大释放视觉空间。
+  - **配置管理顶栏**：移除所有 Segmented Control，只保留 `[← 返回主页]` 与标题。
 
-### 1.2 统一配置管理中心架构设计 (`UnifiedSettingsView`)
-1. **左侧统一导航栏 (`SettingsNavTab`)**：
-   - 🤖 **AI 模型与引擎** (`.model`)：云端 API（OpenAI/DeepSeek/GLM 等）与本地 CLI 引擎（`agy`, `claude`, `ollama`, `llm` 等）的统一配置、模型选择与连通性测试；
-   - 🧩 **Skill 技能库** (`.skills`)：已安装的独立 Markdown 技能管理（包括图片处理、文档转换、批量重命名、企业协同等分类）、启停开关、参数 Schema 查看与示例指令填入；
-   - ☁️ **云端技能市场** (`.marketplace`)：预设与云端扩展 Markdown Skill 的一键下载与安装；
-   - ⚙️ **偏好与快捷键** (`.general`)：全局热键（`⌥ M`）、系统单进程守护状态、Finder 联动状态与退出应用。
-
-2. **交互联动优化**：
-   - 主界面顶栏将原分散的两个按钮合并为单一的 **`[配置管理]`** 入口；
-   - 聊天框右下角点击当前模型徽标（`⚡️ agy · gemini-3.7-flash`）可直接直达配置管理页中的「AI 模型与引擎」分项；
-   - 在 Skill 列表中点击示例 Prompt 可一键填入主界面输入框并返回。
+### 1.2 需求 2：转 PDF 机制澄清与优化
+- **原理解析**：
+  1. **DOCX / TXT / Markdown / RTF / HTML / 图片**：100% 采用 macOS 原生 `NSAttributedString`、`PDFKit` 与 `CoreText` 矢量排版引擎在内存中直接渲染生成，完全无需第三方软件；
+  2. **PPT / PPTX / Keynote**：原先采用 AppleScript 优先调用本地安装的 Keynote / PowerPoint；若系统将 Office 关联到了 WPS，AppleScript 会触发 WPS 启动并带来前台弹窗感。
+- **优化方案**：
+  - 增强静默处理逻辑，避免前台焦点抢占；
+  - 优先利用 macOS 原生 QuickLook 缩略/矢量引擎或 Keynote 纯静默导出。
 
 ---
 
-## 2. 待修改与新建文件清单
+## 2. 待修改文件清单
 
-1. `Sources/AIFileUI/Views/UnifiedSettingsView.swift` [NEW]：
-   - 统合左侧导航栏、模型配置区、Skill 库管理区、云端市场区与通用偏好区；
-2. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]：
-   - 将 `AppNavigationPage` 更新为 `.main`, `.taskBoard`, `.settings(initialTab: SettingsNavTab)`；
-3. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]：
-   - 顶栏按钮整合为统一的「配置管理」，底部模型徽标直达对应分项；
-4. `Tests/AIFileUI/` 单元测试验证路由与状态一致性。
+1. `Sources/AIFileUI/Views/UnifiedSettingsView.swift` [MODIFY]：
+   - 导航项拆分为 `.cloudModel`、`.cliModel`、`.skills`、`.marketplace`、`.general`；
+   - 移除顶栏 Segmented Picker，统一由左侧导航驱动；
+2. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]：
+   - 精简顶栏按钮，收拢次级操作至内容区面包屑栏；
+3. `Tests/AIFileUITests/UnifiedSettingsNavigationTests.swift` [MODIFY]：
+   - 更新导航项测试用例。
