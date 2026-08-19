@@ -63,6 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StatusBarManager.shared.onUndoClicked = { [weak self] in
             self?.viewModel.undoLastOperation()
         }
+        StatusBarManager.shared.onOpenSettings = { [weak self] in
+            self?.viewModel.currentPage = .settings(initialTab: .cloudModel)
+            self?.showWindow()
+        }
         
         // 2. 注册快捷键
         GlobalHotKeyManager.shared.registerDefaultHotKey()

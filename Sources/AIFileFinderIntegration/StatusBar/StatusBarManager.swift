@@ -10,6 +10,7 @@ public final class StatusBarManager: NSObject, ObservableObject {
     public var onToggleWindow: (() -> Void)?
     public var onFilesDropped: (([URL]) -> Void)?
     public var onUndoClicked: (() -> Void)?
+    public var onOpenSettings: (() -> Void)?
     
     public override init() {
         super.init()
@@ -37,27 +38,43 @@ public final class StatusBarManager: NSObject, ObservableObject {
     }
     
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        guard let event = NSApp.currentEvent else { return }
+        guard let event = NSApp.currentEvent else {
+            onToggleWindow?()
+            return
+        }
         
-        if event.type == .rightMouseUp {
+        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
             showContextMenu()
         } else {
             onToggleWindow?()
         }
     }
     
-    private func showContextMenu() {
-        let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "打开文件魔法棒 (⌥M)", action: #selector(openPanel), keyEquivalent: "m"))
-        menu.addItem(NSMenuItem(title: "撤销上次操作 (⌘Z)", action: #selector(triggerUndo), keyEquivalent: "z"))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "偏好设置...", action: #selector(openPreferences), keyEquivalent: ","))
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "退出", action: #selector(quitApp), keyEquivalent: "q"))
+    /// 弹出状态栏右键上下文菜单
+    public func showContextMenu() {
+        let menu = NSMenu(title: "文件魔法棒")
         
-        statusItem?.menu = menu
-        statusItem?.button?.performClick(nil)
-        statusItem?.menu = nil // 恢复点击行为
+        let openItem = NSMenuItem(title: "显示文件魔法棒 (⌥M)", action: #selector(openPanel), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+        
+        let undoItem = NSMenuItem(title: "撤销上次操作 (⌘Z)", action: #selector(triggerUndo), keyEquivalent: "")
+        undoItem.target = self
+        menu.addItem(undoItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        let settingsItem = NSMenuItem(title: "配置管理中心...", action: #selector(openPreferences), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        let quitItem = NSMenuItem(title: "退出文件魔法棒 (⌘Q)", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+        
+        statusItem?.popUpMenu(menu)
     }
     
     @objc private func openPanel() {
@@ -69,7 +86,7 @@ public final class StatusBarManager: NSObject, ObservableObject {
     }
     
     @objc private func openPreferences() {
-        // 打开偏好设置
+        onOpenSettings?()
     }
     
     @objc private func quitApp() {

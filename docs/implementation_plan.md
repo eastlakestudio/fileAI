@@ -1,27 +1,27 @@
-# 任务看板缩略卡片与详情弹窗实施方案 (Implementation Plan)
+# 状态栏右键菜单退出与快捷操作实施方案 (Implementation Plan)
 
 ## 1. 现状与需求分析
 
 ### 1.1 用户需求
-- **任务看板列表应缩略一个小卡片展示**：
-  - 卡片核心内容：**「任务目标和内容」**、**「状态和结果」**；
-  - **点击后再查看详情**：点击卡片可呼出清晰完整的任务执行报告与文件变动详情。
+- 状态栏右键菜单必须支持稳定可靠地「退出」应用程序，以及呼出主窗口、撤销和配置管理。
 
-### 1.2 架构设计
-1. **缩略小卡片 (`taskCompactCard`)**：
-   - 极简紧凑布局（单卡高度约 70px）；
-   - **目标与内容**：展示 Prompt 意图、所涉文件数与方案摘要；
-   - **状态与结果**：彩色状态 Badge、时间、执行结果摘要（如 `✓ 成功生成 N 个文件` / `❌ 失败原因`）；
-   - 点击整卡触发查看详情；
-2. **任务详情弹窗 (`TaskDetailSheet`)**：
-   - 顶部：任务完整标题、创建时间、状态；
-   - 中部：详细变更清单（源文件 ➔ 目标文件、操作类型）、执行结果文件列表；
-   - 底部：持久化 Walkthrough 详细报告与原子事务回滚状态。
+### 1.2 改造方案
+1. **修复 `StatusBarManager.swift` 右键菜单弹出逻辑**：
+   - 使用 AppKit 标准 `statusItem?.popUpMenu(menu)` 接口弹出独立上下文菜单；
+   - 显式为每个 `NSMenuItem` 绑定 `target = self`；
+   - 支持右键点击以及 `Control + 左键点击` 触发；
+   - 提供选项：
+     - `✨ 显示文件魔法棒 (⌥M)`
+     - `↩ 撤销上次操作 (⌘Z)`
+     - `⚙️ 配置管理中心... (⌘,)`
+     - `⏻ 退出文件魔法棒 (⌘Q)`
+2. **在 `main.swift` 中连接所有事件回调**：
+   - 连接 `onOpenSettings`，点击右键菜单可直达配置管理页；
+   - 确保 `NSApplication.shared.terminate(nil)` 正确释放单进程锁并退出。
 
 ---
 
 ## 2. 待修改文件清单
 
-1. `Sources/AIFileUI/Views/TaskBoardView.swift` [MODIFY]：
-   - 将原全屏大卡片改为高密度的紧凑小卡片列表；
-   - 增加 `selectedDetailTask` 状态与 `TaskDetailSheet` 详情展示。
+1. `Sources/AIFileFinderIntegration/StatusBar/StatusBarManager.swift` [MODIFY]
+2. `Sources/AIFileApp/main.swift` [MODIFY]
