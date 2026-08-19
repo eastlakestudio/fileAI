@@ -87,6 +87,9 @@ public struct TaskBoardView: View {
         .task {
             await reloadTasks()
         }
+        .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+            Task { await reloadTasks() }
+        }
     }
     
     // MARK: - 1. 首行控制栏 (包含过滤 Tab)
@@ -154,8 +157,6 @@ public struct TaskBoardView: View {
         }
     }
     
-    // MARK: - 缩略小卡片 (展示：任务目标和内容，状态和结果，点击查看详情)
-    
     @ViewBuilder
     private func taskCompactCard(task: TaskExecutionRecord) -> some View {
         Button(action: {
@@ -191,7 +192,7 @@ public struct TaskBoardView: View {
                 
                 Spacer()
                 
-                // 右侧：状态与结果摘要
+                // 右侧：状态、结果摘要与计时
                 VStack(alignment: .trailing, spacing: 3) {
                     HStack(spacing: 6) {
                         statusBadge(task.status)
@@ -201,10 +202,22 @@ public struct TaskBoardView: View {
                             .foregroundColor(.secondary.opacity(0.6))
                     }
                     
-                    Text(resultSummaryText(task: task))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(resultSummaryColor(task: task))
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(resultSummaryText(task: task))
+                            .foregroundColor(resultSummaryColor(task: task))
+                        
+                        Text("•")
+                            .foregroundColor(.secondary.opacity(0.4))
+                        
+                        HStack(spacing: 2) {
+                            Image(systemName: "stopwatch")
+                                .font(.system(size: 8))
+                            Text(task.formattedDuration)
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                    .font(.system(size: 10, design: .monospaced))
+                    .lineLimit(1)
                 }
             }
             .padding(.horizontal, 12)
@@ -270,6 +283,9 @@ public struct TaskBoardView: View {
                             if let end = task.completedAt {
                                 Text("• 完成时间: \(end.formatted())")
                             }
+                            Text("• ⏱️ 总耗时: \(task.formattedDuration)")
+                                .fontWeight(.medium)
+                                .foregroundColor(.accentColor)
                         }
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
@@ -364,7 +380,7 @@ public struct TaskBoardView: View {
                         } else {
                             HStack(spacing: 6) {
                                 ProgressView().scaleEffect(0.6)
-                                Text("正在执行文件处理流程...")
+                                Text("正在执行文件处理流程... (⏱️ 已耗时 \(task.formattedDuration))")
                                     .font(.system(size: 11))
                                     .foregroundColor(.blue)
                             }

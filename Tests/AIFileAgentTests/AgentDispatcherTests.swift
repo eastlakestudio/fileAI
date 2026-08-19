@@ -5,6 +5,36 @@ import XCTest
 
 final class AgentDispatcherTests: XCTestCase {
     
+    func testFastPathDocToPDFInstantMatching() async throws {
+        let registry = SkillRegistry()
+        registry.register(DocToPDFSkill())
+        
+        let dispatcher = AgentDispatcher(provider: MockLLMClient(), registry: registry)
+        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/slides.pptx"), isDirectory: false)
+        
+        let startTime = Date()
+        let plan = try await dispatcher.generatePlan(userPrompt: "转成 A3 横版 pdf", fileItems: [fileItem])
+        let elapsed = Date().timeIntervalSince(startTime)
+        
+        // Fast-path 应在 0.1 秒内毫秒级瞬时返回
+        XCTAssertLessThan(elapsed, 0.1)
+        XCTAssertEqual(plan.actions.count, 1)
+        XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
+        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "slides.pdf")
+    }
+    
+    func testFastPathImageResizeInstantMatching() async throws {
+        let registry = SkillRegistry()
+        registry.register(ImageResizeSkill())
+        
+        let dispatcher = AgentDispatcher(provider: MockLLMClient(), registry: registry)
+        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/photo.jpg"), isDirectory: false, imageWidth: 4000, imageHeight: 3000)
+        
+        let plan = try await dispatcher.generatePlan(userPrompt: "统一修改为 1920x1080", fileItems: [fileItem])
+        XCTAssertFalse(plan.actions.isEmpty)
+        XCTAssertEqual(plan.actions.first?.operationType, .resizeImage)
+    }
+    
     func testAgentDispatcherGeneratesPlanViaMockProvider() async throws {
         let registry = SkillRegistry()
         registry.register(ImageResizeSkill())

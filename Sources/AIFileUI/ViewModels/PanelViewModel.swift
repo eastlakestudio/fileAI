@@ -35,7 +35,9 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     
     @Published public var inputText: String = ""
     @Published public var isThinking: Bool = false
+    @Published public var thinkingElapsedSeconds: Double = 0
     @Published public var statusMessage: String? = nil
+    private var thinkingTimerCancellable: AnyCancellable?
     
     @Published public var currentPlan: ExecutionPlan? = nil
     @Published public var isShowingDiffPreview: Bool = false
@@ -175,7 +177,19 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         }
         
         isThinking = true
-        statusMessage = "AI 正在分析意图并规划操作方案..."
+        thinkingElapsedSeconds = 0.0
+        statusMessage = "AI 正在分析意图并规划操作方案... (⏱️ 0.0s)"
+        
+        // 启动实时秒表计时器
+        let startTime = Date()
+        thinkingTimerCancellable = Timer.publish(every: 0.1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in
+                guard let self = self, self.isThinking else { return }
+                let elapsed = Date().timeIntervalSince(startTime)
+                self.thinkingElapsedSeconds = elapsed
+                self.statusMessage = "AI 正在分析意图并规划操作方案... (⏱️ \(String(format: "%.1fs", elapsed)))"
+            }
         
         Task {
             // 1. 任务提交瞬间立即持久化记录为【进行中】
@@ -185,8 +199,10 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             
             do {
                 let plan = try await dispatcher.generatePlan(userPrompt: prompt, fileItems: fileItems)
+                let elapsed = Date().timeIntervalSince(startTime)
                 self.currentPlan = plan
                 self.isThinking = false
+                self.thinkingTimerCancellable?.cancel()
                 self.statusMessage = nil
                 
                 // 更新持久化任务中的 plan
@@ -195,18 +211,20 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 if !plan.actions.isEmpty {
                     self.isShowingDiffPreview = true
                 } else if !plan.summary.isEmpty && plan.summary != "计划执行 0 项操作" {
-                    self.statusMessage = plan.summary
+                    self.statusMessage = "\(plan.summary) (⏱️ \(String(format: "%.2fs", elapsed)))"
                     // 问答/查询/统计类操作（无物理文件变动），直接记录为已完成并写入 AI 回复
                     await TaskManager.shared.completeTask(id: taskRecord.id, transactionId: nil, walkthrough: plan.summary)
                     self.activeTask = nil
                 } else {
-                    self.statusMessage = "💡 未匹配到需要变动的文件，请尝试调整指令或参考上方推荐 Skill"
+                    self.statusMessage = "💡 未匹配到需要变动的文件，请尝试调整指令或参考上方推荐 Skill (⏱️ \(String(format: "%.2fs", elapsed)))"
                     await TaskManager.shared.failTask(id: taskRecord.id, error: "未匹配到需要变动的文件")
                     self.activeTask = nil
                 }
             } catch {
+                let elapsed = Date().timeIntervalSince(startTime)
                 self.isThinking = false
-                self.statusMessage = "规划失败: \(error.localizedDescription)"
+                self.thinkingTimerCancellable?.cancel()
+                self.statusMessage = "规划失败: \(error.localizedDescription) (⏱️ \(String(format: "%.1fs", elapsed)))"
                 // 规划阶段出错时，立即持久化记录为【执行失败】，写入任务看板！
                 await TaskManager.shared.failTask(id: taskRecord.id, error: error.localizedDescription)
                 self.activeTask = nil

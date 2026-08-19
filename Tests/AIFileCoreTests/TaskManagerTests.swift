@@ -66,4 +66,28 @@ final class TaskManagerTests: XCTestCase {
         XCTAssertEqual(recoveredTasks.first?.status, .failed)
         XCTAssertEqual(recoveredTasks.first?.errorMessage, "CLI 权限被拒绝")
     }
+    
+    func testTaskTimingCalculationAndFormatting() {
+        let created = Date()
+        let finished = created.addingTimeInterval(1.45)
+        let record = TaskExecutionRecord(
+            prompt: "转成 A3 横版 pdf",
+            status: .completed,
+            createdAt: created,
+            completedAt: finished,
+            plan: ExecutionPlan(summary: "转换完成", actions: [])
+        )
+        
+        XCTAssertEqual(record.durationSeconds, 1.45, accuracy: 0.01)
+        XCTAssertEqual(record.formattedDuration, "1.5s")
+        
+        let fastRecord = TaskExecutionRecord(
+            prompt: "快速匹配",
+            status: .completed,
+            createdAt: created,
+            completedAt: created.addingTimeInterval(0.08),
+            plan: ExecutionPlan(summary: "Fast Path", actions: [])
+        )
+        XCTAssertEqual(fastRecord.formattedDuration, "80ms")
+    }
 }

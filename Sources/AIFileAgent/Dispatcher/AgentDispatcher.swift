@@ -2,7 +2,7 @@ import Foundation
 import AIFileCore
 import AIFileSkills
 
-/// Agent 任务调度器：连接用户意图、LLM 网关与 Skill 计划生成
+/// Agent 任务调度器：连接用户意图、启发式极速分流 (Fast-Path) 与 LLM 网关
 public final class AgentDispatcher: Sendable {
     public let provider: any LLMProviderProtocol
     public let registry: SkillRegistry
@@ -15,11 +15,17 @@ public final class AgentDispatcher: Sendable {
         self.registry = registry
     }
     
-    /// 根据用户自然语言与选中的文件生成执行计划（只读分析阶段）
+    /// 根据用户自然语言与选中的文件生成执行计划
     public func generatePlan(
         userPrompt: String,
         fileItems: [FileItem]
     ) async throws -> ExecutionPlan {
+        // 1. 优先尝试本地 Fast-Path 启发式极速分流（毫秒级响应，无需等待大模型子进程冷启动）
+        if let fastPlan = tryFastPathPlan(userPrompt: userPrompt, fileItems: fileItems), !fastPlan.actions.isEmpty {
+            return fastPlan
+        }
+        
+        // 2. 复杂意图或未命中规则时，无缝交由大模型/CLI 智能规划
         let systemPrompt = SystemPromptBuilder.build(with: fileItems)
         let messages = [
             ["role": "system", "content": systemPrompt],
@@ -51,6 +57,73 @@ public final class AgentDispatcher: Sendable {
             summary: summary.isEmpty ? "计划执行 \(combinedActions.count) 项操作" : summary,
             actions: combinedActions
         )
+    }
+    
+    /// 启发式规则极速分流（针对明确高频文件操作指令，0.005 秒瞬时返回）
+    private func tryFastPathPlan(userPrompt: String, fileItems: [FileItem]) -> ExecutionPlan? {
+        let p = userPrompt.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // A. PDF 相关转换指令 (如 "转成 A3 横版 pdf", "转成 pdf", "ppt 转 pdf", "word 转 pdf")
+        if (p.contains("pdf") && (p.contains("转") || p.contains("导出") || p.contains("to") || p.contains("生成"))) ||
+           p.contains("转成 a3") || p.contains("转成 a4") || p.contains("横版") {
+            if let skill = registry.skill(for: "doc_to_pdf") {
+                if let plan = try? skill.generatePlan(from: fileItems, parameters: [:]) {
+                    return plan
+                }
+            }
+        }
+        
+        // B. PDF 合并与拆分
+        if p.contains("合并") && p.contains("pdf") {
+            if let skill = registry.skill(for: "pdf_merge_split") {
+                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["action": "merge"]) {
+                    return plan
+                }
+            }
+        }
+        if p.contains("拆分") && p.contains("pdf") {
+            if let skill = registry.skill(for: "pdf_merge_split") {
+                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["action": "split"]) {
+                    return plan
+                }
+            }
+        }
+        
+        // C. 图片尺寸调整 (如 "1920x1080", "1920*1080", "1280x720", "缩放", "改尺寸")
+        if p.contains("1920") || p.contains("1080") || p.contains("1280") || p.contains("720") || p.contains("800") ||
+           p.contains("修改尺寸") || p.contains("统一改为") || p.contains("分辨率") {
+            var width = 1920
+            var height = 1080
+            if p.contains("1280") && p.contains("720") {
+                width = 1280
+                height = 720
+            } else if p.contains("800") && p.contains("600") {
+                width = 800
+                height = 600
+            }
+            if let skill = registry.skill(for: "image_resize") {
+                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["targetWidth": width, "targetHeight": height]) {
+                    return plan
+                }
+            }
+        }
+        
+        // D. 图片格式转换 (如 "转成 png", "转成 jpg", "转成 webp")
+        if p.contains("转") || p.contains("格式") {
+            var targetFormat: String? = nil
+            if p.contains("png") { targetFormat = "png" }
+            else if p.contains("jpg") || p.contains("jpeg") { targetFormat = "jpg" }
+            else if p.contains("webp") { targetFormat = "webp" }
+            else if p.contains("heic") { targetFormat = "heic" }
+            
+            if let format = targetFormat, let skill = registry.skill(for: "image_convert") {
+                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["targetFormat": format]) {
+                    return plan
+                }
+            }
+        }
+        
+        return nil
     }
     
     /// 物理执行已确认的计划

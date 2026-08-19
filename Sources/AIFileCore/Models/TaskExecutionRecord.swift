@@ -8,7 +8,7 @@ public enum TaskStatus: String, Sendable, Codable {
     case reverted = "已撤销"
 }
 
-/// 任务执行记录（包含完整的 Plan 方案与 Walkthrough 结果）
+/// 任务执行记录（包含完整的 Plan 方案、Walkthrough 结果与全链路执行计时）
 public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
     public let id: UUID
     public let prompt: String
@@ -47,5 +47,21 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         self.walkthroughReport = walkthroughReport
         self.transactionId = transactionId
         self.errorMessage = errorMessage
+    }
+    
+    /// 任务总耗时（秒）
+    public var durationSeconds: Double {
+        let end = completedAt ?? Date()
+        return max(0.01, end.timeIntervalSince(createdAt))
+    }
+    
+    /// 格式化耗时展示（例如 "1.2s", "350ms"）
+    public var formattedDuration: String {
+        let dur = durationSeconds
+        if dur < 1.0 {
+            return String(format: "%.0fms", dur * 1000)
+        } else {
+            return String(format: "%.1fs", dur)
+        }
     }
 }

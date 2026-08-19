@@ -95,9 +95,38 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 process.standardOutput = outPipe
                 process.standardError = errPipe
                 
+                var isResumed = false
+                let lock = NSLock()
+                
+                // 超时监控定时器
+                let timeoutTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
+                timeoutTimer.schedule(deadline: .now() + self.timeoutSeconds)
+                timeoutTimer.setEventHandler {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    if !isResumed {
+                        isResumed = true
+                        if process.isRunning {
+                            process.terminate()
+                        }
+                        continuation.resume(throwing: NSError(
+                            domain: "CLIModelClient",
+                            code: 408,
+                            userInfo: [NSLocalizedDescriptionKey: "\(self.tool.name) 执行超时（超过 \(Int(self.timeoutSeconds)) 秒），请检查网络或切换模型"]
+                        ))
+                    }
+                }
+                timeoutTimer.resume()
+                
                 do {
                     try process.run()
                     process.waitUntilExit()
+                    timeoutTimer.cancel()
+                    
+                    lock.lock()
+                    defer { lock.unlock() }
+                    if isResumed { return }
+                    isResumed = true
                     
                     let data = outPipe.fileHandleForReading.readDataToEndOfFile()
                     let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -114,7 +143,13 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                         ))
                     }
                 } catch {
-                    continuation.resume(throwing: error)
+                    timeoutTimer.cancel()
+                    lock.lock()
+                    defer { lock.unlock() }
+                    if !isResumed {
+                        isResumed = true
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
         }

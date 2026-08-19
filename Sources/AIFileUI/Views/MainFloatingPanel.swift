@@ -336,11 +336,17 @@ public struct MainFloatingPanel: View {
                         viewModel.submitInstruction()
                     }
                     
-                    VStack(spacing: 6) {
+                    VStack(spacing: 2) {
                         if viewModel.isThinking {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                                .frame(width: 26, height: 26)
+                            HStack(spacing: 4) {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                Text(String(format: "%.1fs", viewModel.thinkingElapsedSeconds))
+                                    .font(.system(size: 9, design: .monospaced))
+                                    .foregroundColor(.accentColor)
+                            }
+                            .padding(.horizontal, 4)
+                            .frame(height: 26)
                         } else {
                             Button(action: { viewModel.submitInstruction() }) {
                                 Image(systemName: "arrow.up.circle.fill")
