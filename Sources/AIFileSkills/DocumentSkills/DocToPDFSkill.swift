@@ -5,8 +5,8 @@ import AIFileCore
 
 public final class DocToPDFSkill: FileSkill, Sendable {
     public let identifier = "doc_to_pdf"
-    public let name = "文档/图片转PDF"
-    public let skillDescription = "将文本文件、Markdown 或图片文件转换为标准 PDF 格式"
+    public let name = "文档/演示/图片转PDF"
+    public let skillDescription = "将 PPT/PPTX、Keynote、Word 文档 (DOC/DOCX)、Markdown、文本或图片安全转换为标准矢量 PDF"
     
     public var parametersSchema: [String: Any] {
         return [
@@ -26,7 +26,12 @@ public final class DocToPDFSkill: FileSkill, Sendable {
     
     public func generatePlan(from items: [FileItem], parameters: [String: Any]) throws -> ExecutionPlan {
         let targetNames = Set((parameters["fileNames"] as? [String]) ?? [])
-        let convertibleExtensions: Set<String> = ["txt", "md", "markdown", "png", "jpg", "jpeg"]
+        let convertibleExtensions: Set<String> = [
+            "ppt", "pptx", "key",
+            "doc", "docx", "pages",
+            "txt", "md", "markdown", "rtf", "html",
+            "png", "jpg", "jpeg", "heic", "webp"
+        ]
         
         let targetItems = items.filter { item in
             !item.isDirectory &&
@@ -45,7 +50,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
                 operationType: .convertToPDF,
                 sourceURL: item.url,
                 targetURL: targetURL,
-                detailDescription: "转换为 PDF 文档"
+                detailDescription: "将 \(item.fileExtension.uppercased()) 转换为 PDF 文档"
             ))
         }
         
@@ -59,15 +64,22 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         guard let targetURL = action.targetURL else { return nil }
         let ext = action.sourceURL.pathExtension.lowercased()
         
-        if ["png", "jpg", "jpeg"].contains(ext) {
+        if ["ppt", "pptx", "key"].contains(ext) {
+            // 演示文稿转 PDF (优先 AppleScript 静默调用 Keynote / PowerPoint / LibreOffice)
+            try convertPresentationToPDF(sourceURL: action.sourceURL, targetURL: targetURL)
+        } else if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext) {
             // 图片转 PDF
             guard let image = NSImage(contentsOf: action.sourceURL),
                   let pdfData = imageToPDFData(image: image) else {
                 throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "图片转PDF失败"])
             }
             try pdfData.write(to: targetURL)
+        } else if ["doc", "docx", "rtf", "html"].contains(ext) {
+            // 富文本 / Word 转 PDF (利用 macOS 原生 NSAttributedString 解析)
+            let pdfData = try richTextToPDFData(sourceURL: action.sourceURL)
+            try pdfData.write(to: targetURL)
         } else {
-            // 文本/Markdown 转 PDF
+            // 纯文本 / Markdown 转 PDF
             let content = try String(contentsOf: action.sourceURL, encoding: .utf8)
             let pdfData = try textToPDFData(text: content)
             try pdfData.write(to: targetURL)
@@ -76,20 +88,140 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         return targetURL
     }
     
+    // MARK: - PPT / Keynote 转换
+    
+    private func convertPresentationToPDF(sourceURL: URL, targetURL: URL) throws {
+        // 1. 尝试使用 Keynote 后台导出
+        if convertViaKeynoteAppleScript(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 2. 尝试使用 PowerPoint 后台导出
+        if convertViaPowerPointAppleScript(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 3. 尝试使用 LibreOffice (soffice) 导出
+        if convertViaSofficeCLI(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        throw NSError(
+            domain: "DocToPDFSkill",
+            code: 404,
+            userInfo: [NSLocalizedDescriptionKey: "PPT 转换需要系统安装有 Keynote、Microsoft PowerPoint 或 LibreOffice。请确认已安装上述任一应用。"]
+        )
+    }
+    
+    private func convertViaKeynoteAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        let scriptSource = """
+        tell application "Keynote"
+            try
+                set theDoc to open POSIX file "\(sourceURL.path)"
+                export theDoc to POSIX file "\(targetURL.path)" as PDF
+                close theDoc saving no
+                return "SUCCESS"
+            on error
+                return "FAIL"
+            end try
+        end tell
+        """
+        return runAppleScript(scriptSource)
+    }
+    
+    private func convertViaPowerPointAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        let scriptSource = """
+        tell application "Microsoft PowerPoint"
+            try
+                open POSIX file "\(sourceURL.path)"
+                save active presentation in POSIX file "\(targetURL.path)" as save as PDF
+                close active presentation saving no
+                return "SUCCESS"
+            on error
+                return "FAIL"
+            end try
+        end tell
+        """
+        return runAppleScript(scriptSource)
+    }
+    
+    private func convertViaSofficeCLI(sourceURL: URL, targetURL: URL) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["soffice"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        try? process.run()
+        process.waitUntilExit()
+        
+        guard process.terminationStatus == 0,
+              let sofficePath = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !sofficePath.isEmpty else {
+            return false
+        }
+        
+        let convertProcess = Process()
+        convertProcess.executableURL = URL(fileURLWithPath: sofficePath)
+        convertProcess.arguments = [
+            "--headless",
+            "--convert-to", "pdf",
+            sourceURL.path,
+            "--outdir", targetURL.deletingLastPathComponent().path
+        ]
+        try? convertProcess.run()
+        convertProcess.waitUntilExit()
+        
+        return FileManager.default.fileExists(atPath: targetURL.path)
+    }
+    
+    private func runAppleScript(_ source: String) -> Bool {
+        var error: NSDictionary?
+        if let script = NSAppleScript(source: source) {
+            let result = script.executeAndReturnError(&error)
+            if error == nil && result.stringValue == "SUCCESS" {
+                return true
+            }
+        }
+        return false
+    }
+    
+    // MARK: - 富文本与 DOCX 转换
+    
+    private func richTextToPDFData(sourceURL: URL) throws -> Data {
+        let options: [NSAttributedString.DocumentReadingOptionKey: Any] = [
+            .documentType: NSAttributedString.DocumentType.officeOpenXML
+        ]
+        
+        if let attrString = try? NSAttributedString(url: sourceURL, options: options, documentAttributes: nil) {
+            return try attributedStringToPDFData(attrString)
+        }
+        
+        // 尝试作为通用富文本/RTF 读取
+        if let attrString = try? NSAttributedString(url: sourceURL, options: [:], documentAttributes: nil) {
+            return try attributedStringToPDFData(attrString)
+        }
+        
+        // Fallback: 作为纯文本读取
+        let text = (try? String(contentsOf: sourceURL, encoding: .utf8)) ?? ""
+        return try textToPDFData(text: text)
+    }
+    
+    // MARK: - 图片转 PDF
+    
     private func imageToPDFData(image: NSImage) -> Data? {
         let pdfDoc = PDFDocument()
-        guard let imageRep = image.representations.first,
-              let page = PDFPage(image: image) else {
+        guard let page = PDFPage(image: image) else {
             return nil
         }
-        _ = imageRep // silence warning
         pdfDoc.insert(page, at: 0)
         return pdfDoc.dataRepresentation()
     }
     
-    private func textToPDFData(text: String) throws -> Data {
+    // MARK: - 矢量排版 CoreText 转 PDF
+    
+    private func attributedStringToPDFData(_ attributedString: NSAttributedString) throws -> Data {
         let pdfData = NSMutableData()
-        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4 尺寸
+        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4
         
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
@@ -99,15 +231,6 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         var mediaBox = pageRect
         context.beginPage(mediaBox: &mediaBox)
         
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineBreakMode = .byWordWrapping
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 12),
-            .foregroundColor: NSColor.textColor,
-            .paragraphStyle: paragraphStyle
-        ]
-        
-        let attributedString = NSAttributedString(string: text, attributes: attributes)
         let framesetter = CTFramesetterCreateWithAttributedString(attributedString as CFAttributedString)
         let textPath = CGPath(rect: pageRect.insetBy(dx: 40, dy: 40), transform: nil)
         let frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, attributedString.length), textPath, nil)
@@ -117,5 +240,17 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         context.closePDF()
         
         return pdfData as Data
+    }
+    
+    private func textToPDFData(text: String) throws -> Data {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineBreakMode = .byWordWrapping
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 12),
+            .foregroundColor: NSColor.textColor,
+            .paragraphStyle: paragraphStyle
+        ]
+        let attributedString = NSAttributedString(string: text, attributes: attributes)
+        return try attributedStringToPDFData(attributedString)
     }
 }
