@@ -48,7 +48,7 @@ public final class StatusBarManager: NSObject, ObservableObject {
     
     private func showContextMenu() {
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "打开 AI 助手 (⌥Space)", action: #selector(openPanel), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "打开文件魔法棒 (⌥M)", action: #selector(openPanel), keyEquivalent: "m"))
         menu.addItem(NSMenuItem(title: "撤销上次操作 (⌘Z)", action: #selector(triggerUndo), keyEquivalent: "z"))
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "偏好设置...", action: #selector(openPreferences), keyEquivalent: ","))

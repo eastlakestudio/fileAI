@@ -13,7 +13,7 @@ public final class GlobalHotKeyManager: ObservableObject {
     
     public init() {}
     
-    /// 注册全局快捷键（默认 Option + Space）
+    /// 注册全局快捷键（默认 Option + M，对应文件魔法棒 Magic Wand）
     public func registerDefaultHotKey() {
         let hotKeyID = EventHotKeyID(signature: OSType(0x41494649), id: 1) // "AIFI"
         
@@ -26,8 +26,8 @@ public final class GlobalHotKeyManager: ObservableObject {
             return noErr
         }, 1, &eventType, nil, &eventHandlerRef)
         
-        // 49 为空格键键码 (Space)，optionKey 为 Option 键修饰符
-        RegisterEventHotKey(UInt32(kVK_Space), UInt32(optionKey), hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
+        // kVK_ANSI_M 为字母 M 键码 (0x29)，optionKey 为 Option 键修饰符
+        RegisterEventHotKey(UInt32(kVK_ANSI_M), UInt32(optionKey), hotKeyID, GetApplicationEventTarget(), 0, &hotKeyRef)
     }
     
     /// 注销快捷键

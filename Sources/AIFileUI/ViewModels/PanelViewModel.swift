@@ -210,7 +210,17 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         Task {
             do {
                 let record = try await dispatcher.executePlan(plan: plan)
-                let walkthrough = "✅ 成功完成 \(record.reverseActions.count) 个文件物理操作。\n- 事务 ID: \(record.id.uuidString)\n- 变更类型: \(plan.summary)"
+                
+                var fileSummaryLines: [String] = []
+                for action in plan.actions {
+                    if let dest = action.targetURL {
+                        fileSummaryLines.append("📄 \(dest.lastPathComponent) (源: \(action.sourceURL.lastPathComponent))")
+                    } else {
+                        fileSummaryLines.append("📄 \(action.sourceURL.lastPathComponent)")
+                    }
+                }
+                let filesBlock = fileSummaryLines.isEmpty ? "（无新文件生成）" : fileSummaryLines.joined(separator: "\n")
+                let walkthrough = "✅ 成功完成 \(record.reverseActions.count) 项物理操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
                 
                 if let task = self.activeTask {
                     await TaskManager.shared.completeTask(id: task.id, transactionId: record.id, walkthrough: walkthrough)
