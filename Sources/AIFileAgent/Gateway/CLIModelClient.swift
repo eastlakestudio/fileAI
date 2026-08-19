@@ -53,10 +53,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         var arguments: [String] = []
         switch tool.type {
         case .antigravity:
-            if modelName.isEmpty || modelName == "auto" {
+            if modelName.isEmpty || modelName == "auto" || modelName == "default" {
                 arguments = ["--print", promptPayload]
             } else {
-                arguments = ["--print", promptPayload, "--model", modelName]
+                arguments = ["--print", promptPayload, "--model", modelName, "--effort", "low"]
             }
         case .ollama:
             arguments = ["run", modelName, promptPayload]
