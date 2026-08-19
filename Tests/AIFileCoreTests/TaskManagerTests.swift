@@ -52,4 +52,18 @@ final class TaskManagerTests: XCTestCase {
         XCTAssertEqual(recoveredTasks.first?.status, .completed)
         XCTAssertEqual(recoveredTasks.first?.walkthroughReport, "✅ 转码完成")
     }
+    
+    func testFailedTaskPersistenceAndRecovery() async throws {
+        let firstInstance = TaskManager(storageDirectory: tempDirectory)
+        let plan = ExecutionPlan(summary: "意图规划中", actions: [])
+        let task = await firstInstance.createTask(prompt: "分析文件异常", plan: plan)
+        await firstInstance.failTask(id: task.id, error: "CLI 权限被拒绝")
+        
+        let restartedInstance = TaskManager(storageDirectory: tempDirectory)
+        let recoveredTasks = await restartedInstance.allTasks
+        
+        XCTAssertEqual(recoveredTasks.count, 1)
+        XCTAssertEqual(recoveredTasks.first?.status, .failed)
+        XCTAssertEqual(recoveredTasks.first?.errorMessage, "CLI 权限被拒绝")
+    }
 }

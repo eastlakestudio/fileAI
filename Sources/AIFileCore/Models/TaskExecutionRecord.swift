@@ -17,7 +17,7 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
     public var completedAt: Date?
     
     // 执行前 Plan 方案
-    public let plan: ExecutionPlan
+    public var plan: ExecutionPlan
     
     // 执行后 Walkthrough 结果报告（Markdown 格式）
     public var walkthroughReport: String?

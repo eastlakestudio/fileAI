@@ -30,8 +30,15 @@ public actor TaskManager {
         return task
     }
     
+    /// 更新任务的执行计划与摘要
+    public func updateTaskPlan(id: UUID, plan: ExecutionPlan) {
+        guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
+        tasks[index].plan = plan
+        persistTask(tasks[index])
+    }
+    
     /// 标记任务已完成并记录 Walkthrough 结果报告
-    public func completeTask(id: UUID, transactionId: UUID, walkthrough: String) {
+    public func completeTask(id: UUID, transactionId: UUID? = nil, walkthrough: String) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[index].status = .completed
         tasks[index].completedAt = Date()

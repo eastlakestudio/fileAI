@@ -179,24 +179,38 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         statusMessage = "AI 正在分析意图并规划操作方案..."
         
         Task {
+            // 1. 任务提交瞬间立即持久化记录为【进行中】
+            let initialPlan = ExecutionPlan(summary: "正在规划意图...", actions: [])
+            let taskRecord = await TaskManager.shared.createTask(prompt: prompt, plan: initialPlan)
+            self.activeTask = taskRecord
+            
             do {
                 let plan = try await dispatcher.generatePlan(userPrompt: prompt, fileItems: fileItems)
                 self.currentPlan = plan
                 self.isThinking = false
                 self.statusMessage = nil
                 
+                // 更新持久化任务中的 plan
+                await TaskManager.shared.updateTaskPlan(id: taskRecord.id, plan: plan)
+                
                 if !plan.actions.isEmpty {
-                    // 创建任务并记录为进行中
-                    self.activeTask = await TaskManager.shared.createTask(prompt: prompt, plan: plan)
                     self.isShowingDiffPreview = true
                 } else if !plan.summary.isEmpty && plan.summary != "计划执行 0 项操作" {
                     self.statusMessage = plan.summary
+                    // 问答/查询/统计类操作（无物理文件变动），直接记录为已完成并写入 AI 回复
+                    await TaskManager.shared.completeTask(id: taskRecord.id, transactionId: nil, walkthrough: plan.summary)
+                    self.activeTask = nil
                 } else {
                     self.statusMessage = "💡 未匹配到需要变动的文件，请尝试调整指令或参考上方推荐 Skill"
+                    await TaskManager.shared.failTask(id: taskRecord.id, error: "未匹配到需要变动的文件")
+                    self.activeTask = nil
                 }
             } catch {
                 self.isThinking = false
                 self.statusMessage = "规划失败: \(error.localizedDescription)"
+                // 规划阶段出错时，立即持久化记录为【执行失败】，写入任务看板！
+                await TaskManager.shared.failTask(id: taskRecord.id, error: error.localizedDescription)
+                self.activeTask = nil
             }
         }
     }
