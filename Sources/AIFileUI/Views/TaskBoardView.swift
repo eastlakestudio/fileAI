@@ -179,9 +179,15 @@ public struct TaskBoardView: View {
                             .foregroundColor(.primary)
                             .lineLimit(1)
                         
-                        Text("(\(task.plan.actions.count) 项变动)")
-                            .font(.system(size: 10))
-                            .foregroundColor(.secondary)
+                        if task.status == .inProgress && task.plan.actions.isEmpty {
+                            Text("(正在分析匹配...)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.blue)
+                        } else {
+                            Text("(\(task.plan.actions.count) 项变动)")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
                     }
                     
                     Text(task.plan.summary)
@@ -293,9 +299,15 @@ public struct TaskBoardView: View {
                     
                     // 2. 实施方案 (Plan) 与详细文件操作
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("📋 实施方案与文件操作 (\(task.plan.actions.count) 项)")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
+                        if task.status == .inProgress && task.plan.actions.isEmpty {
+                            Text("📋 实施方案 (AI 正在分析匹配文件...)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.blue)
+                        } else {
+                            Text("📋 实施方案与文件操作 (\(task.plan.actions.count) 项)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                        }
                         
                         Text(task.plan.summary)
                             .font(.system(size: 11))
