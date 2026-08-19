@@ -1,25 +1,26 @@
-# 任务看板全量数据持久化与冷启动恢复实施方案 (Implementation Plan)
+# 窗口背景不透明度优化与文字高对比度呈现实施方案 (Implementation Plan)
 
-## 1. 现状痛点与目标
+## 1. 现状分析与优化目标
 
-### 1.1 现状排查
-- **存储目录不当**：原实现存储在 `~/Library/Caches/`，容易被系统缓存清理机制误删；
-- **冷启动未加载**：`TaskManager` 在 `init()` 时仅创建了目录，**未从磁盘读取加载已保存的 `.json` 历史任务**，导致每次重新启动 App 时任务看板呈现空白。
+### 1.1 现状痛点
+- 原窗口背景仅使用 `.ultraThinMaterial`（超薄半透明），在下层有深色/黑色背景软件（如黑色终端、VSCode 黑色主题、深色浏览器等）时，下层颜色直接透过窗口，导致当前界面的黑色/浅灰色文字与背景融为一体，产生严重视觉干扰与不可读问题。
 
 ### 1.2 改造目标
-1. **持久化存储迁移至 Application Support**：
-   - 路径统一迁移至 `~/Library/Application Support/AIFileAssistant/tasks/`；
-2. **冷启动自动全量恢复加载**：
-   - 在 `TaskManager.init()` 及 `loadPersistedTasks()` 中，自动遍历并反序列化所有已记录的任务，按创建时间逆序排列；
-3. **单元测试覆盖**：
-   - 增加针对冷启动持久化恢复、写入、更新与重载的完整单元测试。
+1. **采用高密度 Thick Material + 88% 原生 WindowBackground 双层复合底色**：
+   - 底层使用 `.thickMaterial` 提供强力高斯模糊与高光阻隔；
+   - 叠加 `Color(nsColor: .windowBackgroundColor).opacity(0.88)`，在保留 macOS 现代磨砂质感的同时，阻绝下层深色软件的颜色污染，确保浅色/深色系统外观下的文字对比度；
+2. **卡片与列表背景对比度增强**：
+   - 提升文件列表项、任务卡片、技能卡片的底色对比度，确保文字在任何环境背景下清晰锐利。
 
 ---
 
 ## 2. 待修改文件清单
 
-1. `Sources/AIFileCore/Transaction/TaskManager.swift` [MODIFY]：
-   - 迁移至 `Application Support` 目录；
-   - 添加 `loadPersistedTasks()` 在启动时自动恢复全部任务；
-2. `Tests/AIFileCoreTests/TaskManagerTests.swift` [MODIFY]：
-   - 增加独立存储目录下的冷启动重启与持久化恢复测试用例。
+1. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]：
+   - 升级为双层复合防干扰材质底色；
+2. `Sources/AIFileUI/Views/TaskBoardView.swift` [MODIFY]：
+   - 升级为双层复合防干扰材质底色；
+3. `Sources/AIFileUI/Views/ModelSettingsView.swift` [MODIFY]：
+   - 升级为双层复合防干扰材质底色；
+4. `Sources/AIFileUI/Views/SkillManagementView.swift` [MODIFY]：
+   - 升级为双层复合防干扰材质底色。

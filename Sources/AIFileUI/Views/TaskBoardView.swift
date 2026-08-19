@@ -67,11 +67,18 @@ public struct TaskBoardView: View {
             bottomStatusBar
         }
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
-        .background(.ultraThinMaterial)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thickMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.90))
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .ignoresSafeArea(.all)
         .task {
@@ -160,10 +167,10 @@ public struct TaskBoardView: View {
             executionResultSection(task: task)
         }
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.45))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
         )
         .cornerRadius(10)
     }

@@ -49,7 +49,14 @@ public struct MainFloatingPanel: View {
             }
         }
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
-        .background(.ultraThinMaterial)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thickMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.90))
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -277,7 +284,7 @@ public struct MainFloatingPanel: View {
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
                     .cornerRadius(6)
                 }
             }
@@ -339,7 +346,7 @@ public struct MainFloatingPanel: View {
                             }
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.12))
+                            .background(Color.accentColor.opacity(0.15))
                             .foregroundColor(.accentColor)
                             .cornerRadius(6)
                         }
@@ -367,10 +374,10 @@ public struct MainFloatingPanel: View {
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .padding(8)
-                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.95))
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                            .stroke(Color.primary.opacity(0.15), lineWidth: 1)
                     )
                     .cornerRadius(6)
                     .onSubmit {

@@ -54,7 +54,14 @@ public struct SkillManagementView: View {
             bottomActionBar
         }
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
-        .background(.ultraThinMaterial)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.thickMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.90))
+            }
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -376,10 +383,10 @@ public struct SkillManagementView: View {
             }
         }
         .padding(10)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(skill.isEnabled ? 0.45 : 0.2))
+        .background(Color(nsColor: .controlBackgroundColor).opacity(skill.isEnabled ? 0.85 : 0.45))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(skill.isEnabled ? Color.white.opacity(0.15) : Color.white.opacity(0.05), lineWidth: 1)
+                .stroke(skill.isEnabled ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.08), lineWidth: 1)
         )
         .cornerRadius(8)
     }
