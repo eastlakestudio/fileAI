@@ -39,6 +39,25 @@ public final class ModelSettingsManager: @unchecked Sendable {
             return "✅ 本地 MLX-Swift 引擎就绪（Apple Silicon Metal 加速）"
         }
         
+        // 1. 本地 AI CLI 引擎探测
+        if settings.providerId.starts(with: "cli_") {
+            let toolTypeRaw = String(settings.providerId.dropFirst(4))
+            if let type = CLIToolType(rawValue: toolTypeRaw) {
+                if let execPath = CLIDiscoveryEngine.shared.findExecutablePath(for: type.executableNames) {
+                    let version = await fetchCLIVersion(path: execPath)
+                    let verStr = version.map { " (版本: \($0))" } ?? ""
+                    return "✅ 本地 CLI 运行就绪：\(type.displayName)\(verStr)"
+                } else {
+                    throw NSError(
+                        domain: "ModelSettings",
+                        code: 404,
+                        userInfo: [NSLocalizedDescriptionKey: "未在系统 PATH 中找到 \(type.displayName)，请先安装"]
+                    )
+                }
+            }
+        }
+        
+        // 2. 云端 HTTP OpenAI 兼容接口
         guard let url = URL(string: settings.baseURL)?.appendingPathComponent("models") else {
             throw NSError(domain: "ModelSettings", code: 1, userInfo: [NSLocalizedDescriptionKey: "无效的 Base URL"])
         }
@@ -59,6 +78,28 @@ public final class ModelSettingsManager: @unchecked Sendable {
         } else {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw NSError(domain: "ModelSettings", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器返回错误 \(httpResponse.statusCode): \(body)"])
+        }
+    }
+    
+    private func fetchCLIVersion(path: String) async -> String? {
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: path)
+                process.arguments = ["--version"]
+                let pipe = Pipe()
+                process.standardOutput = pipe
+                process.standardError = pipe
+                do {
+                    try process.run()
+                    process.waitUntilExit()
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    let out = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    continuation.resume(returning: out?.components(separatedBy: "\n").first)
+                } catch {
+                    continuation.resume(returning: nil)
+                }
+            }
         }
     }
 }
