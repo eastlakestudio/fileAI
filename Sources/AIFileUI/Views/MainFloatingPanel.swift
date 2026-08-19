@@ -260,9 +260,21 @@ public struct MainFloatingPanel: View {
                             .font(.system(size: 13))
                         
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(item.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .lineLimit(1)
+                            HStack(spacing: 5) {
+                                Text(item.name)
+                                    .font(.system(size: 12, weight: .medium))
+                                    .lineLimit(1)
+                                
+                                if viewModel.latestOutputURLs.contains(where: { $0.path == item.url.path }) {
+                                    Text("✨ 刚生成")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(Color.green.opacity(0.18))
+                                        .foregroundColor(.green)
+                                        .cornerRadius(3)
+                                }
+                            }
                             
                             HStack(spacing: 6) {
                                 Text(item.formattedSize)
@@ -278,6 +290,25 @@ public struct MainFloatingPanel: View {
                         }
                         
                         Spacer()
+                        
+                        // 快捷定位与打开按钮
+                        HStack(spacing: 4) {
+                            Button(action: { viewModel.revealFile(at: item.url) }) {
+                                Image(systemName: "magnifyingglass.circle.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("在访达中定位高亮此文件")
+                            
+                            Button(action: { viewModel.openFile(at: item.url) }) {
+                                Image(systemName: "arrow.up.forward.app.fill")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("使用系统默认程序打开此文件")
+                        }
                     }
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
@@ -318,6 +349,52 @@ public struct MainFloatingPanel: View {
     
     private var bottomChatInputBar: some View {
         VStack(spacing: 4) {
+            // 最近生成文件的快捷定位与打开横幅
+            if !viewModel.latestOutputURLs.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.green)
+                    
+                    Text("已生成 \(viewModel.latestOutputURLs.count) 个结果文件")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Button(action: { viewModel.revealLatestOutputFiles() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 10, weight: .bold))
+                            Text("在访达中高亮定位")
+                                .font(.system(size: 10, weight: .bold))
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.mini)
+                    
+                    Button(action: { viewModel.openLatestOutputDirectory() }) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "folder")
+                                .font(.system(size: 10))
+                            Text("打开目录")
+                                .font(.system(size: 10))
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.green.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.green.opacity(0.25), lineWidth: 1)
+                )
+                .cornerRadius(6)
+                .padding(.horizontal, 14)
+            }
+            
             if let msg = viewModel.statusMessage {
                 Text(msg)
                     .font(.system(size: 11))

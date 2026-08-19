@@ -395,31 +395,119 @@ public struct TaskBoardView: View {
                         }
                     }
                     
-                    // 3. 执行结果与产出清单
+                    // 3. 执行结果与产出清单 (带一键在访达中高亮定位与打开)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("📂 执行结果与产出")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundColor(.secondary)
-                        
-                        if task.status == .completed || task.status == .reverted {
-                            let outputFiles = extractOutputFiles(from: task)
-                            if !outputFiles.isEmpty {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    ForEach(outputFiles, id: \.self) { fileText in
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "checkmark.circle.fill")
+                        HStack {
+                            Text("📂 执行结果与产出 (\(task.plan.actions.count) 项)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            if (task.status == .completed || task.status == .reverted) && !task.plan.actions.isEmpty {
+                                let outputURLs = extractOutputURLs(from: task)
+                                if !outputURLs.isEmpty {
+                                    Button(action: {
+                                        NSWorkspace.shared.activateFileViewerSelecting(outputURLs)
+                                    }) {
+                                        HStack(spacing: 3) {
+                                            Image(systemName: "magnifyingglass")
                                                 .font(.system(size: 9))
-                                                .foregroundColor(.green)
-                                            Text(fileText)
-                                                .font(.system(size: 11, design: .monospaced))
-                                                .foregroundColor(.primary)
+                                            Text("在访达中定位全部")
+                                                .font(.system(size: 10, weight: .medium))
                                         }
                                     }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.mini)
+                                    
+                                    if let first = outputURLs.first {
+                                        Button(action: {
+                                            NSWorkspace.shared.open(first.deletingLastPathComponent())
+                                        }) {
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "folder")
+                                                    .font(.system(size: 9))
+                                                Text("打开目录")
+                                                    .font(.system(size: 10, weight: .medium))
+                                            }
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .controlSize(.mini)
+                                    }
                                 }
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color.green.opacity(0.06))
-                                .cornerRadius(6)
+                            }
+                        }
+                        
+                        if task.status == .completed || task.status == .reverted {
+                            if !task.plan.actions.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(task.plan.actions) { action in
+                                        let targetURL = action.targetURL ?? action.sourceURL
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.green)
+                                            
+                                            VStack(alignment: .leading, spacing: 1) {
+                                                Text(targetURL.lastPathComponent)
+                                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                                    .foregroundColor(.primary)
+                                                
+                                                Text("路径: \(targetURL.path)")
+                                                    .font(.system(size: 9, design: .monospaced))
+                                                    .foregroundColor(.secondary)
+                                                    .lineLimit(1)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            // 单文件操作按钮
+                                            HStack(spacing: 4) {
+                                                Button(action: {
+                                                    NSWorkspace.shared.activateFileViewerSelecting([targetURL])
+                                                }) {
+                                                    HStack(spacing: 2) {
+                                                        Image(systemName: "magnifyingglass")
+                                                            .font(.system(size: 8))
+                                                        Text("定位")
+                                                            .font(.system(size: 9))
+                                                    }
+                                                }
+                                                .buttonStyle(.bordered)
+                                                .controlSize(.mini)
+                                                .help("在访达中高亮显示此文件")
+                                                
+                                                Button(action: {
+                                                    NSWorkspace.shared.open(targetURL)
+                                                }) {
+                                                    HStack(spacing: 2) {
+                                                        Image(systemName: "arrow.up.forward.app")
+                                                            .font(.system(size: 8))
+                                                        Text("打开")
+                                                            .font(.system(size: 9))
+                                                    }
+                                                }
+                                                .buttonStyle(.bordered)
+                                                .controlSize(.mini)
+                                                .help("打开此文件")
+                                                
+                                                Button(action: {
+                                                    NSPasteboard.general.clearContents()
+                                                    NSPasteboard.general.setString(targetURL.path, forType: .string)
+                                                }) {
+                                                    Image(systemName: "doc.on.doc")
+                                                        .font(.system(size: 8))
+                                                }
+                                                .buttonStyle(.bordered)
+                                                .controlSize(.mini)
+                                                .help("复制文件完整路径")
+                                            }
+                                        }
+                                        .padding(6)
+                                        .background(Color.green.opacity(0.06))
+                                        .cornerRadius(6)
+                                    }
+                                }
                             }
                         } else if task.status == .failed {
                             HStack(spacing: 6) {
@@ -529,6 +617,18 @@ public struct TaskBoardView: View {
         case .failed: return "xmark.circle.fill"
         case .reverted: return "arrow.uturn.backward.circle.fill"
         }
+    }
+    
+    private func extractOutputURLs(from task: TaskExecutionRecord) -> [URL] {
+        var results: [URL] = []
+        for action in task.plan.actions {
+            if let dest = action.targetURL {
+                results.append(dest)
+            } else {
+                results.append(action.sourceURL)
+            }
+        }
+        return results
     }
     
     private func extractOutputFiles(from task: TaskExecutionRecord) -> [String] {

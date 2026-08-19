@@ -37,6 +37,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var isThinking: Bool = false
     @Published public var thinkingElapsedSeconds: Double = 0
     @Published public var statusMessage: String? = nil
+    @Published public var latestOutputURLs: [URL] = []
     private var thinkingTimerCancellable: AnyCancellable?
     
     @Published public var currentPlan: ExecutionPlan? = nil
@@ -243,13 +244,18 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 let record = try await dispatcher.executePlan(plan: plan)
                 
                 var fileSummaryLines: [String] = []
+                var producedURLs: [URL] = []
                 for action in plan.actions {
                     if let dest = action.targetURL {
+                        producedURLs.append(dest)
                         fileSummaryLines.append("📄 \(dest.lastPathComponent) (源: \(action.sourceURL.lastPathComponent))")
                     } else {
+                        producedURLs.append(action.sourceURL)
                         fileSummaryLines.append("📄 \(action.sourceURL.lastPathComponent)")
                     }
                 }
+                self.latestOutputURLs = producedURLs
+                
                 let filesBlock = fileSummaryLines.isEmpty ? "（无新文件生成）" : fileSummaryLines.joined(separator: "\n")
                 let walkthrough = "✅ 成功完成 \(record.reverseActions.count) 项物理操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
                 
@@ -268,6 +274,29 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 statusMessage = "❌ 执行失败: \(error.localizedDescription)"
             }
         }
+    }
+    
+    /// 在访达中高亮显示最近生成的所有结果文件
+    public func revealLatestOutputFiles() {
+        guard !latestOutputURLs.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(latestOutputURLs)
+    }
+    
+    /// 打开最近结果文件所在的文件夹
+    public func openLatestOutputDirectory() {
+        guard let firstURL = latestOutputURLs.first else { return }
+        let dirURL = firstURL.deletingLastPathComponent()
+        NSWorkspace.shared.open(dirURL)
+    }
+    
+    /// 直接在访达中定位单个文件
+    public func revealFile(at url: URL) {
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+    
+    /// 直接使用默认应用打开单个文件
+    public func openFile(at url: URL) {
+        NSWorkspace.shared.open(url)
     }
     public func cancelCurrentExecution() {
         isShowingDiffPreview = false
