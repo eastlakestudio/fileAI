@@ -547,12 +547,12 @@ public struct MainFloatingPanel: View {
             }
         } label: {
             Image(systemName: "plus.circle.fill")
-                .font(.system(size: 22))
+                .font(.system(size: 20))
                 .foregroundColor(.accentColor)
-                .padding(.top, 2)
         }
+        .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
-        .frame(width: 24, height: 26)
+        .fixedSize()
         .help("点击选择或调用 Skill 技能")
     }
     
