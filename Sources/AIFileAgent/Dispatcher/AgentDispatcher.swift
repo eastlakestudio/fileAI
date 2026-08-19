@@ -21,7 +21,7 @@ public final class AgentDispatcher: Sendable {
         fileItems: [FileItem]
     ) async throws -> ExecutionPlan {
         // 1. 优先尝试本地 Fast-Path 启发式极速分流（毫秒级响应，无需等待大模型子进程冷启动）
-        if let fastPlan = tryFastPathPlan(userPrompt: userPrompt, fileItems: fileItems), !fastPlan.actions.isEmpty {
+        if let fastPlan = tryFastPathPlan(userPrompt: userPrompt, fileItems: fileItems) {
             return fastPlan
         }
         
@@ -63,9 +63,9 @@ public final class AgentDispatcher: Sendable {
     private func tryFastPathPlan(userPrompt: String, fileItems: [FileItem]) -> ExecutionPlan? {
         let p = userPrompt.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // A. PDF 相关转换指令 (如 "转成 A3 横版 pdf", "转成 pdf", "ppt 转 pdf", "word 转 pdf")
-        if (p.contains("pdf") && (p.contains("转") || p.contains("导出") || p.contains("to") || p.contains("生成"))) ||
-           p.contains("转成 a3") || p.contains("转成 a4") || p.contains("横版") {
+        // A. PDF 相关转换指令 (如 "转成 A3 横版 pdf", "转成 pdf", "ppt 转 pdf", "word 转 pdf", "a3", "横版")
+        if p.contains("pdf") || p.contains("a3") || p.contains("a4") || p.contains("横版") || p.contains("竖版") ||
+           p.contains("转成") || p.contains("转为") {
             if let skill = registry.skill(for: "doc_to_pdf") {
                 if let plan = try? skill.generatePlan(from: fileItems, parameters: [:]) {
                     return plan
@@ -91,7 +91,7 @@ public final class AgentDispatcher: Sendable {
         
         // C. 图片尺寸调整 (如 "1920x1080", "1920*1080", "1280x720", "缩放", "改尺寸")
         if p.contains("1920") || p.contains("1080") || p.contains("1280") || p.contains("720") || p.contains("800") ||
-           p.contains("修改尺寸") || p.contains("统一改为") || p.contains("分辨率") {
+           p.contains("修改尺寸") || p.contains("统一改为") || p.contains("分辨率") || p.contains("缩放") {
             var width = 1920
             var height = 1080
             if p.contains("1280") && p.contains("720") {
@@ -109,7 +109,7 @@ public final class AgentDispatcher: Sendable {
         }
         
         // D. 图片格式转换 (如 "转成 png", "转成 jpg", "转成 webp")
-        if p.contains("转") || p.contains("格式") {
+        if p.contains("png") || p.contains("jpg") || p.contains("jpeg") || p.contains("webp") || p.contains("heic") {
             var targetFormat: String? = nil
             if p.contains("png") { targetFormat = "png" }
             else if p.contains("jpg") || p.contains("jpeg") { targetFormat = "jpg" }
@@ -118,6 +118,24 @@ public final class AgentDispatcher: Sendable {
             
             if let format = targetFormat, let skill = registry.skill(for: "image_convert") {
                 if let plan = try? skill.generatePlan(from: fileItems, parameters: ["targetFormat": format]) {
+                    return plan
+                }
+            }
+        }
+        
+        // E. 批量重命名 (如 "重命名", "前缀", "后缀", "替换")
+        if p.contains("重命名") || p.contains("前缀") || p.contains("后缀") || p.contains("替换") {
+            var prefix = ""
+            var suffix = ""
+            if p.contains("前缀") {
+                prefix = "已整理_"
+            } else if p.contains("后缀") {
+                suffix = "_v1"
+            } else if p.contains("重命名") {
+                prefix = "已重命名_"
+            }
+            if let skill = registry.skill(for: "batch_rename") {
+                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["prefix": prefix, "suffix": suffix]) {
                     return plan
                 }
             }

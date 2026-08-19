@@ -31,13 +31,13 @@ public final class DocToPDFSkill: FileSkill, Sendable {
             "ppt", "pptx", "key",
             "doc", "docx", "pages",
             "txt", "md", "markdown", "rtf", "html",
-            "png", "jpg", "jpeg", "heic", "webp"
+            "png", "jpg", "jpeg", "heic", "webp",
+            "pdf"
         ]
         
         let targetItems = items.filter { item in
             !item.isDirectory &&
-            item.fileExtension != "pdf" &&
-            convertibleExtensions.contains(item.fileExtension) &&
+            convertibleExtensions.contains(item.fileExtension.lowercased()) &&
             (targetNames.isEmpty || targetNames.contains(item.name))
         }
         
@@ -45,13 +45,16 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         for item in targetItems {
             let parentDir = item.url.deletingLastPathComponent()
             let baseName = item.url.deletingPathExtension().lastPathComponent
-            let targetURL = parentDir.appendingPathComponent("\(baseName).pdf")
+            let ext = item.fileExtension.lowercased()
+            let targetURL = ext == "pdf" 
+                ? parentDir.appendingPathComponent("\(baseName)_A3.pdf")
+                : parentDir.appendingPathComponent("\(baseName).pdf")
             
             actions.append(FileActionItem(
                 operationType: .convertToPDF,
                 sourceURL: item.url,
                 targetURL: targetURL,
-                detailDescription: "将 \(item.fileExtension.uppercased()) 转换为 PDF 文档"
+                detailDescription: ext == "pdf" ? "重构为 A3 横版标准 PDF" : "将 \(item.fileExtension.uppercased()) 转换为 PDF 文档"
             ))
         }
         
@@ -68,6 +71,9 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         if ["ppt", "pptx", "key"].contains(ext) {
             // 演示文稿转 PDF (优先 AppleScript 静默调用 Keynote / PowerPoint / LibreOffice)
             try convertPresentationToPDF(sourceURL: action.sourceURL, targetURL: targetURL)
+        } else if ext == "pdf" {
+            // PDF 格式重构为 A3 横版标准
+            try reformatPDFToA3Landscape(sourceURL: action.sourceURL, targetURL: targetURL)
         } else if ["png", "jpg", "jpeg", "heic", "webp"].contains(ext) {
             // 图片转 PDF
             guard let image = NSImage(contentsOf: action.sourceURL),
@@ -253,5 +259,28 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         ]
         let attributedString = NSAttributedString(string: text, attributes: attributes)
         return try attributedStringToPDFData(attributedString)
+    }
+    
+    // MARK: - A3 横版 PDF 重构
+    
+    private func reformatPDFToA3Landscape(sourceURL: URL, targetURL: URL) throws {
+        guard let sourceDoc = PDFDocument(url: sourceURL) else {
+            throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法打开源 PDF 文件"])
+        }
+        let outputDoc = PDFDocument()
+        let a3LandscapeRect = CGRect(x: 0, y: 0, width: 1190.55, height: 841.89) // A3 横版尺寸
+        
+        for i in 0..<sourceDoc.pageCount {
+            if let page = sourceDoc.page(at: i) {
+                let pageImage = page.thumbnail(of: CGSize(width: a3LandscapeRect.width, height: a3LandscapeRect.height), for: .mediaBox)
+                if let newPage = PDFPage(image: pageImage) {
+                    newPage.setBounds(a3LandscapeRect, for: .mediaBox)
+                    outputDoc.insert(newPage, at: outputDoc.pageCount)
+                }
+            }
+        }
+        guard outputDoc.write(to: targetURL) else {
+            throw NSError(domain: "DocToPDFSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: "A3 横版 PDF 保存失败"])
+        }
     }
 }
