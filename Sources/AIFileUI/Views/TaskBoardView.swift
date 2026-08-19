@@ -22,7 +22,7 @@ public struct TaskBoardView: View {
     
     @State private var selectedFilter: TaskFilterTab = .all
     @State private var tasks: [TaskExecutionRecord] = []
-    @State private var expandedTaskId: UUID? = nil
+    @State private var selectedDetailTask: TaskExecutionRecord? = nil
     public let onBack: () -> Void
     
     public init(onBack: @escaping () -> Void) {
@@ -57,7 +57,7 @@ public struct TaskBoardView: View {
             
             Divider().opacity(0.3)
             
-            // 2. 主卡片流视图 (取消左侧分栏，全屏大卡片展示)
+            // 2. 缩略小卡片列表
             taskCardListView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             
@@ -81,6 +81,9 @@ public struct TaskBoardView: View {
                 .stroke(Color.white.opacity(0.2), lineWidth: 1)
         )
         .ignoresSafeArea(.all)
+        .sheet(item: $selectedDetailTask) { task in
+            taskDetailSheetView(task: task)
+        }
         .task {
             await reloadTasks()
         }
@@ -107,7 +110,7 @@ public struct TaskBoardView: View {
             
             Spacer()
             
-            // 首行过滤 Tab 切换 (进行中、已完成、执行失败)
+            // 首行过滤 Tab 切换
             Picker("", selection: $selectedFilter) {
                 Text("全部 (\(tasks.count))").tag(TaskFilterTab.all)
                 Text("进行中 (\(inProgressTasks.count))").tag(TaskFilterTab.inProgress)
@@ -134,231 +137,261 @@ public struct TaskBoardView: View {
         .background(Color.primary.opacity(0.04))
     }
     
-    // MARK: - 2. 全卡片任务列表
+    // MARK: - 2. 缩略小卡片列表
     
     private var taskCardListView: some View {
         ScrollView {
-            LazyVStack(spacing: 14) {
+            LazyVStack(spacing: 8) {
                 if displayedTasks.isEmpty {
                     emptyStateView
                 } else {
                     ForEach(displayedTasks) { task in
-                        taskFullCard(task: task)
+                        taskCompactCard(task: task)
                     }
                 }
             }
-            .padding(16)
+            .padding(14)
         }
     }
     
-    @ViewBuilder
-    private func taskFullCard(task: TaskExecutionRecord) -> some View {
-        let isExpanded = expandedTaskId == task.id
-        VStack(alignment: .leading, spacing: 10) {
-            // 卡片头部
-            cardHeaderView(task: task, isExpanded: isExpanded)
-            
-            Divider().opacity(0.15)
-            
-            // 实施方案 (Plan) 概要
-            planSummarySection(task: task, isExpanded: isExpanded)
-            
-            // 执行结果报告
-            executionResultSection(task: task)
-        }
-        .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
-        )
-        .cornerRadius(10)
-    }
+    // MARK: - 缩略小卡片 (展示：任务目标和内容，状态和结果，点击查看详情)
     
     @ViewBuilder
-    private func cardHeaderView(task: TaskExecutionRecord, isExpanded: Bool) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "wand.and.stars")
-                .font(.system(size: 16))
-                .foregroundColor(badgeColor(task.status))
-                .frame(width: 28, height: 28)
-                .background(badgeColor(task.status).opacity(0.12))
-                .cornerRadius(6)
-            
-            VStack(alignment: .leading, spacing: 3) {
-                Text(task.prompt)
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.primary)
+    private func taskCompactCard(task: TaskExecutionRecord) -> some View {
+        Button(action: {
+            selectedDetailTask = task
+        }) {
+            HStack(spacing: 12) {
+                // 左侧状态图标
+                Image(systemName: iconForStatus(task.status))
+                    .font(.system(size: 15))
+                    .foregroundColor(badgeColor(task.status))
+                    .frame(width: 32, height: 32)
+                    .background(badgeColor(task.status).opacity(0.12))
+                    .cornerRadius(6)
                 
-                HStack(spacing: 6) {
-                    Text(task.createdAt.formatted())
+                // 中间：任务目标与内容
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(task.prompt)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        
+                        Text("(\(task.plan.actions.count) 项变动)")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Text(task.plan.summary)
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
-                    
-                    Text("•")
-                        .foregroundColor(.secondary.opacity(0.5))
-                    
-                    Text("\(task.plan.actions.count) 项文件变动")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            Spacer()
-            
-            statusBadge(task.status)
-            
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    expandedTaskId = isExpanded ? nil : task.id
-                }
-            }) {
-                Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle")
-                    .font(.system(size: 14))
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-    
-    @ViewBuilder
-    private func planSummarySection(task: TaskExecutionRecord, isExpanded: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: "doc.plaintext")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                Text("实施方案:")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-                Text(task.plan.summary)
-                    .font(.system(size: 11))
-                    .foregroundColor(.primary.opacity(0.9))
-            }
-            
-            let displayActions = isExpanded ? task.plan.actions : Array(task.plan.actions.prefix(3))
-            ForEach(displayActions) { action in
-                actionRowView(action: action)
-            }
-            
-            if !isExpanded && task.plan.actions.count > 3 {
-                Text("还有 \(task.plan.actions.count - 3) 项变动... 点击卡片右上角展开查看完整列表")
-                    .font(.system(size: 10))
-                    .foregroundColor(.secondary)
-                    .padding(.top, 2)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func actionRowView(action: FileActionItem) -> some View {
-        HStack(spacing: 6) {
-            Text(action.operationType.rawValue)
-                .font(.system(size: 9, weight: .bold))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-                .background(Color.blue.opacity(0.12))
-                .foregroundColor(.blue)
-                .cornerRadius(3)
-            
-            Text(action.sourceURL.lastPathComponent)
-                .font(.system(size: 11, design: .monospaced))
-                .lineLimit(1)
-            
-            if let dest = action.targetURL {
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 8))
-                    .foregroundColor(.secondary)
-                Text(dest.lastPathComponent)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundColor(.accentColor)
-                    .lineLimit(1)
-            }
-            
-            Spacer()
-            
-            Text(action.detailDescription)
-                .font(.system(size: 10))
-                .foregroundColor(.secondary)
-        }
-        .padding(5)
-        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
-        .cornerRadius(4)
-    }
-    
-    @ViewBuilder
-    private func executionResultSection(task: TaskExecutionRecord) -> some View {
-        if task.status == .completed || task.status == .reverted {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 4) {
-                    Image(systemName: task.status == .reverted ? "arrow.uturn.backward.circle.fill" : "checkmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(task.status == .reverted ? .purple : .green)
-                    
-                    Text(task.status == .reverted ? "已撤销状态" : "📂 执行结果与产出文件:")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(task.status == .reverted ? .purple : .green)
+                        .lineLimit(1)
                 }
                 
-                let outputFiles = extractOutputFiles(from: task)
-                if !outputFiles.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(outputFiles, id: \.self) { fileText in
-                            HStack(spacing: 4) {
-                                Image(systemName: "doc.fill")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(.green)
-                                Text(fileText)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundColor(.primary)
+                Spacer()
+                
+                // 右侧：状态与结果摘要
+                VStack(alignment: .trailing, spacing: 3) {
+                    HStack(spacing: 6) {
+                        statusBadge(task.status)
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.secondary.opacity(0.6))
+                    }
+                    
+                    Text(resultSummaryText(task: task))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(resultSummaryColor(task: task))
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .cornerRadius(8)
+        }
+        .buttonStyle(.plain)
+    }
+    
+    // MARK: - 任务详情弹窗 (TaskDetailSheet)
+    
+    @ViewBuilder
+    private func taskDetailSheetView(task: TaskExecutionRecord) -> some View {
+        VStack(spacing: 0) {
+            // 弹窗顶栏
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(badgeColor(task.status))
+                    Text("任务执行详情")
+                        .font(.system(size: 13, weight: .bold))
+                }
+                
+                Spacer()
+                
+                statusBadge(task.status)
+                
+                Button("关闭") {
+                    selectedDetailTask = nil
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(14)
+            .background(Color.primary.opacity(0.03))
+            
+            Divider().opacity(0.2)
+            
+            // 详情滚动内容
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    // 1. 任务目标与基本信息
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("🎯 任务目标")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                        
+                        Text(task.prompt)
+                            .font(.system(size: 13, weight: .semibold))
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                            .cornerRadius(6)
+                        
+                        HStack(spacing: 8) {
+                            Text("创建时间: \(task.createdAt.formatted())")
+                            if let end = task.completedAt {
+                                Text("• 完成时间: \(end.formatted())")
+                            }
+                        }
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    }
+                    
+                    // 2. 实施方案 (Plan) 与详细文件操作
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("📋 实施方案与文件操作 (\(task.plan.actions.count) 项)")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                        
+                        Text(task.plan.summary)
+                            .font(.system(size: 11))
+                            .foregroundColor(.primary.opacity(0.9))
+                        
+                        VStack(spacing: 4) {
+                            ForEach(task.plan.actions) { action in
+                                HStack(spacing: 6) {
+                                    Text(action.operationType.rawValue)
+                                        .font(.system(size: 9, weight: .bold))
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 2)
+                                        .background(Color.blue.opacity(0.12))
+                                        .foregroundColor(.blue)
+                                        .cornerRadius(3)
+                                    
+                                    Text(action.sourceURL.lastPathComponent)
+                                        .font(.system(size: 11, design: .monospaced))
+                                        .lineLimit(1)
+                                    
+                                    if let dest = action.targetURL {
+                                        Image(systemName: "arrow.right")
+                                            .font(.system(size: 8))
+                                            .foregroundColor(.secondary)
+                                        Text(dest.lastPathComponent)
+                                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                            .foregroundColor(.accentColor)
+                                            .lineLimit(1)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    Text(action.detailDescription)
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(6)
+                                .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+                                .cornerRadius(4)
                             }
                         }
                     }
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.green.opacity(0.06))
-                    .cornerRadius(6)
-                } else if let report = task.walkthroughReport {
-                    Text(cleanReport(report))
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.primary)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
-                        .cornerRadius(6)
+                    
+                    // 3. 执行结果与产出清单
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("📂 执行结果与产出")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(.secondary)
+                        
+                        if task.status == .completed || task.status == .reverted {
+                            let outputFiles = extractOutputFiles(from: task)
+                            if !outputFiles.isEmpty {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    ForEach(outputFiles, id: \.self) { fileText in
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 9))
+                                                .foregroundColor(.green)
+                                            Text(fileText)
+                                                .font(.system(size: 11, design: .monospaced))
+                                                .foregroundColor(.primary)
+                                        }
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.green.opacity(0.06))
+                                .cornerRadius(6)
+                            }
+                        } else if task.status == .failed {
+                            HStack(spacing: 6) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                Text(task.errorMessage ?? "未知执行错误")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.red)
+                            }
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.red.opacity(0.08))
+                            .cornerRadius(6)
+                        } else {
+                            HStack(spacing: 6) {
+                                ProgressView().scaleEffect(0.6)
+                                Text("正在执行文件处理流程...")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.blue)
+                            }
+                            .padding(8)
+                        }
+                    }
+                    
+                    // 4. Walkthrough 报告
+                    if let report = task.walkthroughReport, !report.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("📄 执行记录报告 (Walkthrough)")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.secondary)
+                            
+                            Text(cleanReport(report))
+                                .font(.system(size: 10, design: .monospaced))
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+                                .cornerRadius(6)
+                        }
+                    }
                 }
+                .padding(14)
             }
-            .padding(10)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
-            .cornerRadius(8)
-        } else if task.status == .failed {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(.red)
-                    Text("执行失败报告:")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.red)
-                }
-                
-                Text(task.errorMessage ?? "未知错误")
-                    .font(.system(size: 11))
-                    .foregroundColor(.red.opacity(0.9))
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.red.opacity(0.08))
-            .cornerRadius(8)
-        } else if task.status == .inProgress {
-            HStack(spacing: 6) {
-                ProgressView().scaleEffect(0.6)
-                Text("⏳ 正在物理执行文件操作中...")
-                    .font(.system(size: 11))
-                    .foregroundColor(.blue)
-            }
-            .padding(8)
         }
+        .frame(width: 580, height: 460)
     }
     
     private var emptyStateView: some View {
@@ -394,6 +427,37 @@ public struct TaskBoardView: View {
     }
     
     // MARK: - Helpers
+    
+    private func resultSummaryText(task: TaskExecutionRecord) -> String {
+        switch task.status {
+        case .completed:
+            return "✓ 产出 \(task.plan.actions.count) 项"
+        case .reverted:
+            return "↩ 已撤销操作"
+        case .failed:
+            return "❌ 失败"
+        case .inProgress:
+            return "⏳ 执行中..."
+        }
+    }
+    
+    private func resultSummaryColor(task: TaskExecutionRecord) -> Color {
+        switch task.status {
+        case .completed: return .green
+        case .reverted: return .purple
+        case .failed: return .red
+        case .inProgress: return .blue
+        }
+    }
+    
+    private func iconForStatus(_ status: TaskStatus) -> String {
+        switch status {
+        case .inProgress: return "hourglass"
+        case .completed: return "checkmark.circle.fill"
+        case .failed: return "xmark.circle.fill"
+        case .reverted: return "arrow.uturn.backward.circle.fill"
+        }
+    }
     
     private func extractOutputFiles(from task: TaskExecutionRecord) -> [String] {
         var results: [String] = []
