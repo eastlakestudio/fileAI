@@ -1,12 +1,13 @@
 import SwiftUI
+import ServiceManagement
 import AIFileCore
 
 /// 配置管理主导航 Tab 枚举 (云端 API 与本地 CLI 明确解耦二选一)
 public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
     case cloudModel = "云端 API 引擎"
     case cliModel = "本地 CLI 引擎"
-    case skills = "Skill 技能库"
-    case marketplace = "云端扩展市场"
+    case skills = "本地技能库"
+    case marketplace = "云端技能库"
     case general = "偏好与系统"
     
     public var id: String { rawValue }
@@ -25,6 +26,8 @@ public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
 /// 统一配置管理页面：整合云端/本地模型设置、Skill 技能管理、云端市场与系统偏好
 public struct UnifiedSettingsView: View {
     @State private var selectedTab: SettingsNavTab
+    @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
+    @AppStorage("uiWindowMode") private var uiWindowMode: String = "standard"
     
     // Model Settings 状态
     @State private var modelSettings: ModelSettings
@@ -184,7 +187,7 @@ public struct UnifiedSettingsView: View {
                 badge: isUsingLocalCLI ? "当前使用" : "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
             )
             
-            Text("功能扩展与系统")
+            Text("功能扩展")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
@@ -192,6 +195,13 @@ public struct UnifiedSettingsView: View {
             
             tabNavRow(tab: .skills, badge: "\(localSkills.count)")
             tabNavRow(tab: .marketplace, badge: "云端 \(cloudSkills.count)")
+            
+            Text("系统设置")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+            
             tabNavRow(tab: .general, badge: "⌥M")
             
             Spacer()
@@ -801,7 +811,97 @@ public struct UnifiedSettingsView: View {
     private var generalPreferencesContentView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                // 快捷键卡片
+                // 1. 系统启动与交互呈现模式卡片
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("⚙️ 系统与交互偏好")
+                        .font(.system(size: 12, weight: .bold))
+                    
+                    // 开机自启动
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("开机自动启动")
+                                .font(.system(size: 11, weight: .medium))
+                            Text("登录 macOS 系统时在后台静默启动常驻守护")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: Binding(
+                            get: { launchAtLogin },
+                            set: { newVal in
+                                launchAtLogin = newVal
+                                setLaunchAtLogin(enabled: newVal)
+                            }
+                        ))
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                    }
+                    
+                    Divider().opacity(0.15)
+                    
+                    // 窗口交互呈现模式
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("窗口交互呈现模式:")
+                            .font(.system(size: 11, weight: .medium))
+                        
+                        HStack(spacing: 8) {
+                            Button(action: { uiWindowMode = "standard" }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "macwindow")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(uiWindowMode == "standard" ? .accentColor : .secondary)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("标准面板模式")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("完整文件树、多文件批量与看板")
+                                            .font(.system(size: 9))
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(uiWindowMode == "standard" ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(uiWindowMode == "standard" ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: 1)
+                                )
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            Button(action: { uiWindowMode = "mini" }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "rectangle.compress.vertical")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(uiWindowMode == "mini" ? .accentColor : .secondary)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text("Mini 聊天框模式")
+                                            .font(.system(size: 11, weight: .bold))
+                                        Text("极简悬浮输入胶囊与即时触发")
+                                            .font(.system(size: 9))
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .padding(8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(uiWindowMode == "mini" ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .stroke(uiWindowMode == "mini" ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: 1)
+                                )
+                                .cornerRadius(6)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
+                .cornerRadius(8)
+                
+                // 2. 快捷键卡片
                 VStack(alignment: .leading, spacing: 8) {
                     Text("⌨️ 全局快捷键与呼出")
                         .font(.system(size: 12, weight: .bold))
@@ -851,7 +951,7 @@ public struct UnifiedSettingsView: View {
                 .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
                 .cornerRadius(8)
                 
-                // 系统进程状态
+                // 3. 系统单进程与安全守护
                 VStack(alignment: .leading, spacing: 8) {
                     Text("🛡️ 系统单进程与安全守护")
                         .font(.system(size: 12, weight: .bold))
@@ -892,6 +992,20 @@ public struct UnifiedSettingsView: View {
                 .controlSize(.small)
             }
             .padding(14)
+        }
+    }
+    
+    private func setLaunchAtLogin(enabled: Bool) {
+        if #available(macOS 13.0, *) {
+            do {
+                if enabled {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                print("LaunchAtLogin setting status changed: \(enabled)")
+            }
         }
     }
     

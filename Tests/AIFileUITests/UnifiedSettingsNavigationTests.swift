@@ -10,6 +10,12 @@ final class UnifiedSettingsNavigationTests: XCTestCase {
             XCTAssertFalse(tab.icon.isEmpty)
             XCTAssertEqual(tab.id, tab.rawValue)
         }
+        
+        XCTAssertEqual(SettingsNavTab.cloudModel.rawValue, "云端 API 引擎")
+        XCTAssertEqual(SettingsNavTab.cliModel.rawValue, "本地 CLI 引擎")
+        XCTAssertEqual(SettingsNavTab.skills.rawValue, "本地技能库")
+        XCTAssertEqual(SettingsNavTab.marketplace.rawValue, "云端技能库")
+        XCTAssertEqual(SettingsNavTab.general.rawValue, "偏好与系统")
     }
     
     @MainActor
