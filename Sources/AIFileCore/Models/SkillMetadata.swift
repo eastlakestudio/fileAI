@@ -6,6 +6,7 @@ public enum SkillCategory: String, CaseIterable, Identifiable, Sendable, Codable
     case image = "图片处理"
     case document = "文档与PDF"
     case organization = "整理与命名"
+    case collaboration = "企业协同"
     case custom = "自定义扩展"
     case cloudMarket = "云端市场"
     
@@ -17,6 +18,7 @@ public enum SkillCategory: String, CaseIterable, Identifiable, Sendable, Codable
         case .image: return "photo.stack.fill"
         case .document: return "doc.text.fill"
         case .organization: return "folder.badge.gearshape"
+        case .collaboration: return "person.2.badge.gearshape.fill"
         case .custom: return "terminal.fill"
         case .cloudMarket: return "icloud.and.arrow.down.fill"
         }
@@ -28,6 +30,7 @@ public enum SkillCategory: String, CaseIterable, Identifiable, Sendable, Codable
         case .image: return "image"
         case .document: return "document"
         case .organization: return "organization"
+        case .collaboration: return "collaboration"
         case .custom: return "custom"
         case .cloudMarket: return "cloudMarket"
         }
@@ -38,6 +41,7 @@ public enum SkillCategory: String, CaseIterable, Identifiable, Sendable, Codable
         case "image", "图片", "photo": return .image
         case "document", "doc", "pdf", "文档": return .document
         case "organization", "rename", "整理", "命名": return .organization
+        case "collaboration", "office", "协同", "办公", "飞书", "钉钉", "企微": return .collaboration
         case "custom", "script", "自定义": return .custom
         case "cloudmarket", "cloud", "云端": return .cloudMarket
         default: return .organization

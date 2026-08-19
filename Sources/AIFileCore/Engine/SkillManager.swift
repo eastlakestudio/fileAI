@@ -274,6 +274,65 @@ public final class SkillManager: @unchecked Sendable {
                     "抹除所有个人 EXIF 元数据保护隐私"
                 ],
                 markdownContent: "# 隐私与 EXIF 清理 (clean_metadata.md)\n\n本地安全抹除敏感地理位置与私人 EXIF 标签。"
+            ),
+            SkillMetadata(
+                id: "lark_sync",
+                name: "飞书云文档与多维表格协同",
+                icon: "paperplane.fill",
+                category: .collaboration,
+                summary: "深度集成飞书生态 (lark-cli)，支持一键将本地文档/PDF/表格同步上传至飞书云文档、写入多维表格或发送群消息",
+                supportedExtensions: ["pdf", "docx", "xlsx", "csv", "md", "png", "jpg"],
+                parametersDescription: [
+                    "action": "协同动作 (upload_doc, insert_bitable, send_message)",
+                    "docTitle": "飞书云文档标题",
+                    "targetChatId": "目标接收群聊 ID",
+                    "bitableAppToken": "多维表格 Base Token"
+                ],
+                examplePrompts: [
+                    "把整理好的 PDF 发送到飞书项目群",
+                    "将选中的 Excel 数据同步写入飞书多维表格",
+                    "把这篇 Markdown 文档创建为飞书云文档"
+                ],
+                markdownContent: "# 飞书生态协同 Skill (lark_sync.md)\n\n基于 lark-cli 深度打通飞书文档、多维表格与消息通知，实现本地与云端一键协同。",
+                author: "Lark Ecosystem"
+            ),
+            SkillMetadata(
+                id: "wxwork_sync",
+                name: "企业微信微盘与群协同",
+                icon: "bubble.left.and.bubble.right.fill",
+                category: .collaboration,
+                summary: "专为企微 Agent 打造 (wxwork-cli)，支持一键将本地文件同步至企业微信微盘、智能表格并触发待办群通知",
+                supportedExtensions: ["pdf", "docx", "xlsx", "csv", "zip", "png", "jpg"],
+                parametersDescription: [
+                    "action": "协同动作 (upload_weiyun, sync_smart_table, notify_group)",
+                    "spaceId": "微盘目标空间 ID",
+                    "scheduleTime": "日程提醒时间"
+                ],
+                examplePrompts: [
+                    "将转换后的合同 PDF 归档到企业微信微盘",
+                    "发送今日整理的文件汇总到企微工作群"
+                ],
+                markdownContent: "# 企业微信协同 Skill (wxwork_sync.md)\n\n通过 wxwork-cli 无缝衔接企业微信微盘、智能表格、会议与待办任务。",
+                author: "WeCom Ecosystem"
+            ),
+            SkillMetadata(
+                id: "dingtalk_sync",
+                name: "钉钉云文档与审批归档",
+                icon: "bell.badge.fill",
+                category: .collaboration,
+                summary: "集成钉钉 CLI (dingtalk-cli)，覆盖钉盘文档同步、智能考勤日程与发起文件审批流",
+                supportedExtensions: ["pdf", "docx", "xlsx", "pptx", "zip"],
+                parametersDescription: [
+                    "action": "协同动作 (dingpan_upload, start_approval, calendar_event)",
+                    "processCode": "审批流编码",
+                    "approvalTitle": "审批单名称"
+                ],
+                examplePrompts: [
+                    "将选中的报价单上传钉盘并自动发起审批单",
+                    "把提取的会议纪要同步到钉钉文档并添加日历日程"
+                ],
+                markdownContent: "# 钉钉协同 Skill (dingtalk_sync.md)\n\n基于 dingtalk-cli 覆盖钉盘、日历、消息与标准化 OA 审批流程。",
+                author: "DingTalk Ecosystem"
             )
         ]
     }
@@ -351,65 +410,6 @@ public final class SkillManager: @unchecked Sendable {
                 ],
                 markdownContent: "# 表格数据互转 (csv_json_convert.md)\n\n针对海量数据表格进行结构化清洗与跨格式转换。",
                 author: "Cloud Preset"
-            ),
-            SkillMetadata(
-                id: "lark_sync",
-                name: "飞书云文档与多维表格协同",
-                icon: "paperplane.fill",
-                category: .custom,
-                summary: "深度集成飞书生态 (lark-cli)，支持一键将本地文档/PDF/表格同步上传至飞书云文档、写入多维表格或发送群消息",
-                supportedExtensions: ["pdf", "docx", "xlsx", "csv", "md", "png", "jpg"],
-                parametersDescription: [
-                    "action": "协同动作 (upload_doc, insert_bitable, send_message)",
-                    "docTitle": "飞书云文档标题",
-                    "targetChatId": "目标接收群聊 ID",
-                    "bitableAppToken": "多维表格 Base Token"
-                ],
-                examplePrompts: [
-                    "把整理好的 PDF 发送到飞书项目群",
-                    "将选中的 Excel 数据同步写入飞书多维表格",
-                    "把这篇 Markdown 文档创建为飞书云文档"
-                ],
-                markdownContent: "# 飞书生态协同 Skill (lark_sync.md)\n\n基于 lark-cli 深度打通飞书文档、多维表格与消息通知，实现本地与云端一键协同。",
-                author: "Lark Ecosystem"
-            ),
-            SkillMetadata(
-                id: "wxwork_sync",
-                name: "企业微信微盘与群协同",
-                icon: "bubble.left.and.bubble.right.fill",
-                category: .custom,
-                summary: "专为企微 Agent 打造 (wxwork-cli)，支持一键将本地文件同步至企业微信微盘、智能表格并触发待办群通知",
-                supportedExtensions: ["pdf", "docx", "xlsx", "csv", "zip", "png", "jpg"],
-                parametersDescription: [
-                    "action": "协同动作 (upload_weiyun, sync_smart_table, notify_group)",
-                    "spaceId": "微盘目标空间 ID",
-                    "scheduleTime": "日程提醒时间"
-                ],
-                examplePrompts: [
-                    "将转换后的合同 PDF 归档到企业微信微盘",
-                    "发送今日整理的文件汇总到企微工作群"
-                ],
-                markdownContent: "# 企业微信协同 Skill (wxwork_sync.md)\n\n通过 wxwork-cli 无缝衔接企业微信微盘、智能表格、会议与待办任务。",
-                author: "WeCom Ecosystem"
-            ),
-            SkillMetadata(
-                id: "dingtalk_sync",
-                name: "钉钉云文档与审批归档",
-                icon: "bell.badge.fill",
-                category: .custom,
-                summary: "集成钉钉 CLI (dingtalk-cli)，覆盖钉盘文档同步、智能考勤日程与发起文件审批流",
-                supportedExtensions: ["pdf", "docx", "xlsx", "pptx", "zip"],
-                parametersDescription: [
-                    "action": "协同动作 (dingpan_upload, start_approval, calendar_event)",
-                    "processCode": "审批流编码",
-                    "approvalTitle": "审批单名称"
-                ],
-                examplePrompts: [
-                    "将选中的报价单上传钉盘并自动发起审批单",
-                    "把提取的会议纪要同步到钉钉文档并添加日历日程"
-                ],
-                markdownContent: "# 钉钉协同 Skill (dingtalk_sync.md)\n\n基于 dingtalk-cli 覆盖钉盘、日历、消息与标准化 OA 审批流程。",
-                author: "DingTalk Ecosystem"
             )
         ]
     }
