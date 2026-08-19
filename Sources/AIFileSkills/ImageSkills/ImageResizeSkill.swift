@@ -43,12 +43,20 @@ public final class ImageResizeSkill: FileSkill, Sendable {
         let targetHeight = parameters["targetHeight"] as? Int
         let scaleFactor = parameters["scaleFactor"] as? Double
         let targetNames = Set((parameters["fileNames"] as? [String]) ?? [])
-        
-        let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff"]
+        let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff", "bmp"]
         let targetItems = items.filter { item in
             !item.isDirectory &&
-            imageExtensions.contains(item.fileExtension) &&
+            imageExtensions.contains(item.fileExtension.lowercased()) &&
             (targetNames.isEmpty || targetNames.contains(item.name))
+        }
+        
+        guard !targetItems.isEmpty else {
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            throw NSError(
+                domain: "ImageResizeSkill",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 不是支持的图片格式。修改尺寸仅支持：.png, .jpg, .heic, .webp, .tiff 等图片。"]
+            )
         }
         
         var actions: [FileActionItem] = []

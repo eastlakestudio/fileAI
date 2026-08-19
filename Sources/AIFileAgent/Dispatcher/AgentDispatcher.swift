@@ -21,7 +21,7 @@ public final class AgentDispatcher: Sendable {
         fileItems: [FileItem]
     ) async throws -> ExecutionPlan {
         // 1. 优先尝试本地 Fast-Path 启发式极速分流（毫秒级响应，无需等待大模型子进程冷启动）
-        if let fastPlan = tryFastPathPlan(userPrompt: userPrompt, fileItems: fileItems) {
+        if let fastPlan = try tryFastPathPlan(userPrompt: userPrompt, fileItems: fileItems) {
             return fastPlan
         }
         
@@ -60,32 +60,26 @@ public final class AgentDispatcher: Sendable {
     }
     
     /// 启发式规则极速分流（针对明确高频文件操作指令，0.005 秒瞬时返回）
-    private func tryFastPathPlan(userPrompt: String, fileItems: [FileItem]) -> ExecutionPlan? {
+    private func tryFastPathPlan(userPrompt: String, fileItems: [FileItem]) throws -> ExecutionPlan? {
         let p = userPrompt.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         
         // A. PDF 相关转换指令 (如 "转成 A3 横版 pdf", "转成 pdf", "ppt 转 pdf", "word 转 pdf", "a3", "横版")
         if p.contains("pdf") || p.contains("a3") || p.contains("a4") || p.contains("横版") || p.contains("竖版") ||
            p.contains("转成") || p.contains("转为") {
             if let skill = registry.skill(for: "doc_to_pdf") {
-                if let plan = try? skill.generatePlan(from: fileItems, parameters: [:]) {
-                    return plan
-                }
+                return try skill.generatePlan(from: fileItems, parameters: [:])
             }
         }
         
         // B. PDF 合并与拆分
         if p.contains("合并") && p.contains("pdf") {
             if let skill = registry.skill(for: "pdf_merge_split") {
-                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["action": "merge"]) {
-                    return plan
-                }
+                return try skill.generatePlan(from: fileItems, parameters: ["actionType": "merge"])
             }
         }
         if p.contains("拆分") && p.contains("pdf") {
             if let skill = registry.skill(for: "pdf_merge_split") {
-                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["action": "split"]) {
-                    return plan
-                }
+                return try skill.generatePlan(from: fileItems, parameters: ["actionType": "split"])
             }
         }
         
@@ -102,9 +96,7 @@ public final class AgentDispatcher: Sendable {
                 height = 600
             }
             if let skill = registry.skill(for: "image_resize") {
-                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["targetWidth": width, "targetHeight": height]) {
-                    return plan
-                }
+                return try skill.generatePlan(from: fileItems, parameters: ["targetWidth": width, "targetHeight": height])
             }
         }
         
@@ -117,9 +109,7 @@ public final class AgentDispatcher: Sendable {
             else if p.contains("heic") { targetFormat = "heic" }
             
             if let format = targetFormat, let skill = registry.skill(for: "image_convert") {
-                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["targetFormat": format]) {
-                    return plan
-                }
+                return try skill.generatePlan(from: fileItems, parameters: ["targetFormat": format])
             }
         }
         
@@ -135,9 +125,7 @@ public final class AgentDispatcher: Sendable {
                 prefix = "已重命名_"
             }
             if let skill = registry.skill(for: "batch_rename") {
-                if let plan = try? skill.generatePlan(from: fileItems, parameters: ["prefix": prefix, "suffix": suffix]) {
-                    return plan
-                }
+                return try skill.generatePlan(from: fileItems, parameters: ["prefix": prefix, "suffix": suffix])
             }
         }
         

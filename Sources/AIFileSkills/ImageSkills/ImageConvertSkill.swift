@@ -37,12 +37,21 @@ public final class ImageConvertSkill: FileSkill, Sendable {
         }
         let targetNames = Set((parameters["fileNames"] as? [String]) ?? [])
         
-        let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff"]
+        let imageExtensions: Set<String> = ["jpg", "jpeg", "png", "heic", "webp", "tiff", "bmp"]
         let targetItems = items.filter { item in
             !item.isDirectory &&
-            imageExtensions.contains(item.fileExtension) &&
-            item.fileExtension != targetFormat &&
+            imageExtensions.contains(item.fileExtension.lowercased()) &&
+            item.fileExtension.lowercased() != targetFormat &&
             (targetNames.isEmpty || targetNames.contains(item.name))
+        }
+        
+        guard !targetItems.isEmpty else {
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            throw NSError(
+                domain: "ImageConvertSkill",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 不是待转换的图片格式。图片格式转换仅支持：.png, .jpg, .heic, .webp, .tiff 等。"]
+            )
         }
         
         var actions: [FileActionItem] = []

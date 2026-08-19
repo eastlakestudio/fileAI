@@ -39,4 +39,16 @@ final class SmartSkillSuggesterTests: XCTestCase {
         let titles = suggestions.map { $0.title }
         XCTAssertTrue(titles.contains(where: { $0.contains("选取文件") }))
     }
+    
+    func testSuggestsSpreadsheetToPDFWhenSpreadsheetsPresent() {
+        let items = [
+            FileItem(url: URL(fileURLWithPath: "/path/清单.xlsx"), isDirectory: false)
+        ]
+        
+        let suggester = SmartSkillSuggester()
+        let suggestions = suggester.suggestSkills(for: items)
+        
+        let titles = suggestions.map { $0.title }
+        XCTAssertTrue(titles.contains(where: { $0.contains("电子表格转为 PDF") }))
+    }
 }

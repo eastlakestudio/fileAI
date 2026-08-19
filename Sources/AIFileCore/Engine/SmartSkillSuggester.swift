@@ -33,15 +33,38 @@ public final class SmartSkillSuggester: Sendable {
         
         var suggestions: [SkillSuggestion] = []
         
-        let extensions = Set(items.map { $0.fileExtension })
-        let imageExts: Set<String> = ["png", "jpg", "jpeg", "heic", "webp", "tiff"]
-        let docExts: Set<String> = ["txt", "md", "markdown", "docx", "doc", "rtf"]
+        let imageExts: Set<String> = ["png", "jpg", "jpeg", "heic", "webp", "tiff", "bmp"]
+        let spreadsheetExts: Set<String> = ["xlsx", "xls", "numbers", "csv"]
+        let presentationExts: Set<String> = ["ppt", "pptx", "key"]
+        let docExts: Set<String> = ["txt", "md", "markdown", "docx", "doc", "rtf", "html", "pages"]
         
-        let imageCount = items.filter { imageExts.contains($0.fileExtension) }.count
-        let pdfCount = items.filter { $0.fileExtension == "pdf" }.count
-        let docCount = items.filter { docExts.contains($0.fileExtension) }.count
+        let imageCount = items.filter { imageExts.contains($0.fileExtension.lowercased()) }.count
+        let spreadsheetCount = items.filter { spreadsheetExts.contains($0.fileExtension.lowercased()) }.count
+        let presentationCount = items.filter { presentationExts.contains($0.fileExtension.lowercased()) }.count
+        let pdfCount = items.filter { $0.fileExtension.lowercased() == "pdf" }.count
+        let docCount = items.filter { docExts.contains($0.fileExtension.lowercased()) }.count
         
-        // 1. 图像类智能推荐
+        // 1. 电子表格类智能推荐
+        if spreadsheetCount > 0 {
+            suggestions.append(SkillSuggestion(
+                title: "📊 电子表格转为 PDF",
+                promptText: "将选中的 Excel 表格转换为标准 PDF 文档",
+                icon: "tablecells",
+                priority: 20
+            ))
+        }
+        
+        // 2. 演示文稿类智能推荐
+        if presentationCount > 0 {
+            suggestions.append(SkillSuggestion(
+                title: "📽️ 演示文稿转为 PDF",
+                promptText: "将选中的 PPT/Keynote 转换为 PDF 文档",
+                icon: "sparkles.tv",
+                priority: 18
+            ))
+        }
+        
+        // 3. 图像类智能推荐
         if imageCount > 0 {
             suggestions.append(SkillSuggestion(
                 title: "🖼️ 统一修改分辨率为 1920x1080",
@@ -63,7 +86,7 @@ public final class SmartSkillSuggester: Sendable {
             ))
         }
         
-        // 2. PDF 类智能推荐
+        // 4. PDF 类智能推荐
         if pdfCount >= 2 {
             suggestions.append(SkillSuggestion(
                 title: "📑 合并 \(pdfCount) 个 PDF 为单个文件",
@@ -78,15 +101,21 @@ public final class SmartSkillSuggester: Sendable {
                 icon: "scissors",
                 priority: 12
             ))
+            suggestions.append(SkillSuggestion(
+                title: "📐 重构为 A3 横版 PDF",
+                promptText: "转成 A3 横版 pdf",
+                icon: "aspectratio",
+                priority: 11
+            ))
         }
         
-        // 3. 文档类智能推荐
+        // 5. 文档类智能推荐
         if docCount > 0 {
             suggestions.append(SkillSuggestion(
-                title: "📄 文档批量转 PDF",
+                title: "📄 Word/文档批量转 PDF",
                 promptText: "将选中的所有文档转为标准 PDF 格式",
                 icon: "doc.richtext",
-                priority: 11
+                priority: 16
             ))
         }
         

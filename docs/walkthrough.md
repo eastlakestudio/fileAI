@@ -1,22 +1,22 @@
-# 消除「成功完成0项操作」与精准错误透传总结 (Walkthrough)
+# 格式兼容性严格校验与防系统弹窗总结 (Walkthrough)
 
-## 1. 核心改进清单
+## 1. 核心改进与问题根因
 
-### 1.1 为什么之前会显示「成功完成 0 项操作」？（根因分析）
-- 之前在 `AgentDispatcher` 执行底层文件操作时，使用了 `try? skill.execute(action)` 盲目循环执行各个 Skill；
-- 一旦底层遇到错误（例如：转换 PPT 时由于系统缺少 Keynote/LibreOffice，或图片格式解析失败），底层的异常被 `try?` 吞没返回了 `nil`；
-- 执行调度器未捕获到异常，误以为“执行成功完成”，但由于产出项数为 0，最终输出了 `"✅ 成功完成 0 项物理操作"`，既没有生成文件也没有向用户反馈真实失败原因。
+### 1.1 为什么会弹出「Choose Application - Where is Microsoft Excel?」窗口？
+- **根因**：macOS 的 AppleScript 引擎在编译或执行 `tell application "Microsoft Excel"` 时，如果当前系统**未安装 Microsoft Excel**，macOS 会自动阻断进程并弹出一个系统级的 Application Picker 窗口，向用户询问“Excel 在哪里？”；
+- **彻底解决**：在调用任何 AppleScript（包括 Excel、Numbers、Keynote、PowerPoint）前，系统先通过 `NSWorkspace.shared.urlForApplication(withBundleIdentifier:)` 静默探测是否已安装该软件，未安装时**直接优雅跳过**或切换备选引擎（如 Numbers / LibreOffice / 文本排版），**100% 杜绝触发 macOS 系统级弹窗**！
 
-### 1.2 架构级重构与修复
-1. **`FileSkill` 引入 `supportedOperations` 路由**：
-   - 每个 Skill 显式声明其支持的 `FileOperationType`（如 `convertToPDF`、`resizeImage` 等），避免无关 Skill 盲目调用；
-2. **去除 `try?` 错误吞没，精准透传底层真实报错**：
-   - 当执行失败时（如缺少系统依赖或格式不支持），系统立即抛出真实错误，任务看板准确记录为 **`[❌ 执行失败]`** 并呈现具体原因（例如：`PPT 转换需要系统安装 Keynote 或 PowerPoint`），彻底杜绝“假成功 0 项”；
-3. **空操作严格拦截**：
-   - 当待执行计划为空或执行后未产生任何有效逆向事务时，系统主动拦截并给出清晰明确的错误提示。
+### 1.2 「不支持就不能选这个 Skill，还应该给正确反馈」
+- **智能推荐引擎（SmartSkillSuggester）增强**：
+  - 选中 Excel/表格 (`.xlsx`/`.xls`/`.numbers`/`.csv`) ➔ 智能推荐 **`📊 电子表格转为 PDF`**；
+  - 选中 PPT/Keynote (`.pptx`/`.ppt`/`.key`) ➔ 智能推荐 **`📽️ 演示文稿转为 PDF`**；
+  - 选中 PDF ➔ 智能推荐 **`📑 合并 PDF`** / **`✂️ 拆分 PDF`** / **`📐 重构为 A3 横版 PDF`**；
+- **全 Skill 增加格式严格校验与支持格式清单提示**：
+  - 当选中的文件不属于该 Skill 的支持范围时，严禁输出无意义的“将 0 个文件转换”，而是立即抛出清晰指引：
+    `"⚠️ 当前选中的文件 (.zip) 无法转为 PDF。转 PDF 支持：Excel 表格 (.xlsx/.xls/.csv)、Word (.docx)、PPT (.pptx)、图片 (.png/.jpg) 等。"`
 
 ---
 
 ## 2. 自动化测试
 
-- 新增 `SkillExecutionErrorHandlingTests` 单元测试，全量 **40 个单元测试全部通过（100% Pass, 0 failures）**。
+- 新增 `SkillValidationFeedbackTests` 与 `SmartSkillSuggesterTests` 测试，全量 **46 个单元测试 100% 全部通过**。

@@ -45,7 +45,12 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
         }
         
         guard !pdfItems.isEmpty else {
-            throw NSError(domain: "PDFMergeSplitSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: "未找到符合条件的 PDF 文件"])
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            throw NSError(
+                domain: "PDFMergeSplitSkill",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 中未包含 PDF 文件。PDF 合并与拆分仅支持 .pdf 格式。"]
+            )
         }
         
         var actions: [FileActionItem] = []

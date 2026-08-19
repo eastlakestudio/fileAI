@@ -42,6 +42,15 @@ public final class DocToPDFSkill: FileSkill, Sendable {
             (targetNames.isEmpty || targetNames.contains(item.name))
         }
         
+        guard !targetItems.isEmpty else {
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            throw NSError(
+                domain: "DocToPDFSkill",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 无法转为 PDF。转 PDF 支持：Excel 表格 (.xlsx/.xls/.csv)、Word (.docx)、PPT (.pptx)、Keynote/Numbers、图片 (.png/.jpg) 等。"]
+            )
+        }
+        
         var actions: [FileActionItem] = []
         for item in targetItems {
             let parentDir = item.url.deletingLastPathComponent()
@@ -124,7 +133,12 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         )
     }
     
+    private func isAppInstalled(bundleId: String) -> Bool {
+        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) != nil
+    }
+    
     private func convertViaKeynoteAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        guard isAppInstalled(bundleId: "com.apple.iWork.Keynote") else { return false }
         let scriptSource = """
         tell application "Keynote"
             try
@@ -141,6 +155,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
     }
     
     private func convertViaPowerPointAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        guard isAppInstalled(bundleId: "com.microsoft.Powerpoint") else { return false }
         let scriptSource = """
         tell application "Microsoft PowerPoint"
             try
@@ -190,6 +205,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
     }
     
     private func convertViaExcelAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        guard isAppInstalled(bundleId: "com.microsoft.Excel") else { return false }
         let scriptSource = """
         tell application "Microsoft Excel"
             try
@@ -206,6 +222,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
     }
     
     private func convertViaNumbersAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        guard isAppInstalled(bundleId: "com.apple.iWork.Numbers") else { return false }
         let scriptSource = """
         tell application "Numbers"
             try
