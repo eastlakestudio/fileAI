@@ -333,16 +333,16 @@ public struct UnifiedSettingsView: View {
                     Spacer()
                 }
                 
-                // 2. 预设推荐模型
-                if let provider = currentProvider, !provider.models.isEmpty {
-                    HStack(spacing: 10) {
-                        Text("预设推荐模型:")
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(width: 110, alignment: .leading)
-                        
+                // 2. 选用模型 (下拉选择官方预设模型，或在无预设时自由输入)
+                HStack(spacing: 10) {
+                    Text("选用模型:")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 110, alignment: .leading)
+                    
+                    if let provider = currentProvider, !provider.models.isEmpty {
                         Picker("", selection: Binding(
                             get: {
-                                provider.models.contains(where: { $0.id == modelSettings.modelName }) ? modelSettings.modelName : (provider.defaultModel?.id ?? "")
+                                provider.models.contains(where: { $0.id == modelSettings.modelName }) ? modelSettings.modelName : (provider.defaultModel?.id ?? modelSettings.modelName)
                             },
                             set: { newModelId in
                                 modelSettings.modelName = newModelId
@@ -359,28 +359,21 @@ public struct UnifiedSettingsView: View {
                             }
                         }
                         .pickerStyle(.menu)
-                        
-                        Spacer()
+                    } else {
+                        TextField("输入具体 Model 标识符 (如 deepseek-chat, gpt-4o 等)", text: $modelSettings.modelName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, design: .monospaced))
+                            .padding(6)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                            .cornerRadius(5)
                     }
+                    
+                    Spacer()
                 }
                 
                 Divider().opacity(0.15)
                 
-                // 3. 模型名称
-                HStack(spacing: 10) {
-                    Text("模型名称 (可编辑):")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 110, alignment: .leading)
-                    
-                    TextField("输入具体 Model 标识符 (如 deepseek-chat, gpt-4o 等)", text: $modelSettings.modelName)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12, design: .monospaced))
-                        .padding(6)
-                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-                        .cornerRadius(5)
-                }
-                
-                // 4. API Key
+                // 3. API Key
                 HStack(spacing: 10) {
                     Text("API Key / Token:")
                         .font(.system(size: 12, weight: .semibold))
@@ -409,7 +402,7 @@ public struct UnifiedSettingsView: View {
                     .cornerRadius(5)
                 }
                 
-                // 5. Base URL
+                // 4. Base URL
                 HStack(spacing: 10) {
                     Text("Base URL:")
                         .font(.system(size: 12, weight: .semibold))
@@ -423,7 +416,7 @@ public struct UnifiedSettingsView: View {
                         .cornerRadius(5)
                 }
                 
-                // 6. 采样温度
+                // 5. 采样温度
                 HStack(spacing: 10) {
                     Text("采样温度 (Temp):")
                         .font(.system(size: 12, weight: .semibold))
@@ -564,14 +557,16 @@ public struct UnifiedSettingsView: View {
                         }
                         .pickerStyle(.menu)
                         .controlSize(.small)
+                    } else {
+                        TextField("输入模型标识符 (如 gemini-3.7-flash, gpt-4o 等)", text: $modelSettings.modelName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 10, design: .monospaced))
+                            .padding(4)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                            .cornerRadius(4)
                     }
                     
-                    TextField("自定义模型", text: $modelSettings.modelName)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 10, design: .monospaced))
-                        .padding(4)
-                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-                        .cornerRadius(4)
+                    Spacer()
                 }
             }
         }

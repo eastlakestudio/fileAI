@@ -1,23 +1,13 @@
-# 智能推荐 Skill 移入聊天框 + 号菜单实施方案 (Implementation Plan)
+# 去除模型配置冗余控件实施方案 (Implementation Plan)
 
-## 1. 现状与需求分析
-
-### 1.1 需求说明
-- 用户要求：在首页内容中，智能推荐 Skill 移入**聊天输入框内部（通过 `+` 号按钮点击展开菜单选择）**，不再单独展示在首页文件区域与聊天框之间的横幅条中，使主界面极简纯粹。
-
-### 1.2 改造方案
-1. **移除独立横幅**：从 `mainPanelBody` 中彻底移除 `smartSkillRecommendationSection`，文件展示列表直接与底部输入框衔接；
-2. **在聊天框左侧集成 `+` 号 Skill 菜单 (`Menu`)**：
-   - 动态置顶展示 **✨ 智能推荐 Skill (已结合所选文件动态感知)**；
-   - 提供常用 **🧩 核心文件 Skill** (图像处理、文档转PDF、合并拆分、批量重命名、EXIF清理)；
-   - 提供 **🏢 企业协同 Skill** (飞书、企业微信、钉钉)；
-   - 提供 **⚙️ 管理所有 Skill 库...** 快捷跳转入口；
-   - 点击任一 Skill 即将对应的指令模板填入输入框，体验极速流畅。
+## 1. 现状与痛点分析
+- **痛点**：在「本地 CLI 引擎」与「云端 API 引擎」配置卡片中，原本同时并列展示了「下拉菜单」和「文本输入框」，导致两者都显示同一个模型名称（例如 `gemini-3.5-flash`），界面视觉重叠且体验冗余。
+- **目标**：彻底消除冗余控件。对有预设推荐模型的服务商/CLI，提供单一清晰的 **下拉模型选择器 (`Picker`)**；对无预设或自定义场景，提供单一清晰的输入框。
 
 ---
 
 ## 2. 待修改文件清单
 
-1. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]：
-   - 移除 `smartSkillRecommendationSection`；
-   - 在 `bottomChatInputBar` 输入框左侧添加 `+` 号 Skill 菜单。
+1. `Sources/AIFileUI/Views/UnifiedSettingsView.swift` [MODIFY]：
+   - 优化 `cliToolCardRow`：移除并列的冗余 `TextField`，只保留单一的 `选用模型` 下拉菜单；
+   - 优化 `cloudAPISection`：统合 `预设推荐模型` 与 `模型名称` 为单一的 `选用模型` 选择器。
