@@ -1,0 +1,37 @@
+import XCTest
+@testable import AIFileCore
+
+final class TaskManagerTests: XCTestCase {
+    var tempDirectory: URL!
+    
+    override func setUpWithError() throws {
+        tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+    }
+    
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: tempDirectory)
+    }
+    
+    func testTaskLifecycleAndWalkthroughRecording() async throws {
+        let manager = TaskManager(storageDirectory: tempDirectory)
+        
+        let plan = ExecutionPlan(summary: "测试计划", actions: [])
+        let task = await manager.createTask(prompt: "修改图片尺寸为1920", plan: plan)
+        
+        XCTAssertEqual(task.status, .inProgress)
+        
+        let inProgress = await manager.inProgressTasks
+        XCTAssertTrue(inProgress.contains(where: { $0.id == task.id }))
+        
+        let txId = UUID()
+        let report = "✅ 成功处理 1 个文件"
+        await manager.completeTask(id: task.id, transactionId: txId, walkthrough: report)
+        
+        let completed = await manager.completedTasks
+        let updatedTask = completed.first { $0.id == task.id }
+        XCTAssertNotNil(updatedTask)
+        XCTAssertEqual(updatedTask?.status, .completed)
+        XCTAssertEqual(updatedTask?.walkthroughReport, report)
+    }
+}

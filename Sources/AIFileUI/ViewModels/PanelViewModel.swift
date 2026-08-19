@@ -1,0 +1,265 @@
+import Foundation
+import SwiftUI
+import AppKit
+import Combine
+import AIFileCore
+import AIFileSkills
+import AIFileAgent
+import AIFileFinderIntegration
+
+public enum AppNavigationPage: Sendable {
+    case main
+    case taskBoard
+    case modelSettings
+    case skillManagement
+}
+
+public enum FileListViewMode: String, CaseIterable, Identifiable {
+    case list = "平铺列表"
+    case tree = "路径树状"
+    public var id: String { rawValue }
+}
+
+@MainActor
+public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
+    @Published public var rawURLs: [URL] = []
+    @Published public var fileItems: [FileItem] = []
+    @Published public var viewMode: FileListViewMode = .list
+    @Published public var currentPage: AppNavigationPage = .main
+    
+    @Published public var isRecursive: Bool = false {
+        didSet { refreshFiles() }
+    }
+    @Published public var selectedExtensionFilter: String? = nil {
+        didSet { refreshFiles() }
+    }
+    
+    @Published public var inputText: String = ""
+    @Published public var isThinking: Bool = false
+    @Published public var statusMessage: String? = nil
+    
+    @Published public var currentPlan: ExecutionPlan? = nil
+    @Published public var isShowingDiffPreview: Bool = false
+    @Published public var activeTask: TaskExecutionRecord? = nil
+    
+    @Published public var isShowingModelSettings: Bool = false
+    
+    @Published public var consentRequest: ConsentRequest? = nil
+    @Published public var isShowingConsentModal: Bool = false
+    private var consentContinuation: CheckedContinuation<ConsentDecision, Never>?
+    
+    @Published public var smartSuggestions: [SkillSuggestion] = []
+    
+    private let customDispatcher: AgentDispatcher?
+    
+    public init(dispatcher: AgentDispatcher? = nil) {
+        let registry = SkillRegistry.shared
+        registry.register(ImageResizeSkill())
+        registry.register(ImageConvertSkill())
+        registry.register(DocToPDFSkill())
+        registry.register(PDFMergeSplitSkill())
+        registry.register(BatchRenameSkill())
+        
+        self.customDispatcher = dispatcher
+        
+        ContentConsentGate.shared.delegate = self
+        updateSuggestions()
+    }
+    
+    public var dispatcher: AgentDispatcher {
+        if let custom = customDispatcher {
+            return custom
+        }
+        let settings = ModelSettingsManager.shared.settings
+        let registry = SkillRegistry.shared
+        
+        if settings.providerId.starts(with: "cli_") {
+            let toolTypeRaw = String(settings.providerId.dropFirst(4))
+            if let type = CLIToolType(rawValue: toolTypeRaw) {
+                let execPath = CLIDiscoveryEngine.shared.findExecutablePath(for: type.executableNames)
+                let tool = DiscoveredCLITool(type: type, executablePath: execPath, isInstalled: execPath != nil)
+                let client = CLIModelClient(tool: tool, modelName: settings.modelName)
+                return AgentDispatcher(provider: client, registry: registry)
+            }
+        }
+        
+        if !settings.apiKey.isEmpty {
+            let client = OpenAICompatibleClient(
+                providerName: settings.providerId,
+                apiKey: settings.apiKey,
+                baseURLString: settings.baseURL,
+                modelName: settings.modelName
+            )
+            return AgentDispatcher(provider: client, registry: registry)
+        }
+        
+        return AgentDispatcher(provider: MockLLMClient(), registry: registry)
+    }
+    
+    /// 从 Finder 抓取最新选中的文件
+    public func fetchFromFinder() {
+        let urls = FinderContextReader.shared.getSelectedFinderItems()
+        setTargetURLs(urls)
+    }
+    
+    /// 手动打开文件选择器
+    public func pickFilesManually() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.message = "选择需要 AI 批处理的文件或文件夹"
+        
+        if panel.runModal() == .OK {
+            setTargetURLs(panel.urls)
+        }
+    }
+    
+    /// 设置当前操作的目标 URL 列表
+    public func setTargetURLs(_ urls: [URL]) {
+        self.rawURLs = urls
+        refreshFiles()
+    }
+    
+    /// 刷新元数据提取结果
+    public func refreshFiles() {
+        var allowedExts: Set<String>? = nil
+        if let filter = selectedExtensionFilter, !filter.isEmpty {
+            allowedExts = [filter.lowercased()]
+        }
+        
+        self.fileItems = FileMetadataEngine.shared.collectMetadata(
+            from: rawURLs,
+            recursive: isRecursive,
+            allowedExtensions: allowedExts
+        )
+        updateSuggestions()
+    }
+    
+    /// 计算共同祖先目录
+    public var commonParentDirectoryPath: String {
+        guard let first = fileItems.first?.url.deletingLastPathComponent().path else {
+            return "未选择路径"
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return first.replacingOccurrences(of: home, with: "~")
+    }
+    
+    /// 更新动态推荐的 Skills
+    public func updateSuggestions() {
+        self.smartSuggestions = SmartSkillSuggester.shared.suggestSkills(for: fileItems)
+    }
+    
+    /// 所有检测到的文件扩展名（供过滤器使用）
+    public var availableExtensions: [String] {
+        let allExts = FileMetadataEngine.shared.collectMetadata(from: rawURLs, recursive: isRecursive).map { $0.fileExtension }.filter { !$0.isEmpty }
+        return Array(Set(allExts)).sorted()
+    }
+    
+    /// 提交用户自然语言指令
+    public func submitInstruction(_ text: String? = nil) {
+        let prompt = (text ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prompt.isEmpty else { return }
+        
+        if prompt == "__PICK_FILES__" {
+            pickFilesManually()
+            return
+        }
+        if prompt == "__REFRESH_FINDER__" {
+            fetchFromFinder()
+            return
+        }
+        
+        if fileItems.isEmpty {
+            statusMessage = "⚠️ 请先在 Finder 中选择文件或点击「手动选取」"
+            return
+        }
+        
+        isThinking = true
+        statusMessage = "AI 正在分析意图并规划操作方案..."
+        
+        Task {
+            do {
+                let plan = try await dispatcher.generatePlan(userPrompt: prompt, fileItems: fileItems)
+                self.currentPlan = plan
+                self.isThinking = false
+                self.statusMessage = nil
+                
+                if !plan.actions.isEmpty {
+                    // 创建任务并记录为进行中
+                    self.activeTask = await TaskManager.shared.createTask(prompt: prompt, plan: plan)
+                    self.isShowingDiffPreview = true
+                } else if !plan.summary.isEmpty && plan.summary != "计划执行 0 项操作" {
+                    self.statusMessage = plan.summary
+                } else {
+                    self.statusMessage = "💡 未匹配到需要变动的文件，请尝试调整指令或参考上方推荐 Skill"
+                }
+            } catch {
+                self.isThinking = false
+                self.statusMessage = "规划失败: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// 用户确认执行计划
+    public func confirmExecution() {
+        guard let plan = currentPlan else { return }
+        isShowingDiffPreview = false
+        statusMessage = "正在安全执行文件操作..."
+        
+        Task {
+            do {
+                let record = try await dispatcher.executePlan(plan: plan)
+                let walkthrough = "✅ 成功完成 \(record.reverseActions.count) 个文件物理操作。\n- 事务 ID: \(record.id.uuidString)\n- 变更类型: \(plan.summary)"
+                
+                if let task = self.activeTask {
+                    await TaskManager.shared.completeTask(id: task.id, transactionId: record.id, walkthrough: walkthrough)
+                }
+                
+                statusMessage = "✅ 成功完成 \(record.reverseActions.count) 项操作！已写入任务看板，可随时 ⌘Z 撤销"
+                refreshFiles()
+                currentPlan = nil
+                activeTask = nil
+            } catch {
+                if let task = self.activeTask {
+                    await TaskManager.shared.failTask(id: task.id, error: error.localizedDescription)
+                }
+                statusMessage = "❌ 执行失败: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    /// 撤销上一次事务操作
+    public func undoLastOperation() {
+        Task {
+            do {
+                if let record = try await TransactionJournal.shared.undoLatest() {
+                    await TaskManager.shared.markReverted(transactionId: record.id)
+                    statusMessage = "↩️ 已成功撤销: \(record.description)"
+                    refreshFiles()
+                } else {
+                    statusMessage = "没有可撤销的操作"
+                }
+            } catch {
+                statusMessage = "撤销失败: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    // MARK: - Consent Gate Delegate
+    public func presentConsentModal(for request: ConsentRequest) async -> ConsentDecision {
+        self.consentRequest = request
+        self.isShowingConsentModal = true
+        
+        return await withCheckedContinuation { continuation in
+            self.consentContinuation = continuation
+        }
+    }
+    
+    public func handleConsentDecision(_ decision: ConsentDecision) {
+        isShowingConsentModal = false
+        consentContinuation?.resume(returning: decision)
+        consentContinuation = nil
+        consentRequest = nil
+    }
+}
