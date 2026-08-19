@@ -24,9 +24,11 @@ public struct TaskBoardView: View {
     @State private var tasks: [TaskExecutionRecord] = []
     @State private var selectedDetailTask: TaskExecutionRecord? = nil
     public let onBack: () -> Void
+    public var onRerunTask: ((String) -> Void)?
     
-    public init(onBack: @escaping () -> Void) {
+    public init(onBack: @escaping () -> Void, onRerunTask: ((String) -> Void)? = nil) {
         self.onBack = onBack
+        self.onRerunTask = onRerunTask
     }
     
     private var inProgressTasks: [TaskExecutionRecord] {
@@ -159,83 +161,109 @@ public struct TaskBoardView: View {
     
     @ViewBuilder
     private func taskCompactCard(task: TaskExecutionRecord) -> some View {
-        Button(action: {
-            selectedDetailTask = task
-        }) {
-            HStack(spacing: 12) {
-                // 左侧状态图标
-                Image(systemName: iconForStatus(task.status))
-                    .font(.system(size: 15))
-                    .foregroundColor(badgeColor(task.status))
-                    .frame(width: 32, height: 32)
-                    .background(badgeColor(task.status).opacity(0.12))
-                    .cornerRadius(6)
-                
-                // 中间：任务目标与内容
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(task.prompt)
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.primary)
+        HStack(spacing: 10) {
+            // 点击整卡区域打开详情
+            Button(action: {
+                selectedDetailTask = task
+            }) {
+                HStack(spacing: 12) {
+                    // 左侧状态图标
+                    Image(systemName: iconForStatus(task.status))
+                        .font(.system(size: 15))
+                        .foregroundColor(badgeColor(task.status))
+                        .frame(width: 32, height: 32)
+                        .background(badgeColor(task.status).opacity(0.12))
+                        .cornerRadius(6)
+                    
+                    // 中间：任务目标与内容
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(task.prompt)
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.primary)
+                                .lineLimit(1)
+                            
+                            if task.status == .inProgress && task.plan.actions.isEmpty {
+                                Text("(正在分析匹配...)")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.blue)
+                            } else {
+                                Text("(\(task.plan.actions.count) 项变动)")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Text(task.plan.summary)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
                             .lineLimit(1)
-                        
-                        if task.status == .inProgress && task.plan.actions.isEmpty {
-                            Text("(正在分析匹配...)")
-                                .font(.system(size: 10))
-                                .foregroundColor(.blue)
-                        } else {
-                            Text("(\(task.plan.actions.count) 项变动)")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
                     }
                     
-                    Text(task.plan.summary)
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                    Spacer()
+                    
+                    // 右侧：状态、结果摘要与计时
+                    VStack(alignment: .trailing, spacing: 3) {
+                        HStack(spacing: 6) {
+                            statusBadge(task.status)
+                            
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.secondary.opacity(0.6))
+                        }
+                        
+                        HStack(spacing: 4) {
+                            Text(resultSummaryText(task: task))
+                                .foregroundColor(resultSummaryColor(task: task))
+                            
+                            Text("•")
+                                .foregroundColor(.secondary.opacity(0.4))
+                            
+                            HStack(spacing: 2) {
+                                Image(systemName: "stopwatch")
+                                    .font(.system(size: 8))
+                                Text(task.formattedDuration)
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                        .font(.system(size: 10, design: .monospaced))
                         .lineLimit(1)
-                }
-                
-                Spacer()
-                
-                // 右侧：状态、结果摘要与计时
-                VStack(alignment: .trailing, spacing: 3) {
-                    HStack(spacing: 6) {
-                        statusBadge(task.status)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.secondary.opacity(0.6))
                     }
-                    
-                    HStack(spacing: 4) {
-                        Text(resultSummaryText(task: task))
-                            .foregroundColor(resultSummaryColor(task: task))
-                        
-                        Text("•")
-                            .foregroundColor(.secondary.opacity(0.4))
-                        
-                        HStack(spacing: 2) {
-                            Image(systemName: "stopwatch")
-                                .font(.system(size: 8))
-                            Text(task.formattedDuration)
-                        }
-                        .foregroundColor(.secondary)
-                    }
-                    .font(.system(size: 10, design: .monospaced))
-                    .lineLimit(1)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-            .cornerRadius(8)
+            .buttonStyle(.plain)
+            
+            Divider()
+                .frame(height: 24)
+                .opacity(0.3)
+            
+            // 独立「再次执行」按钮
+            Button(action: {
+                onRerunTask?(task.prompt)
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("再次执行")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(Color.accentColor.opacity(0.12))
+                .foregroundColor(.accentColor)
+                .cornerRadius(5)
+            }
+            .buttonStyle(.plain)
+            .help("以此指令对当前文件重新发起执行")
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.85))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .cornerRadius(8)
     }
     
     // MARK: - 任务详情弹窗 (TaskDetailSheet)
@@ -244,7 +272,7 @@ public struct TaskBoardView: View {
     private func taskDetailSheetView(task: TaskExecutionRecord) -> some View {
         VStack(spacing: 0) {
             // 弹窗顶栏
-            HStack {
+            HStack(spacing: 10) {
                 HStack(spacing: 6) {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 13, weight: .bold))
@@ -256,6 +284,22 @@ public struct TaskBoardView: View {
                 Spacer()
                 
                 statusBadge(task.status)
+                
+                // 再次执行按钮
+                Button(action: {
+                    let promptToRun = task.prompt
+                    selectedDetailTask = nil
+                    onRerunTask?(promptToRun)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("再次执行此任务")
+                            .font(.system(size: 11, weight: .bold))
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 
                 Button("关闭") {
                     selectedDetailTask = nil

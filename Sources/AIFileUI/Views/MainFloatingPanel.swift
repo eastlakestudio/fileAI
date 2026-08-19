@@ -18,11 +18,20 @@ public struct MainFloatingPanel: View {
         Group {
             switch viewModel.currentPage {
             case .taskBoard:
-                TaskBoardView(onBack: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        viewModel.currentPage = .main
+                TaskBoardView(
+                    onBack: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.currentPage = .main
+                        }
+                    },
+                    onRerunTask: { prompt in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            viewModel.currentPage = .main
+                            viewModel.inputText = prompt
+                            viewModel.submitInstruction(prompt)
+                        }
                     }
-                })
+                )
                 .transition(.opacity)
             case .settings(let tab):
                 UnifiedSettingsView(
