@@ -7,11 +7,10 @@ import AIFileSkills
 import AIFileAgent
 import AIFileFinderIntegration
 
-public enum AppNavigationPage: Sendable {
+public enum AppNavigationPage: Equatable, Sendable {
     case main
     case taskBoard
-    case modelSettings
-    case skillManagement
+    case settings(initialTab: SettingsNavTab)
 }
 
 public enum FileListViewMode: String, CaseIterable, Identifiable {

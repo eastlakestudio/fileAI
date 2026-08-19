@@ -24,8 +24,9 @@ public struct MainFloatingPanel: View {
                     }
                 })
                 .transition(.opacity)
-            case .skillManagement:
-                SkillManagementView(
+            case .settings(let tab):
+                UnifiedSettingsView(
+                    initialTab: tab,
                     onBack: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             viewModel.currentPage = .main
@@ -35,13 +36,6 @@ public struct MainFloatingPanel: View {
                         viewModel.inputText = prompt
                     }
                 )
-                .transition(.opacity)
-            case .modelSettings:
-                ModelSettingsView(onBack: {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        viewModel.currentPage = .main
-                    }
-                })
                 .transition(.opacity)
             case .main:
                 mainPanelBody
@@ -148,30 +142,15 @@ public struct MainFloatingPanel: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             
-            // Skill 管理全页切换
+            // 统一配置管理全页切换 (整合模型与 Skill)
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    viewModel.currentPage = .skillManagement
+                    viewModel.currentPage = .settings(initialTab: .model)
                 }
             }) {
                 HStack(spacing: 3) {
-                    Image(systemName: "puzzlepiece.extension")
-                    Text("Skill 管理")
-                }
-                .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            
-            // 模型配置全页切换
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    viewModel.currentPage = .modelSettings
-                }
-            }) {
-                HStack(spacing: 3) {
-                    Image(systemName: "cpu")
-                    Text("模型配置")
+                    Image(systemName: "slider.horizontal.3")
+                    Text("配置管理")
                 }
                 .font(.system(size: 11, weight: .medium))
             }
@@ -432,7 +411,7 @@ public struct MainFloatingPanel: View {
                     
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            viewModel.currentPage = .modelSettings
+                            viewModel.currentPage = .settings(initialTab: .model)
                         }
                     }) {
                         HStack(spacing: 3) {

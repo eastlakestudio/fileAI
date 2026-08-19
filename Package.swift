@@ -77,6 +77,11 @@ let package = Package(
             name: "AIFileAgentTests",
             dependencies: ["AIFileAgent", "AIFileCore", "AIFileSkills"],
             path: "Tests/AIFileAgentTests"
+        ),
+        .testTarget(
+            name: "AIFileUITests",
+            dependencies: ["AIFileUI", "AIFileCore"],
+            path: "Tests/AIFileUITests"
         )
     ]
 )

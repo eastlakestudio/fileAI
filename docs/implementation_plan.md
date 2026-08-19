@@ -1,28 +1,30 @@
-# 系统单进程锁与优雅退出支持实施方案 (Implementation Plan)
+# 模型配置与 Skill 管理统一整合实施方案 (Implementation Plan)
 
-## 1. 现状与需求分析
+## 1. 现状与重构目标
 
-### 1.1 需求 1：系统单进程保证（禁止多开）
-- **痛点**：若用户多次点击应用或从终端重复运行 `swift run AIFileApp`，系统会创建多个并行后台进程，导致快捷键冲突或状态不同步；
-- **方案**：
-  1. 在 `main.swift` 入口处引入 **POSIX `flock` 文件独占锁 (`~/.aifiles_app.lock`)**；
-  2. 若尝试加锁失败（即已有主进程在运行），新进程通过 `DistributedNotificationCenter` 向已运行的主实例发送 `com.eastlakestudio.aifiles.activate` 广播，唤起并居中展示现有窗口；
-  3. 新进程立即 `exit(0)` 退出，保证系统始终 **严格单进程** 运行。
+### 1.1 需求背景
+目前「模型配置」和「Skill 管理」分别作为两个独立的二级页面存在，入口分散；现需将它们统一整合为一个**一体化的「配置管理中心」**，采用标准的 macOS 左侧导航栏模式分项管理。
 
-### 1.2 需求 2：支持应用退出 (Quit)
-- **多入口退出**：
-  1. **状态栏托盘菜单**：提供显式的「退出文件魔法棒 (⌘Q)」菜单项；
-  2. **全局快捷键 / 窗口快捷键**：悬浮窗在前台时按 `⌘ Q` 直接触发 `NSApp.terminate(nil)`；
-  3. **顶栏快捷控制**：在主界面顶栏右侧与模型配置页提供「退出应用」按钮，确保用户无论在哪个入口均可一键安全退出。
+### 1.2 统一配置管理中心架构设计 (`UnifiedSettingsView`)
+1. **左侧统一导航栏 (`SettingsNavTab`)**：
+   - 🤖 **AI 模型与引擎** (`.model`)：云端 API（OpenAI/DeepSeek/GLM 等）与本地 CLI 引擎（`agy`, `claude`, `ollama`, `llm` 等）的统一配置、模型选择与连通性测试；
+   - 🧩 **Skill 技能库** (`.skills`)：已安装的独立 Markdown 技能管理（包括图片处理、文档转换、批量重命名、企业协同等分类）、启停开关、参数 Schema 查看与示例指令填入；
+   - ☁️ **云端技能市场** (`.marketplace`)：预设与云端扩展 Markdown Skill 的一键下载与安装；
+   - ⚙️ **偏好与快捷键** (`.general`)：全局热键（`⌥ M`）、系统单进程守护状态、Finder 联动状态与退出应用。
+
+2. **交互联动优化**：
+   - 主界面顶栏将原分散的两个按钮合并为单一的 **`[配置管理]`** 入口；
+   - 聊天框右下角点击当前模型徽标（`⚡️ agy · gemini-3.7-flash`）可直接直达配置管理页中的「AI 模型与引擎」分项；
+   - 在 Skill 列表中点击示例 Prompt 可一键填入主界面输入框并返回。
 
 ---
 
-## 2. 待修改文件清单
+## 2. 待修改与新建文件清单
 
-1. `Sources/AIFileApp/main.swift` [MODIFY]：
-   - 增加 POSIX 单进程文件锁检测与唤醒已运行实例逻辑；
-   - 主实例监听广播通知，重复启动时自动激活当前窗口；
-2. `Sources/AIFileFinderIntegration/StatusBar/StatusBarManager.swift` [MODIFY]：
-   - 优化状态栏托盘菜单，确保「退出文件魔法棒」一键彻底关闭所有进程；
+1. `Sources/AIFileUI/Views/UnifiedSettingsView.swift` [NEW]：
+   - 统合左侧导航栏、模型配置区、Skill 库管理区、云端市场区与通用偏好区；
+2. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]：
+   - 将 `AppNavigationPage` 更新为 `.main`, `.taskBoard`, `.settings(initialTab: SettingsNavTab)`；
 3. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]：
-   - 在顶栏增加快捷退出菜单支持（快捷键 `⌘ Q`）。
+   - 顶栏按钮整合为统一的「配置管理」，底部模型徽标直达对应分项；
+4. `Tests/AIFileUI/` 单元测试验证路由与状态一致性。
