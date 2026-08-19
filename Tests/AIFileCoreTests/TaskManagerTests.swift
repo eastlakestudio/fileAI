@@ -34,4 +34,22 @@ final class TaskManagerTests: XCTestCase {
         XCTAssertEqual(updatedTask?.status, .completed)
         XCTAssertEqual(updatedTask?.walkthroughReport, report)
     }
+    
+    func testColdStartPersistenceRecovery() async throws {
+        // 1. 模拟第一次运行并创建完成任务
+        let firstInstance = TaskManager(storageDirectory: tempDirectory)
+        let plan = ExecutionPlan(summary: "批量转PDF", actions: [])
+        let task = await firstInstance.createTask(prompt: "将选中文档转为 PDF", plan: plan)
+        await firstInstance.completeTask(id: task.id, transactionId: UUID(), walkthrough: "✅ 转码完成")
+        
+        // 2. 模拟 App 退出后重启（创建全新的 TaskManager 实例指向同一持久化存储目录）
+        let restartedInstance = TaskManager(storageDirectory: tempDirectory)
+        let recoveredTasks = await restartedInstance.allTasks
+        
+        XCTAssertEqual(recoveredTasks.count, 1, "冷启动后应成功恢复之前持久化的任务")
+        XCTAssertEqual(recoveredTasks.first?.id, task.id)
+        XCTAssertEqual(recoveredTasks.first?.prompt, "将选中文档转为 PDF")
+        XCTAssertEqual(recoveredTasks.first?.status, .completed)
+        XCTAssertEqual(recoveredTasks.first?.walkthroughReport, "✅ 转码完成")
+    }
 }

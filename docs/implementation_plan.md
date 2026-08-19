@@ -1,28 +1,25 @@
-# 任务看板全卡片模式与结果文件清晰呈现实施方案 (Implementation Plan)
+# 任务看板全量数据持久化与冷启动恢复实施方案 (Implementation Plan)
 
-## 1. 现状分析与优化目标
+## 1. 现状痛点与目标
 
-### 1.1 现状痛点
-- 原任务看板采用左侧列表 + 右侧详情的左右分栏，在任务较多或较长时视野受限；
-- 顶部过滤仅有「进行中」和「已完成」，缺少对「执行失败」任务的独立筛选；
-- 执行报告中包含冗余的技术信息（如 `事务 ID: uuid-xxx`），用户更关心 **「最终生成了哪些结果文件」**。
+### 1.1 现状排查
+- **存储目录不当**：原实现存储在 `~/Library/Caches/`，容易被系统缓存清理机制误删；
+- **冷启动未加载**：`TaskManager` 在 `init()` 时仅创建了目录，**未从磁盘读取加载已保存的 `.json` 历史任务**，导致每次重新启动 App 时任务看板呈现空白。
 
 ### 1.2 改造目标
-1. **取消左侧导航模式，改用全卡片流 (Full Card List)**：
-   - 每一个任务作为一个完整的独立卡片呈现，卡片内整合意图、方案明细、生成结果文件与撤销操作；
-2. **首行增强过滤 Tab**：
-   - 顶部提供 **「进行中 (x)」**、**「已完成 (y)」**、**「执行失败 (z)」** 三态筛选；
-3. **结果报告强化呈现生成文件**：
-   - 清晰展示执行后输出的新文件列表（新文件名、原文件名与操作类型）；
-   - 彻底移除无用的「事务 ID」显示。
+1. **持久化存储迁移至 Application Support**：
+   - 路径统一迁移至 `~/Library/Application Support/AIFileAssistant/tasks/`；
+2. **冷启动自动全量恢复加载**：
+   - 在 `TaskManager.init()` 及 `loadPersistedTasks()` 中，自动遍历并反序列化所有已记录的任务，按创建时间逆序排列；
+3. **单元测试覆盖**：
+   - 增加针对冷启动持久化恢复、写入、更新与重载的完整单元测试。
 
 ---
 
 ## 2. 待修改文件清单
 
-1. `Sources/AIFileUI/Views/TaskBoardView.swift` [MODIFY]：
-   - 重构为首行三态 Tab + 全卡片式任务流；
-2. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]：
-   - 优化任务完成时 Walkthrough 结果文本的构建，明确罗列生成的目标文件列表，去除事务 ID；
-3. `Tests/AIFileCoreTests/TaskManagerTests.swift` [MODIFY]：
-   - 确保任务状态转换与报告记录的单元测试验证。
+1. `Sources/AIFileCore/Transaction/TaskManager.swift` [MODIFY]：
+   - 迁移至 `Application Support` 目录；
+   - 添加 `loadPersistedTasks()` 在启动时自动恢复全部任务；
+2. `Tests/AIFileCoreTests/TaskManagerTests.swift` [MODIFY]：
+   - 增加独立存储目录下的冷启动重启与持久化恢复测试用例。
