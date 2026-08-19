@@ -256,14 +256,23 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 }
                 self.latestOutputURLs = producedURLs
                 
+                let count = record.reverseActions.count
+                guard count > 0 else {
+                    throw NSError(
+                        domain: "SafeFileExecutor",
+                        code: 500,
+                        userInfo: [NSLocalizedDescriptionKey: "操作未能成功生成目标文件，请检查文件格式或系统依赖权限"]
+                    )
+                }
+                
                 let filesBlock = fileSummaryLines.isEmpty ? "（无新文件生成）" : fileSummaryLines.joined(separator: "\n")
-                let walkthrough = "✅ 成功完成 \(record.reverseActions.count) 项物理操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
+                let walkthrough = "✅ 成功完成 \(count) 项物理操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
                 
                 if let task = self.activeTask {
                     await TaskManager.shared.completeTask(id: task.id, transactionId: record.id, walkthrough: walkthrough)
                 }
                 
-                statusMessage = "✅ 成功完成 \(record.reverseActions.count) 项操作！已写入任务看板，可随时 ⌘Z 撤销"
+                statusMessage = "✅ 成功完成 \(count) 项操作！已写入任务看板，可随时 ⌘Z 撤销"
                 refreshFiles()
                 currentPlan = nil
                 activeTask = nil

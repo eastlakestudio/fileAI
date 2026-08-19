@@ -132,11 +132,15 @@ public final class AgentDispatcher: Sendable {
     ) async throws -> TransactionRecord {
         return try await SafeFileExecutor.shared.execute(plan: plan) { [registry] action in
             for skill in registry.allSkills {
-                if let url = try? skill.execute(action: action) {
-                    return url
+                if skill.supportedOperations.contains(action.operationType) {
+                    return try skill.execute(action: action)
                 }
             }
-            return nil
+            throw NSError(
+                domain: "AgentDispatcher",
+                code: 404,
+                userInfo: [NSLocalizedDescriptionKey: "未找到能够执行操作「\(action.operationType.rawValue)」的可用 Skill"]
+            )
         }
     }
 }

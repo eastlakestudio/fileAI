@@ -5,6 +5,7 @@ public final class BatchRenameSkill: FileSkill, Sendable {
     public let identifier = "batch_rename"
     public let name = "智能批量重命名"
     public let skillDescription = "根据大模型生成的重命名映射或规则，批量重命名文件（支持添加前后缀、去除特定字符、格式化日期等）"
+    public var supportedOperations: [FileOperationType] { [.rename] }
     
     public var parametersSchema: [String: Any] {
         return [

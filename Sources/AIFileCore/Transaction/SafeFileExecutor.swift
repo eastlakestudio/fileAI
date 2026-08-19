@@ -27,6 +27,14 @@ public final class SafeFileExecutor: Sendable {
         customHandler: ((FileActionItem) throws -> URL?)? = nil
     ) async throws -> TransactionRecord {
         let txId = plan.id
+        guard !plan.selectedActions.isEmpty else {
+            throw NSError(
+                domain: "SafeFileExecutor",
+                code: 400,
+                userInfo: [NSLocalizedDescriptionKey: "待执行的操作列表为空，未进行任何物理变动"]
+            )
+        }
+        
         let backupDir = backupRootDirectory.appendingPathComponent(txId.uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: backupDir, withIntermediateDirectories: true)
         

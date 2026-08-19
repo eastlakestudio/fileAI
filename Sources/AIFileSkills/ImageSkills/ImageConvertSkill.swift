@@ -8,6 +8,7 @@ public final class ImageConvertSkill: FileSkill, Sendable {
     public let identifier = "image_convert"
     public let name = "批量转换图片格式"
     public let skillDescription = "将图片批量转换为指定格式（如 png, jpg, heic, webp）"
+    public var supportedOperations: [FileOperationType] { [.convertImageFormat] }
     
     public var parametersSchema: [String: Any] {
         return [

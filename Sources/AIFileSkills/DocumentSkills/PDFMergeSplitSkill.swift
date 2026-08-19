@@ -6,6 +6,7 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
     public let identifier = "pdf_merge_split"
     public let name = "PDF合并与拆分"
     public let skillDescription = "将多个 PDF 文件合并为一个新 PDF，或将多页 PDF 拆分为单页文件"
+    public var supportedOperations: [FileOperationType] { [.mergePDF, .splitPDF] }
     
     public var parametersSchema: [String: Any] {
         return [

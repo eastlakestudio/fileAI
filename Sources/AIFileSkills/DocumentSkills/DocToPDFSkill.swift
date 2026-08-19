@@ -7,6 +7,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
     public let identifier = "doc_to_pdf"
     public let name = "文档/演示/图片转PDF"
     public let skillDescription = "将 PPT/PPTX、Keynote、Word 文档 (DOC/DOCX)、Markdown、文本或图片安全转换为标准矢量 PDF"
+    public var supportedOperations: [FileOperationType] { [.convertToPDF] }
     
     public var parametersSchema: [String: Any] {
         return [

@@ -8,6 +8,7 @@ public final class ImageResizeSkill: FileSkill, Sendable {
     public let identifier = "image_resize"
     public let name = "批量调整图片尺寸"
     public let skillDescription = "将指定图片批量缩放或修改为指定分辨率（例如 1920x1080、宽度 800、或按比例缩放）"
+    public var supportedOperations: [FileOperationType] { [.resizeImage] }
     
     public var parametersSchema: [String: Any] {
         return [

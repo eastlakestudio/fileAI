@@ -12,6 +12,9 @@ public protocol FileSkill: Sendable {
     /// 功能描述（供大模型理解其能力）
     var skillDescription: String { get }
     
+    /// 支持的文件操作类型枚举列表
+    var supportedOperations: [FileOperationType] { get }
+    
     /// Function Calling 的参数 Schema (JSON Schema 规范)
     var parametersSchema: [String: Any] { get }
     
