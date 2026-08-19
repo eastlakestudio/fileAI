@@ -53,7 +53,11 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         var arguments: [String] = []
         switch tool.type {
         case .antigravity:
-            arguments = ["--print", promptPayload]
+            if modelName.isEmpty || modelName == "auto" {
+                arguments = ["--print", promptPayload]
+            } else {
+                arguments = ["--print", promptPayload, "--model", modelName]
+            }
         case .ollama:
             arguments = ["run", modelName, promptPayload]
         case .claude:
@@ -133,21 +137,41 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         
         cleanJSON = cleanJSON.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // 尝试解析为标准 ToolCall
-        if let data = cleanJSON.data(using: .utf8),
-           let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            
-            if let toolName = jsonDict["tool"] as? String,
-               let args = jsonDict["arguments"] as? [String: Any],
-               let argsData = try? JSONSerialization.data(withJSONObject: args),
-               let argsString = String(data: argsData, encoding: .utf8) {
+        // 提取最外层或内嵌的 { ... } JSON 字典
+        if let startBrace = cleanJSON.firstIndex(of: "{"),
+           let endBrace = cleanJSON.lastIndex(of: "}"),
+           startBrace < endBrace {
+            let jsonSubstring = String(cleanJSON[startBrace...endBrace])
+            if let data = jsonSubstring.data(using: .utf8),
+               let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 
-                let call = ToolCallRequest(
-                    id: "call_cli_\(UUID().uuidString.prefix(6))",
-                    functionName: toolName,
-                    argumentsJSON: argsString
-                )
-                return LLMResponse(textContent: "由 \(tool.name) 自动规划", toolCalls: [call])
+                // 格式 A: {"tool": "...", "arguments": {...}}
+                if let toolName = jsonDict["tool"] as? String,
+                   let args = jsonDict["arguments"] as? [String: Any],
+                   let argsData = try? JSONSerialization.data(withJSONObject: args),
+                   let argsString = String(data: argsData, encoding: .utf8) {
+                    
+                    let call = ToolCallRequest(
+                        id: "call_cli_\(UUID().uuidString.prefix(6))",
+                        functionName: toolName,
+                        argumentsJSON: argsString
+                    )
+                    return LLMResponse(textContent: "由 \(tool.name) 自动规划", toolCalls: [call])
+                }
+                
+                // 格式 B: {"name": "...", "parameters": {...}}
+                if let funcName = jsonDict["name"] as? String,
+                   let args = (jsonDict["parameters"] ?? jsonDict["arguments"]) as? [String: Any],
+                   let argsData = try? JSONSerialization.data(withJSONObject: args),
+                   let argsString = String(data: argsData, encoding: .utf8) {
+                    
+                    let call = ToolCallRequest(
+                        id: "call_cli_\(UUID().uuidString.prefix(6))",
+                        functionName: funcName,
+                        argumentsJSON: argsString
+                    )
+                    return LLMResponse(textContent: "由 \(tool.name) 自动规划", toolCalls: [call])
+                }
             }
         }
         

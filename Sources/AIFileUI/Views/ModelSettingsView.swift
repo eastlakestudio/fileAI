@@ -426,59 +426,43 @@ public struct ModelSettingsView: View {
                 }
             }
             
-            // 若已选定且有发现的模型，展示可自由编辑的输入框与模型切换胶囊
+            // 若已选定且有发现的模型，展示下拉选择列表与可自由编辑输入框
             if isSelected && cli.isInstalled {
                 Divider().opacity(0.15)
                 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text("指定模型 (可自由输入):")
+                VStack(alignment: .leading, spacing: 8) {
+                    // 1. 预设推荐模型下拉选择列表
+                    if !cli.availableModels.isEmpty {
+                        HStack(spacing: 12) {
+                            Text("预设推荐模型:")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 110, alignment: .leading)
+                            
+                            Picker("", selection: $settings.modelName) {
+                                ForEach(cli.availableModels, id: \.self) { model in
+                                    Text(model).tag(model)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            
+                            Spacer()
+                        }
+                    }
+                    
+                    // 2. 模型名称 (支持自由键盘输入任何新版本/私有模型)
+                    HStack(spacing: 12) {
+                        Text("模型名称 (可编辑):")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(.secondary)
+                            .frame(width: 110, alignment: .leading)
                         
-                        TextField("输入 Model 标识符 (如 gemini-2.5-flash, claude-3-7-sonnet 等)", text: $settings.modelName)
+                        TextField("输入具体 Model 标识符 (如 gemini-2.5-flash, claude-3-7-sonnet 等)", text: $settings.modelName)
                             .textFieldStyle(.plain)
                             .font(.system(size: 11, design: .monospaced))
                             .padding(6)
                             .background(Color(nsColor: .controlBackgroundColor).opacity(0.7))
                             .cornerRadius(5)
-                    }
-                    
-                    if !cli.availableModels.isEmpty {
-                        HStack(spacing: 6) {
-                            Text("常用推荐:")
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                            
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 5) {
-                                    ForEach(cli.availableModels, id: \.self) { model in
-                                        let isCur = settings.modelName == model
-                                        Button(action: {
-                                            settings.modelName = model
-                                        }) {
-                                            HStack(spacing: 3) {
-                                                if isCur {
-                                                    Image(systemName: "checkmark")
-                                                        .font(.system(size: 8, weight: .bold))
-                                                }
-                                                Text(model)
-                                                    .font(.system(size: 10, design: .monospaced))
-                                            }
-                                            .padding(.horizontal, 7)
-                                            .padding(.vertical, 3)
-                                            .background(isCur ? Color.accentColor.opacity(0.2) : Color(nsColor: .controlBackgroundColor).opacity(0.6))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .stroke(isCur ? Color.accentColor : Color.clear, lineWidth: 1)
-                                            )
-                                            .cornerRadius(4)
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
