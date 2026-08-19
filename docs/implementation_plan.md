@@ -1,39 +1,28 @@
-# CLI 连通性测试修复与企业协同转移至 Skill 管理实施方案 (Implementation Plan)
+# 系统单进程锁与优雅退出支持实施方案 (Implementation Plan)
 
 ## 1. 现状与需求分析
 
-### 1.1 问题 1：为什么测试连通性总报 "unsupported url"？
-- **原因**：当前 `testConnection` 方法直接把 `settings.baseURL` 当作 HTTP URL 发起 `URLSession` 请求。当用户选用 CLI（如 `agy`、`llm`、`ollama`）时，`baseURL` 存储的是本地可执行文件路径（或 `cli://`），导致 `URLSession` 抛出 `unsupported URL` 错误；
-- **修复**：在 `testConnection` 中增加 `cli_` 分支，直接在后台执行 CLI 版本检测或可执行文件状态探测，返回 `✅ 本地 CLI 运行就绪 (版本: x.x.x)`。
+### 1.1 需求 1：系统单进程保证（禁止多开）
+- **痛点**：若用户多次点击应用或从终端重复运行 `swift run AIFileApp`，系统会创建多个并行后台进程，导致快捷键冲突或状态不同步；
+- **方案**：
+  1. 在 `main.swift` 入口处引入 **POSIX `flock` 文件独占锁 (`~/.aifiles_app.lock`)**；
+  2. 若尝试加锁失败（即已有主进程在运行），新进程通过 `DistributedNotificationCenter` 向已运行的主实例发送 `com.eastlakestudio.aifiles.activate` 广播，唤起并居中展示现有窗口；
+  3. 新进程立即 `exit(0)` 退出，保证系统始终 **严格单进程** 运行。
 
-### 1.2 问题 2：使用 LLM CLI 能否完全替代云端 API？
-- **解答**：**完全可以替代！**
-  - 当使用 `llm` CLI 或 `agy` CLI 时，应用会直接调用您本地终端已登录认证的凭据或本地模型，**无需在软件中填写任何 API Key**，免去 Token 账单或网络配置，并且全链路支持意图理解、Schema 约束规划与安全执行。
-
-### 1.3 问题 3：将飞书、企业微信、钉钉移至「Skill 管理」
-- **重构归位**：飞书、企业微信和钉钉本质上是**生态动作技能（Actions / Skills）**而非底层语言大模型；
-- **改造方案**：
-  1. 将它们从 `CLIToolType` 中剥离，保证「模型配置」专注服务于纯大模型推理引擎（`agy`, `claude`, `ollama`, `llm`, `aichat`, `ghCopilot`, `llamaCli`）；
-  2. 在 `SkillRegistry` 和 `SkillManagementView` 中注册为标准 **企业协同办公 Skill 插件**：
-     - `飞书协同 (LarkSyncSkill)`：支持文档读写与多维表格同步；
-     - `企业微信协同 (WXWorkSyncSkill)`：支持微盘文件协同与群通知；
-     - `钉钉协同 (DingTalkSyncSkill)`：支持钉盘文档归档与审批发起。
+### 1.2 需求 2：支持应用退出 (Quit)
+- **多入口退出**：
+  1. **状态栏托盘菜单**：提供显式的「退出文件魔法棒 (⌘Q)」菜单项；
+  2. **全局快捷键 / 窗口快捷键**：悬浮窗在前台时按 `⌘ Q` 直接触发 `NSApp.terminate(nil)`；
+  3. **顶栏快捷控制**：在主界面顶栏右侧与模型配置页提供「退出应用」按钮，确保用户无论在哪个入口均可一键安全退出。
 
 ---
 
 ## 2. 待修改文件清单
 
-1. `Sources/AIFileCore/Engine/ModelSettingsManager.swift` [MODIFY]：
-   - 适配 `cli_` 工具的本地子进程连通性与版本探测；
-2. `Sources/AIFileCore/Models/CLIToolInfo.swift` [MODIFY]：
-   - 将 `CLIToolType` 收敛回大模型类终端工具；
-3. `Sources/AIFileCore/Engine/CLIDiscoveryEngine.swift` [MODIFY]：
-   - 移除已迁移到 Skill 层的协同工具 switch 分支；
-4. `Sources/AIFileSkills/CollaborationSkills/` [NEW]：
-   - `LarkSyncSkill.swift` [NEW]
-   - `WXWorkSyncSkill.swift` [NEW]
-   - `DingTalkSyncSkill.swift` [NEW]
-5. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]：
-   - 在 `SkillRegistry` 中默认注册三大协同 Skill；
-6. `Tests/AIFileCoreTests/ModelSettingsTests.swift` [NEW/MODIFY]：
-   - 验证 CLI 连通性测试逻辑与协同 Skill 规划测试。
+1. `Sources/AIFileApp/main.swift` [MODIFY]：
+   - 增加 POSIX 单进程文件锁检测与唤醒已运行实例逻辑；
+   - 主实例监听广播通知，重复启动时自动激活当前窗口；
+2. `Sources/AIFileFinderIntegration/StatusBar/StatusBarManager.swift` [MODIFY]：
+   - 优化状态栏托盘菜单，确保「退出文件魔法棒」一键彻底关闭所有进程；
+3. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]：
+   - 在顶栏增加快捷退出菜单支持（快捷键 `⌘ Q`）。

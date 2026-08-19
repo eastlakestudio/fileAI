@@ -1,14 +1,14 @@
-# 企业协同 Skill 归类与自动载入总结 (Walkthrough)
+# 系统单进程锁与全入口退出支持总结 (Walkthrough)
 
 ## 1. 核心改进清单
 
-### 1.1 新增「企业协同」Skill 分类并默认内置载入
-- **分类增加**：在 `SkillCategory` 中正式新增 **`企业协同`** 分类（图标 `person.2.badge.gearshape.fill`）；
-- **默认内置并自动落盘**：
-  1. 🚀 **飞书云文档与多维表格协同 (`lark_sync`)**
-  2. 💼 **企业微信微盘与群协同 (`wxwork_sync`)**
-  3. 📌 **钉钉云文档与审批归档 (`dingtalk_sync`)**
-  应用启动时自动在 `~/Library/Application Support/AIFileAssistant/skills/` 生成对应的独立 Markdown 文件（`lark_sync.md`、`wxwork_sync.md`、`dingtalk_sync.md`），用户可在「Skill 管理」左侧点击「企业协同」或「全部技能」直接查看、启停与预览示例指令。
+### 1.1 系统级单进程独占锁（防止多开）
+- **POSIX `flock` 独占机制**：在应用启动入口 `acquireSingleInstanceLock()` 对 `~/.aifiles_app.lock` 进行非阻塞加锁；
+- **自动唤醒已有实例**：若尝试重复启动，新进程会通过 `DistributedNotificationCenter` 向现有运行的主进程发送广播通知，唤起并居中展现现有窗口，新进程毫秒级 `exit(0)` 退出，彻底杜绝系统多进程并存。
+
+### 1.2 全入口优雅退出 (Quit)
+- **状态栏托盘菜单**：提供显式「退出文件魔法棒 (⌘Q)」；
+- **顶栏退出按钮**：在主悬浮窗顶栏集成电源退出按钮并绑定 `⌘ Q` 全局退出快捷键，随时一键安全释放并关闭应用。
 
 ---
 

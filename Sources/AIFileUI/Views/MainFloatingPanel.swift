@@ -205,6 +205,19 @@ public struct MainFloatingPanel: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .help("从当前前台 Finder 重新抓取")
+            
+            // 退出应用
+            Button(action: {
+                NSApplication.shared.terminate(nil)
+            }) {
+                Image(systemName: "power")
+                    .font(.system(size: 10))
+                    .foregroundColor(.red.opacity(0.85))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("退出文件魔法棒 (⌘Q)")
+            .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.leading, 78) // 预留左侧 78px 红黄绿系统按钮位置
         .padding(.trailing, 14)
