@@ -11,6 +11,9 @@ public struct SkillManagementView: View {
     @State private var importMarkdownText: String = ""
     @State private var importErrorMessage: String? = nil
     
+    @State private var isScanningApps: Bool = false
+    @State private var harvestNotice: String? = nil
+    
     public let onBack: () -> Void
     public var onSelectPrompt: ((String) -> Void)? = nil
     
@@ -140,6 +143,32 @@ public struct SkillManagementView: View {
             // 底部快速操作
             VStack(spacing: 6) {
                 Button(action: {
+                    Task {
+                        isScanningApps = true
+                        harvestNotice = "正在扫描本机 /Applications 与命令行生产力工具..."
+                        let generated = await SkillHarvesterEngine.shared.harvestAllLocalSkills()
+                        reloadSkills()
+                        isScanningApps = false
+                        harvestNotice = "🎉 成功扫描并生成装载 \(generated.count) 款本机软件指令集！"
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        if isScanningApps {
+                            ProgressView()
+                                .scaleEffect(0.6)
+                        } else {
+                            Image(systemName: "sparkles.rectangle.stack.fill")
+                        }
+                        Text(isScanningApps ? "正在扫描构建..." : "扫描本机建立指令库")
+                    }
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isScanningApps)
+                
+                Button(action: {
                     importErrorMessage = nil
                     importMarkdownText = defaultMarkdownTemplate
                     isShowingImportModal = true
@@ -222,6 +251,27 @@ public struct SkillManagementView: View {
     private var localSkillsListView: some View {
         ScrollView {
             LazyVStack(spacing: 10) {
+                if let notice = harvestNotice {
+                    HStack(spacing: 8) {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(.accentColor)
+                        Text(notice)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Button(action: { harvestNotice = nil }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.accentColor.opacity(0.12))
+                    .cornerRadius(6)
+                }
+                
                 if displayedLocalSkills.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "tray")

@@ -35,64 +35,15 @@ public struct ChatTaskCardView: View {
     }
     
     public var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            // 1. 用户提问气泡
-            userPromptHeader
-            
-            // 2. AI 任务响应与执行卡片
-            aiTaskCardBody
-        }
-        .padding(.vertical, 4)
+        aiTaskCardBody
+            .padding(.vertical, 4)
     }
     
-    // MARK: - 1. 用户提问气泡
-    
-    private var userPromptHeader: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "person.circle.fill")
-                .font(.system(size: 20))
-                .foregroundColor(.accentColor)
-            
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text("用户指令")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.primary)
-                    
-                    Text(task.createdAt.formatted(date: .omitted, time: .shortened))
-                        .font(.system(size: 9))
-                        .foregroundColor(.secondary)
-                    
-                    if !task.targetFilePaths.isEmpty {
-                        Text("• 目标 \(task.targetFilePaths.count) 个文件")
-                            .font(.system(size: 9, weight: .medium))
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.primary.opacity(0.06))
-                            .cornerRadius(3)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Text(task.prompt)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.primary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.primary.opacity(0.06))
-                    .cornerRadius(8)
-                    .textSelection(.enabled)
-            }
-            
-            Spacer()
-        }
-    }
-    
-    // MARK: - 2. AI 任务卡片主体
+    // MARK: - AI 任务卡片主体 (包含合并后的用户指令首行)
     
     private var aiTaskCardBody: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // A. 顶栏：状态徽标与计时
+            // A. 顶栏首行：用户指令提要 + 目标文件数 + 状态徽标与计时
             cardTopHeader
             
             Divider().opacity(0.15)
@@ -111,54 +62,102 @@ public struct ChatTaskCardView: View {
         }
         .padding(12)
         .background(
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .controlBackgroundColor).opacity(0.95),
-                    statusColor.opacity(0.10)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                LinearGradient(
+                    colors: [
+                        Color(nsColor: .controlBackgroundColor).opacity(0.85),
+                        statusColor.opacity(0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(statusColor.opacity(0.35), lineWidth: 1.2)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            statusColor.opacity(0.45),
+                            Color.white.opacity(0.20),
+                            statusColor.opacity(0.15)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         )
-        .cornerRadius(10)
-        .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
     }
     
     private var cardTopHeader: some View {
-        HStack(spacing: 6) {
-            statusBadge
-            if task.status == .inProgress {
-                HStack(spacing: 3) {
-                    ProgressView()
-                        .scaleEffect(0.5)
-                    Text(String(format: "%.1fs", liveThinkingSeconds > 0 ? liveThinkingSeconds : task.durationSeconds))
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(.accentColor)
+        HStack(alignment: .center, spacing: 8) {
+            // 左侧：用户指令与上下文芯片
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.accentColor)
+                
+                Text(task.prompt)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundColor(.primary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                
+                if !task.targetFilePaths.isEmpty {
+                    Text("\(task.targetFilePaths.count) 个文件")
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 4.5)
+                        .padding(.vertical, 1.5)
+                        .background(Color.primary.opacity(0.06))
+                        .cornerRadius(3.5)
+                        .foregroundColor(.secondary)
                 }
-            } else {
-                HStack(spacing: 2) {
-                    Image(systemName: "stopwatch")
-                        .font(.system(size: 8))
-                    Text(task.formattedDuration)
-                        .font(.system(size: 10, design: .monospaced))
-                }
-                .foregroundColor(.secondary)
+                
+                Text(task.createdAt.formatted(date: .omitted, time: .shortened))
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary.opacity(0.8))
             }
-            Spacer()
-            Button(action: { onShowDetail?(task) }) {
-                HStack(spacing: 2) {
-                    Text("详情")
-                        .font(.system(size: 10))
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8))
+            
+            Spacer(minLength: 8)
+            
+            // 右侧：状态徽标、计时与详情
+            HStack(spacing: 6) {
+                statusBadge
+                
+                if task.status == .inProgress {
+                    HStack(spacing: 3) {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                        Text(String(format: "%.1fs", liveThinkingSeconds > 0 ? liveThinkingSeconds : task.durationSeconds))
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundColor(.accentColor)
+                    }
+                } else {
+                    HStack(spacing: 2) {
+                        Image(systemName: "stopwatch")
+                            .font(.system(size: 8))
+                        Text(task.formattedDuration)
+                            .font(.system(size: 9.5, design: .monospaced))
+                    }
+                    .foregroundColor(.secondary)
                 }
-                .foregroundColor(.secondary)
+                
+                Button(action: { onShowDetail?(task) }) {
+                    HStack(spacing: 2) {
+                        Text("详情")
+                            .font(.system(size: 10, weight: .medium))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8))
+                    }
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
     
@@ -523,6 +522,7 @@ public struct ChatTaskCardView: View {
         case .completed: return .green
         case .failed: return .red
         case .reverted: return .purple
+        case .cancelled: return .secondary
         }
     }
     

@@ -99,7 +99,7 @@ public actor TaskManager {
     /// 取消/放弃指定进行中的任务
     public func cancelTask(id: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
-        tasks[index].status = .failed
+        tasks[index].status = .cancelled
         tasks[index].completedAt = Date()
         tasks[index].errorMessage = "用户取消了执行确认"
         persistTask(tasks[index])
@@ -117,7 +117,7 @@ public actor TaskManager {
     
     /// 获取已完成/历史任务
     public var completedTasks: [TaskExecutionRecord] {
-        return tasks.filter { $0.status == .completed || $0.status == .reverted || $0.status == .failed }
+        return tasks.filter { $0.status == .completed || $0.status == .reverted || $0.status == .failed || $0.status == .cancelled }
     }
     
     /// 从磁盘重新加载全部已持久化的任务

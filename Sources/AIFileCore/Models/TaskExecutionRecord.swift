@@ -6,6 +6,7 @@ public enum TaskStatus: String, Sendable, Codable {
     case completed = "已完成"
     case failed = "执行失败"
     case reverted = "已撤销"
+    case cancelled = "用户取消"
 }
 
 /// 任务执行记录（包含完整的 Plan 方案、Walkthrough 结果与全链路执行计时）

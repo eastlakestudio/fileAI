@@ -43,10 +43,12 @@ public struct UnifiedSettingsView: View {
     @State private var localSkills: [SkillMetadata] = []
     @State private var cloudSkills: [SkillMetadata] = []
     @State private var expandedSkillId: String? = nil
-    @State private var expandedCategories: Set<SkillCategory> = [.image, .document, .organization, .collaboration, .custom]
+    @State private var expandedCategories: Set<String> = ["图片处理", "文档与PDF", "整理与命名", "企业协同", "自定义扩展", "音视频处理", "数据分析", "开发工具"]
     @State private var isShowingImportModal: Bool = false
     @State private var importMarkdownText: String = ""
     @State private var importErrorMessage: String? = nil
+    @State private var isScanningApps: Bool = false
+    @State private var harvestNotice: String? = nil
     
     public let onBack: () -> Void
     public var onSelectPrompt: ((String) -> Void)? = nil
@@ -601,7 +603,7 @@ public struct UnifiedSettingsView: View {
     
     private var skillLibraryContentView: some View {
         VStack(spacing: 0) {
-            // 顶栏说明与导入按钮
+            // 顶栏说明与操作按钮
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("本地已安装 Skill 技能库")
@@ -612,6 +614,31 @@ public struct UnifiedSettingsView: View {
                 }
                 
                 Spacer()
+                
+                // 扫描本机软件与命令行建立指令库按钮
+                Button(action: {
+                    Task {
+                        isScanningApps = true
+                        harvestNotice = "正在扫描本机 /Applications 与 Homebrew/bin 生产力工具..."
+                        let generated = await SkillHarvesterEngine.shared.harvestAllLocalSkills()
+                        reloadAllData()
+                        isScanningApps = false
+                        harvestNotice = "🎉 成功扫描并生成装载 \(generated.count) 款本机软件与命令行指令集！"
+                    }
+                }) {
+                    HStack(spacing: 3.5) {
+                        if isScanningApps {
+                            ProgressView().scaleEffect(0.5)
+                        } else {
+                            Image(systemName: "sparkles.rectangle.stack.fill")
+                        }
+                        Text(isScanningApps ? "扫描构建中..." : "扫描本机建立指令库")
+                    }
+                    .font(.system(size: 10.5, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isScanningApps)
                 
                 Button(action: {
                     importErrorMessage = nil
@@ -624,25 +651,43 @@ public struct UnifiedSettingsView: View {
                     }
                     .font(.system(size: 10.5, weight: .medium))
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.small)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(Color.primary.opacity(0.02))
             
+            if let notice = harvestNotice {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .foregroundColor(.accentColor)
+                    Text(notice)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.primary)
+                    Spacer()
+                    Button(action: { harvestNotice = nil }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color.accentColor.opacity(0.12))
+                .cornerRadius(6)
+                .padding(.horizontal, 14)
+                .padding(.top, 6)
+            }
+            
             Divider().opacity(0.15)
             
-            // 风琴折叠分类列表
+            // 风琴折叠分类列表（支持自动发现新创分类）
             ScrollView {
                 VStack(spacing: 10) {
-                    let displayCategories: [SkillCategory] = [.image, .document, .organization, .collaboration, .custom]
-                    
-                    ForEach(displayCategories, id: \.self) { cat in
-                        let catSkills = localSkills.filter { $0.category == cat }
-                        if !catSkills.isEmpty {
-                            categoryAccordionSection(category: cat, skills: catSkills)
-                        }
+                    ForEach(dynamicCategoryGroups, id: \.name) { group in
+                        categoryAccordionSection(name: group.name, icon: group.icon, skills: group.skills)
                     }
                 }
                 .padding(14)
@@ -650,18 +695,27 @@ public struct UnifiedSettingsView: View {
         }
     }
     
+    private var dynamicCategoryGroups: [(name: String, icon: String, skills: [SkillMetadata])] {
+        let uniqueNames = Array(Set(localSkills.map { $0.categoryDisplayName })).sorted()
+        return uniqueNames.map { name in
+            let catSkills = localSkills.filter { $0.categoryDisplayName == name }
+            let icon = catSkills.first?.categoryIcon ?? "folder.badge.gearshape"
+            return (name: name, icon: icon, skills: catSkills)
+        }
+    }
+    
     @ViewBuilder
-    private func categoryAccordionSection(category: SkillCategory, skills: [SkillMetadata]) -> some View {
-        let isExpanded = expandedCategories.contains(category)
+    private func categoryAccordionSection(name: String, icon: String, skills: [SkillMetadata]) -> some View {
+        let isExpanded = expandedCategories.contains(name)
         
         VStack(alignment: .leading, spacing: 0) {
             // 风琴头部
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     if isExpanded {
-                        expandedCategories.remove(category)
+                        expandedCategories.remove(name)
                     } else {
-                        expandedCategories.insert(category)
+                        expandedCategories.insert(name)
                     }
                 }
             }) {
@@ -671,11 +725,11 @@ public struct UnifiedSettingsView: View {
                         .foregroundColor(.secondary)
                         .frame(width: 12)
                     
-                    Image(systemName: category.icon)
+                    Image(systemName: icon)
                         .font(.system(size: 12))
                         .foregroundColor(.accentColor)
                     
-                    Text(category.rawValue)
+                    Text(name)
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.primary)
                     

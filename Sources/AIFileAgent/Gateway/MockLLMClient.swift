@@ -69,6 +69,37 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
                 toolCalls: [call],
                 executionTraceLogs: ["🧩 Mock 模拟引擎解析出 batch_rename Tool Call"]
             )
+        } else if userMessage.contains("音频") || userMessage.contains("视频") || userMessage.contains("水印") || userMessage.contains("写") || userMessage.contains("创建") || userMessage.contains("新技能") {
+            var cat = "音视频处理"
+            var name = "音视频提取转换"
+            var id = "media_transcoder"
+            if userMessage.contains("水印") {
+                cat = "图片处理"
+                name = "图片批量水印"
+                id = "image_watermarker"
+            } else if userMessage.contains("表格") || userMessage.contains("excel") || userMessage.contains("csv") {
+                cat = "数据分析"
+                name = "Excel数据转换"
+                id = "excel_data_converter"
+            }
+            
+            let args = """
+            {
+                "id": "\(id)",
+                "name": "\(name)",
+                "category": "\(cat)",
+                "summary": "针对用户指令「\(userMessage)」自主编写的专用技能",
+                "supportedExtensions": ["*"],
+                "executableScript": "echo 'Processing $INPUT_FILE'",
+                "markdownDocumentation": "# \(name)\\n\\n自主编写的专用扩展技能。"
+            }
+            """
+            let call = ToolCallRequest(id: "call_create_skill_1", functionName: "create_skill", argumentsJSON: args)
+            return LLMResponse(
+                textContent: "检测到现有技能库未包含该能力，已为您自主编写新技能「\(name)」并自动归入「\(cat)」分类。",
+                toolCalls: [call],
+                executionTraceLogs: ["✨ Mock 模拟大模型调用 create_skill 自主编写并安装新技能"]
+            )
         }
         
         return LLMResponse(

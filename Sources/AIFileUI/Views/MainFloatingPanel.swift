@@ -53,16 +53,36 @@ public struct MainFloatingPanel: View {
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.thickMaterial)
+                    .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.90))
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.82))
+                
+                // 次表面流动微光层
+                RadialGradient(
+                    gradient: Gradient(colors: [Color.white.opacity(0.08), Color.clear]),
+                    center: .topLeading,
+                    startRadius: 20,
+                    endRadius: 400
+                )
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.40),
+                            Color.white.opacity(0.12),
+                            Color.black.opacity(0.15)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         )
+        .shadow(color: Color.black.opacity(0.18), radius: 16, x: 0, y: 6)
         .ignoresSafeArea(.all)
         .sheet(isPresented: $viewModel.isShowingDiffPreview) {
             DiffPreviewView(

@@ -62,18 +62,26 @@ public struct ConsentGateModalView: View {
                 Button("仅使用元数据 (推荐)") {
                     onDecision(.deniedFallbackToMetadata)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .frame(height: 32)
                 
                 Spacer()
                 
                 Button("取消任务") {
                     onDecision(.deniedAbort)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                .frame(width: 120, height: 32)
                 .keyboardShortcut(.cancelAction)
                 
                 Button("允许本次发送") {
                     onDecision(.allowedOnce)
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+                .frame(width: 120, height: 32)
                 .keyboardShortcut(.defaultAction)
             }
         }

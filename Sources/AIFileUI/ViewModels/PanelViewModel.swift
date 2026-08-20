@@ -400,7 +400,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         isShowingDiffPreview = false
         if let task = activeTask {
             updateSessionTask(id: task.id) { item in
-                item.status = .failed
+                item.status = .cancelled
                 item.completedAt = Date()
                 item.errorMessage = "用户取消了执行确认"
             }

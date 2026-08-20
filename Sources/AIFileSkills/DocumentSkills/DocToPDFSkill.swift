@@ -94,18 +94,78 @@ public final class DocToPDFSkill: FileSkill, Sendable {
                 throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "图片转PDF失败"])
             }
             try pdfData.write(to: targetURL)
-        } else if ["doc", "docx", "rtf", "html"].contains(ext) {
-            // 富文本 / Word 转 PDF (利用 macOS 原生 NSAttributedString 解析)
+        } else if ["doc", "docx", "pages"].contains(ext) {
+            // Word / 文档转 PDF (优先 AppleScript 静默调用 Word / Pages / LibreOffice，回退多页矢量 CoreText)
+            try convertWordDocumentToPDF(sourceURL: action.sourceURL, targetURL: targetURL)
+        } else if ["rtf", "html"].contains(ext) {
+            // 富文本 / RTF / HTML 转 PDF (利用多页矢量 CoreText 解析)
             let pdfData = try richTextToPDFData(sourceURL: action.sourceURL)
             try pdfData.write(to: targetURL)
         } else {
-            // 纯文本 / Markdown 转 PDF
+            // 纯文本 / Markdown 转 PDF (利用多页矢量 CoreText 引擎)
             let content = try String(contentsOf: action.sourceURL, encoding: .utf8)
             let pdfData = try textToPDFData(text: content)
             try pdfData.write(to: targetURL)
         }
         
         return targetURL
+    }
+    
+    // MARK: - Word / DOCX / Pages 转换 (原生办公应用静默导出 + 多页矢量回退)
+    
+    private func convertWordDocumentToPDF(sourceURL: URL, targetURL: URL) throws {
+        // 1. 尝试使用 Microsoft Word 后台导出
+        if convertViaWordAppleScript(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 2. 尝试使用 Apple Pages 后台导出
+        if convertViaPagesAppleScript(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 3. 尝试使用 LibreOffice (soffice) 导出
+        if convertViaSofficeCLI(sourceURL: sourceURL, targetURL: targetURL) {
+            return
+        }
+        
+        // 4. 原生多页富文本解析回退 (利用 NSAttributedString + 多页 CoreText 分页循环)
+        let pdfData = try richTextToPDFData(sourceURL: sourceURL)
+        try pdfData.write(to: targetURL)
+    }
+    
+    private func convertViaWordAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        guard isAppInstalled(bundleId: "com.microsoft.Word") else { return false }
+        let scriptSource = """
+        tell application "Microsoft Word"
+            try
+                set theDoc to open POSIX file "\(sourceURL.path)"
+                save as theDoc file name "\(targetURL.path)" file format format PDF
+                close theDoc saving no
+                return "SUCCESS"
+            on error
+                return "FAIL"
+            end try
+        end tell
+        """
+        return runAppleScript(scriptSource)
+    }
+    
+    private func convertViaPagesAppleScript(sourceURL: URL, targetURL: URL) -> Bool {
+        guard isAppInstalled(bundleId: "com.apple.iWork.Pages") else { return false }
+        let scriptSource = """
+        tell application "Pages"
+            try
+                set theDoc to open POSIX file "\(sourceURL.path)"
+                export theDoc to POSIX file "\(targetURL.path)" as PDF
+                close theDoc saving no
+                return "SUCCESS"
+            on error
+                return "FAIL"
+            end try
+        end tell
+        """
+        return runAppleScript(scriptSource)
     }
     
     // MARK: - PPT / Keynote 转换
@@ -310,28 +370,59 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         return pdfDoc.dataRepresentation()
     }
     
-    // MARK: - 矢量排版 CoreText 转 PDF
+    // MARK: - 矢量排版 CoreText 多页转 PDF 引擎
     
     private func attributedStringToPDFData(_ attributedString: NSAttributedString) throws -> Data {
         let pdfData = NSMutableData()
-        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // A4
+        let pageRect = CGRect(x: 0, y: 0, width: 595.2, height: 841.8) // 标准 A4 (595.2 x 841.8 pt)
+        let margin: CGFloat = 40.0
+        let printableRect = CGRect(
+            x: margin,
+            y: margin,
+            width: pageRect.width - margin * 2,
+            height: pageRect.height - margin * 2
+        )
         
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
             throw NSError(domain: "DocToPDFSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: "无法初始化 PDF 上下文"])
         }
         
-        var mediaBox = pageRect
-        context.beginPage(mediaBox: &mediaBox)
-        
         let framesetter = CTFramesetterCreateWithAttributedString(attributedString as CFAttributedString)
-        let textPath = CGPath(rect: pageRect.insetBy(dx: 40, dy: 40), transform: nil)
-        let frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(0, attributedString.length), textPath, nil)
+        var textIndex = 0
+        let totalLength = attributedString.length
         
-        CTFrameDraw(frame, context)
-        context.endPage()
+        guard totalLength > 0 else {
+            var mediaBox = pageRect
+            context.beginPage(mediaBox: &mediaBox)
+            context.endPage()
+            context.closePDF()
+            return pdfData as Data
+        }
+        
+        // 核心多页循环分页排版：逐页计算可见字符范围并推进游标
+        while textIndex < totalLength {
+            var mediaBox = pageRect
+            context.beginPage(mediaBox: &mediaBox)
+            
+            // CoreText 在 PDF 上下文中坐标系需保证正向绘制
+            let textPath = CGPath(rect: printableRect, transform: nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRangeMake(textIndex, 0), textPath, nil)
+            
+            CTFrameDraw(frame, context)
+            
+            let frameRange = CTFrameGetVisibleStringRange(frame)
+            if frameRange.length == 0 {
+                // 安全防死循环兜底
+                context.endPage()
+                break
+            }
+            
+            textIndex += frameRange.length
+            context.endPage()
+        }
+        
         context.closePDF()
-        
         return pdfData as Data
     }
     

@@ -10,11 +10,14 @@ public struct PinnedTargetFilesHeaderView: View {
     }
     
     public var body: some View {
-        HStack(spacing: 0) {
-            // 一体化大胶囊容器
+        HStack(alignment: .center, spacing: 8) {
+            // 一体化大胶囊容器（目标文件标题 + 选取/刷新 + 文件信息）
             HStack(alignment: .center, spacing: 8) {
-                // 1. 左侧目标文件标题（迷你模式下附带纯图标恢复大窗）
-                headerSummaryView
+                // 1. 左侧：目标文件标题 + 选取文件与刷新操作
+                HStack(spacing: 6) {
+                    headerSummaryView
+                    leftActionButtons
+                }
                 
                 verticalDivider
                 
@@ -26,31 +29,46 @@ public struct PinnedTargetFilesHeaderView: View {
                 }
                 
                 Spacer(minLength: 4)
-                
-                verticalDivider
-                
-                // 3. 右侧快捷操作按钮（选取与刷新）
-                actionButtons
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(
-                LinearGradient(
-                    colors: [
-                        Color.accentColor.opacity(0.18),
-                        Color.blue.opacity(0.10),
-                        Color(nsColor: .controlBackgroundColor).opacity(0.95)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.ultraThinMaterial)
+                    LinearGradient(
+                        colors: [
+                            Color.accentColor.opacity(0.16),
+                            Color.blue.opacity(0.08),
+                            Color(nsColor: .controlBackgroundColor).opacity(0.70)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 9)
-                    .stroke(Color.accentColor.opacity(0.40), lineWidth: 1.2)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.40),
+                                Color.accentColor.opacity(0.30),
+                                Color.white.opacity(0.05)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
             )
-            .cornerRadius(9)
-            .shadow(color: Color.black.opacity(0.10), radius: 4, x: 0, y: 1.5)
+            .cornerRadius(10)
+            .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
+            
+            // 3. 卡片外部（右侧）：小窗口模式时展示独立的还原大窗按钮
+            if viewModel.isMiniMode {
+                restoreWindowButton
+            }
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)
@@ -66,52 +84,73 @@ public struct PinnedTargetFilesHeaderView: View {
             .padding(.horizontal, 2)
     }
     
-    // MARK: - 1. 左侧汇总视图 (无图钉图标，纯文字“目标文件”，迷你模式附带纯图标恢复大窗)
+    // MARK: - 1. 左侧标题与操作按钮
     
     private var headerSummaryView: some View {
-        HStack(spacing: 6) {
-            if viewModel.isMiniMode {
-                Button(action: {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        viewModel.isMiniMode = false
-                    }
-                }) {
-                    Image(systemName: "rectangle.expand.vertical")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.accentColor)
-                        .frame(width: 22, height: 22)
-                        .background(Color.accentColor.opacity(0.18))
-                        .cornerRadius(5)
+        HStack(spacing: 4) {
+            if viewModel.fileItems.isEmpty {
+                Text("未选择文件")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+            } else {
+                let totalFiles = viewModel.fileItems.reduce(0) { sum, item in
+                    sum + (item.isDirectory ? (item.childFileCount ?? 0) : 1)
                 }
-                .buttonStyle(.plain)
-                .help("恢复大窗")
-            }
-            
-            VStack(alignment: .leading, spacing: 1) {
-                Text("目标文件")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.primary)
+                let totalDirs = viewModel.fileItems.reduce(0) { sum, item in
+                    sum + (item.isDirectory ? 1 + (item.childDirectoryCount ?? 0) : 0)
+                }
                 
-                if !viewModel.fileItems.isEmpty {
-                    let totalFiles = viewModel.fileItems.reduce(0) { sum, item in
-                        sum + (item.isDirectory ? (item.childFileCount ?? 0) : 1)
-                    }
-                    let totalDirs = viewModel.fileItems.reduce(0) { sum, item in
-                        sum + (item.isDirectory ? 1 + (item.childDirectoryCount ?? 0) : 0)
-                    }
-                    
-                    if totalDirs > 0 {
-                        Text("\(totalFiles)文件 • \(totalDirs)目录")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.secondary)
-                    } else {
-                        Text("共 \(totalFiles) 个文件")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.secondary)
-                    }
+                if totalDirs > 0 {
+                    Text("选中 \(totalFiles) 个文件 • \(totalDirs) 目录")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.primary)
+                } else {
+                    Text("选中 \(totalFiles) 个文件")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.primary)
                 }
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+    
+    private var leftActionButtons: some View {
+        HStack(spacing: 4) {
+            Button(action: { viewModel.pickFilesManually() }) {
+                HStack(spacing: 2.5) {
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 8.5))
+                    Text("选取")
+                        .font(.system(size: 9.5, weight: .medium))
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.mini)
+            .help("手动选取更多文件或目录")
+            
+            Button(action: { viewModel.fetchFromFinder() }) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 8.5))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .help("重新从当前前台访达抓取选中的文件与目录")
+        }
+        .fixedSize(horizontal: true, vertical: false)
+    }
+    
+    private var restoreWindowButton: some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                viewModel.isMiniMode = false
+            }
+        }) {
+            Image(systemName: "rectangle.expand.vertical")
+                .font(.system(size: 8.5))
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+        .help("还原为标准完整大窗")
         .fixedSize(horizontal: true, vertical: false)
     }
     
@@ -242,32 +281,7 @@ public struct PinnedTargetFilesHeaderView: View {
         }
     }
     
-    // MARK: - 3. 右侧操作按钮
-    
-    private var actionButtons: some View {
-        HStack(spacing: 4) {
-            Button(action: { viewModel.pickFilesManually() }) {
-                HStack(spacing: 2.5) {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 8.5))
-                    Text("选取")
-                        .font(.system(size: 9.5, weight: .medium))
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.mini)
-            .help("手动选取更多文件或目录")
-            
-            Button(action: { viewModel.fetchFromFinder() }) {
-                Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 8.5))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
-            .help("重新从当前前台访达抓取选中的文件与目录")
-        }
-        .fixedSize(horizontal: true, vertical: false)
-    }
+
     
     private func fileIcon(for ext: String) -> String {
         let e = ext.lowercased()

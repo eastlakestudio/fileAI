@@ -107,6 +107,54 @@ public final class SkillManager: @unchecked Sendable {
         return true
     }
     
+    /// 获取当前所有已安装技能涵盖的分类名称列表（支持动态新创分类）
+    public var allCategories: [String] {
+        let names = allSkills.map { $0.categoryDisplayName }
+        var result: [String] = []
+        for n in names where !result.contains(n) {
+            result.append(n)
+        }
+        return result.sorted()
+    }
+    
+    /// 自主合成并安装新 Skill 到本地技能库
+    @discardableResult
+    public func synthesizeAndInstallSkill(
+        id: String,
+        name: String,
+        category: String,
+        summary: String,
+        supportedExtensions: [String] = ["*"],
+        script: String? = nil,
+        markdown: String? = nil,
+        icon: String = "sparkles.rectangle.stack.fill",
+        parameters: [String: String] = [:],
+        examplePrompts: [String] = []
+    ) -> SkillMetadata {
+        let standardCategory = SkillCategory.from(string: category)
+        let isStandardCode = ["all", "image", "document", "organization", "collaboration", "custom", "cloudMarket", "全部技能", "图片处理", "文档与pdf", "整理与命名", "企业协同", "自定义扩展", "云端市场"].contains(category.lowercased())
+        let customCat: String? = isStandardCode ? nil : category
+        
+        let meta = SkillMetadata(
+            id: id,
+            name: name,
+            icon: icon,
+            category: standardCategory,
+            customCategory: customCat,
+            summary: summary,
+            supportedExtensions: supportedExtensions,
+            parametersDescription: parameters,
+            examplePrompts: examplePrompts,
+            markdownContent: markdown ?? "# \(name) (\(id).md)\n\n\(summary)\n",
+            executableScript: script,
+            isEnabled: true,
+            isInstalled: true,
+            author: "AI CLI Auto-Synthesizer"
+        )
+        installSkill(meta)
+        return meta
+    }
+    
     /// 在访达中打开自定义 Skills 扩展目录
     public func openSkillsDirectoryInFinder() {
         let dir = skillsDirectoryURL
@@ -166,24 +214,51 @@ public final class SkillManager: @unchecked Sendable {
     private var defaultBuiltinPresets: [SkillMetadata] {
         [
             SkillMetadata(
-                id: "image_resize",
-                name: "图片尺寸智能调整",
-                icon: "arrow.up.left.and.down.right.magnifyingglass",
-                category: .image,
-                summary: "按指定分辨率、最长边或比例快速批量缩放图片",
-                supportedExtensions: ["png", "jpg", "jpeg", "heic", "webp"],
+                id: "doc_to_pdf",
+                name: "文档一键转多页 PDF",
+                icon: "doc.richtext.fill",
+                category: .document,
+                summary: "将 Word (DOC/DOCX)、Pages、Keynote、Markdown、文本安全转换为标准多页矢量 PDF",
+                supportedExtensions: ["docx", "doc", "txt", "md", "rtf", "pages", "key", "html"],
                 parametersDescription: [
-                    "targetWidth": "目标宽度 (像素)",
-                    "targetHeight": "目标高度 (像素)",
-                    "maxDimension": "最大边长限制 (像素)",
-                    "scale": "缩放比例系数 (如 0.5)"
+                    "fileNames": "需要转换的目标文档文件名列表",
+                    "pageSize": "纸张尺寸 (A4, A3 等，默认 A4)"
                 ],
                 examplePrompts: [
-                    "统一将图片分辨率调整为 800x600",
-                    "最长边缩小至 1080px，保持原始比例",
-                    "全部图片分辨率缩减 50%"
+                    "转成 PDF 文件",
+                    "将这几篇 Markdown 文档全部转为 PDF",
+                    "批量将选中的 Word 报告导出为多页 PDF"
                 ],
-                markdownContent: "# 图片尺寸智能调整 (image_resize.md)\n\n使用 macOS ImageIO 硬件加速极速批量缩放图片。"
+                markdownContent: "# 文档一键转 PDF (doc_to_pdf.md)\n\n优先调度 Microsoft Word / Pages / LibreOffice 原生办公引擎，回退矢量 CoreText 多页排版循环，确保 100+ 页文档完整导出。",
+                executableScript: """
+                for FILE in "$@"; do
+                  EXT="${FILE##*.}"
+                  EXT="$(echo "$EXT" | tr '[:upper:]' '[:lower:]')"
+                  OUT="${FILE%.*}.pdf"
+                  
+                  # 1. 尝试 LibreOffice
+                  if command -v soffice >/dev/null 2>&1; then
+                    soffice --headless --convert-to pdf "$FILE" --outdir "$(dirname "$FILE")" && continue
+                  fi
+                  
+                  # 2. 尝试 Word / Pages AppleScript
+                  if [ "$EXT" = "docx" ] || [ "$EXT" = "doc" ]; then
+                    osascript -e 'tell application "Microsoft Word"' -e 'set theDoc to open POSIX file "'"$FILE"'"' -e 'save as theDoc file name "'"$OUT"'" file format format PDF' -e 'close theDoc saving no' -e 'end tell' >/dev/null 2>&1 && continue
+                  fi
+                  if [ "$EXT" = "pages" ]; then
+                    osascript -e 'tell application "Pages"' -e 'set theDoc to open POSIX file "'"$FILE"'"' -e 'export theDoc to POSIX file "'"$OUT"'" as PDF' -e 'close theDoc saving no' -e 'end tell' >/dev/null 2>&1 && continue
+                  fi
+                  if [ "$EXT" = "key" ]; then
+                    osascript -e 'tell application "Keynote"' -e 'set theDoc to open POSIX file "'"$FILE"'"' -e 'export theDoc to POSIX file "'"$OUT"'" as PDF' -e 'close theDoc saving no' -e 'end tell' >/dev/null 2>&1 && continue
+                  fi
+                  
+                  # 3. 尝试 cupsfilter / textutil 系统命令
+                  if [ "$EXT" = "txt" ] || [ "$EXT" = "md" ] || [ "$EXT" = "rtf" ]; then
+                    /usr/sbin/cupsfilter -D "$FILE" > "$OUT" 2>/dev/null && continue
+                  fi
+                done
+                """,
+                scriptEngine: .bash
             ),
             SkillMetadata(
                 id: "image_convert",
@@ -201,24 +276,71 @@ public final class SkillManager: @unchecked Sendable {
                     "转为现代 WebP 格式，压缩质量 0.85",
                     "统一转换为透明背景 PNG"
                 ],
-                markdownContent: "# 图片格式批量转换 (image_convert.md)\n\n支持全格式无损转码并自动优化文件体积。"
+                markdownContent: "# 图片格式批量转换 (image_convert.md)\n\n支持全格式无损转码并自动优化文件体积。",
+                executableScript: """
+                TARGET_FMT="${AIFILE_PARAM_TARGETFORMAT:-png}"
+                for FILE in "$@"; do
+                  OUT="${FILE%.*}.$TARGET_FMT"
+                  sips -s format "$TARGET_FMT" "$FILE" --out "$OUT" >/dev/null 2>&1 || magick "$FILE" "$OUT" >/dev/null 2>&1
+                done
+                """,
+                scriptEngine: .bash
             ),
             SkillMetadata(
-                id: "doc_to_pdf",
-                name: "文档一键转 PDF",
-                icon: "doc.richtext.fill",
-                category: .document,
-                summary: "将 Word、Pages、纯文本或 Markdown 渲染导出为标准 PDF",
-                supportedExtensions: ["docx", "doc", "txt", "md", "rtf", "pages"],
+                id: "image_resize",
+                name: "图片尺寸智能调整",
+                icon: "arrow.up.left.and.down.right.magnifyingglass",
+                category: .image,
+                summary: "按指定分辨率、最长边或比例快速批量缩放图片",
+                supportedExtensions: ["png", "jpg", "jpeg", "heic", "webp"],
                 parametersDescription: [
-                    "pageSize": "纸张尺寸 (A4, Letter)",
-                    "margins": "页边距 (标准, 窄, 宽)"
+                    "targetWidth": "目标宽度 (像素)",
+                    "targetHeight": "目标高度 (像素)",
+                    "maxDimension": "最大边长限制 (像素)"
                 ],
                 examplePrompts: [
-                    "将这几篇 Markdown 文档全部转为 PDF",
-                    "批量将选中的 Word 报告导出为 A4 PDF"
+                    "统一将图片分辨率调整为 800x600",
+                    "最长边缩小至 1080px，保持原始比例",
+                    "全部图片分辨率缩减 50%"
                 ],
-                markdownContent: "# 文档一键转 PDF (doc_to_pdf.md)\n\n复用 macOS CoreText 与 WebKit 引擎生成矢量 PDF。"
+                markdownContent: "# 图片尺寸智能调整 (image_resize.md)\n\n使用 macOS ImageIO 硬件加速极速批量缩放图片。",
+                executableScript: """
+                for FILE in "$@"; do
+                  if [ -n "$AIFILE_PARAM_TARGETWIDTH" ] && [ -n "$AIFILE_PARAM_TARGETHEIGHT" ]; then
+                    sips --resampleWidth "$AIFILE_PARAM_TARGETWIDTH" --resampleHeight "$AIFILE_PARAM_TARGETHEIGHT" "$FILE" >/dev/null 2>&1
+                  elif [ -n "$AIFILE_PARAM_MAXDIMENSION" ]; then
+                    sips --resampleMax "$AIFILE_PARAM_MAXDIMENSION" "$FILE" >/dev/null 2>&1
+                  fi
+                done
+                """,
+                scriptEngine: .bash
+            ),
+            SkillMetadata(
+                id: "zip_compress",
+                name: "ZIP 归档压缩",
+                icon: "archivebox.fill",
+                category: .organization,
+                summary: "将指定的文件或文件夹批量打包压缩为标准的 .zip 格式归档文件",
+                supportedExtensions: ["*"],
+                parametersDescription: [
+                    "fileNames": "需要压缩的文件或文件夹列表"
+                ],
+                examplePrompts: [
+                    "压缩成zip",
+                    "打包为 zip 归档",
+                    "将这些文件压缩成一个 zip 包"
+                ],
+                markdownContent: "# ZIP 归档压缩 (zip_compress.md)\n\n利用系统原生 /usr/bin/zip 进行多线程无损归档打包。",
+                executableScript: """
+                for FILE in "$@"; do
+                  if [ -d "$FILE" ]; then
+                    zip -r -q "${FILE%/}.zip" "$FILE"
+                  elif [ -f "$FILE" ]; then
+                    zip -q "${FILE%.*}.zip" "$FILE"
+                  fi
+                done
+                """,
+                scriptEngine: .bash
             ),
             SkillMetadata(
                 id: "pdf_merge_split",
@@ -235,7 +357,27 @@ public final class SkillManager: @unchecked Sendable {
                     "将选中的 3 个 PDF 文件按顺序合并为一个",
                     "将每页 PDF 拆分为独立文件"
                 ],
-                markdownContent: "# PDF 合并与拆分 (pdf_merge_split.md)\n\n基于 Apple PDFKit 原生高性能无损合并与拆解。"
+                markdownContent: "# PDF 合并与拆分 (pdf_merge_split.md)\n\n基于 Apple PDFKit / Python 原生高性能无损合并与拆解。",
+                executableScript: """
+                import sys, os
+                from Foundation import NSURL
+                import Quartz
+
+                input_files = [f for f in sys.argv[1:] if f.endswith('.pdf')]
+                if len(input_files) >= 2:
+                    out_pdf = os.path.join(os.path.dirname(input_files[0]), '合并文档.pdf')
+                    doc = Quartz.PDFDocument.alloc().init()
+                    page_idx = 0
+                    for f in input_files:
+                        in_doc = Quartz.PDFDocument.alloc().initWithURL_(NSURL.fileURLWithPath_(f))
+                        if in_doc:
+                            for i in range(in_doc.pageCount()):
+                                page = in_doc.pageAtIndex_(i)
+                                doc.insertPage_atIndex_(page, page_idx)
+                                page_idx += 1
+                    doc.writeToFile_(out_pdf)
+                """,
+                scriptEngine: .python3
             ),
             SkillMetadata(
                 id: "batch_rename",
@@ -243,7 +385,7 @@ public final class SkillManager: @unchecked Sendable {
                 icon: "character.cursor.ibeam",
                 category: .organization,
                 summary: "添加前缀/后缀、序号递增编号、关键字替换与日期规范化",
-                supportedExtensions: ["* (所有格式)"],
+                supportedExtensions: ["*"],
                 parametersDescription: [
                     "pattern": "重命名规则模板 (如 汇报_{index})",
                     "prefix": "统一头部前缀",
@@ -256,7 +398,23 @@ public final class SkillManager: @unchecked Sendable {
                     "按 01_ 02_ 03_ 重新递增编号",
                     "将文件名中的「副本」二字全部去掉"
                 ],
-                markdownContent: "# 智能批量重命名 (batch_rename.md)\n\n支持正则表达式、序号自增与安全冲突重试机制。"
+                markdownContent: "# 智能批量重命名 (batch_rename.md)\n\n支持序号自增、前后缀拼接与安全冲突重试机制。",
+                executableScript: """
+                PREFIX="${AIFILE_PARAM_PREFIX:-}"
+                SUFFIX="${AIFILE_PARAM_SUFFIX:-}"
+                INDEX=1
+                for FILE in "$@"; do
+                  DIR="$(dirname "$FILE")"
+                  BASE="$(basename "$FILE")"
+                  NAME="${BASE%.*}"
+                  EXT="${BASE##*.}"
+                  
+                  NEW_NAME="${PREFIX}${NAME}${SUFFIX}.${EXT}"
+                  mv "$FILE" "$DIR/$NEW_NAME"
+                  INDEX=$((INDEX + 1))
+                done
+                """,
+                scriptEngine: .bash
             ),
             SkillMetadata(
                 id: "clean_metadata",

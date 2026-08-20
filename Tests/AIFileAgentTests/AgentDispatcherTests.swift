@@ -151,4 +151,51 @@ final class AgentDispatcherTests: XCTestCase {
         XCTAssertFalse(plan.executionLogs.isEmpty)
         XCTAssertTrue(plan.executionLogs.contains(where: { $0.contains("Mock") || $0.contains("统计") || $0.contains("规划") }))
     }
+    
+    func testCompositeZipAndSharePlanGeneration() async throws {
+        let zipSkill = SkillMetadata(
+            id: "zip_and_share",
+            name: "ZIP压缩与飞书发送",
+            icon: "archivebox.fill",
+            category: .collaboration,
+            summary: "将文件打包压缩为ZIP并发送给飞书用户或群聊",
+            supportedExtensions: ["*"]
+        )
+        SkillManager.shared.installSkill(zipSkill)
+        defer { SkillManager.shared.uninstallSkill(id: "zip_and_share") }
+        
+        let mock = MockLLMClient { messages, tools in
+            let args = """
+            {
+                "fileNames": ["安全管控平台系统总表.xlsx"],
+                "recipient": "刘明华"
+            }
+            """
+            let call = ToolCallRequest(id: "call_zip_1", functionName: "zip_and_share", argumentsJSON: args)
+            return LLMResponse(
+                textContent: "为您规划压缩并发送至刘明华",
+                toolCalls: [call],
+                rawThinking: "用户指令为压缩并发送给刘明华，调用 zip_and_share 技能进行处理。",
+                executionTraceLogs: ["✨ 命中 zip_and_share"]
+            )
+        }
+        
+        let dispatcher = AgentDispatcher(provider: mock)
+        let fileURL = URL(fileURLWithPath: "/tmp/安全管控平台系统总表.xlsx")
+        let item = FileItem(url: fileURL, isDirectory: false, fileSize: 2048)
+        
+        let plan = try await dispatcher.generatePlan(
+            userPrompt: "压缩zip 并通过飞书发给刘明华",
+            fileItems: [item]
+        )
+        
+        // 验证实施方案 (Plan) 中包含清晰的步骤规划与 LLM 原始思考过程
+        XCTAssertNotNil(plan.thoughtProcess)
+        XCTAssertTrue(plan.thoughtProcess?.contains("zip_and_share") == true)
+        
+        // 验证变动操作项
+        XCTAssertEqual(plan.actions.count, 1)
+        let action = plan.actions.first!
+        XCTAssertTrue(action.detailDescription.contains("ZIP压缩与飞书发送"))
+    }
 }

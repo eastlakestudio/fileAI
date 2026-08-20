@@ -71,10 +71,12 @@ public struct TaskDetailSheetView: View {
         .frame(width: 620, height: 500)
     }
     
+    @State private var copiedKey: String? = nil
+    
     // MARK: - Sections
     
     private func topHeaderBar(for task: TaskExecutionRecord) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "wand.and.stars")
                     .font(.system(size: 13, weight: .bold))
@@ -86,6 +88,21 @@ public struct TaskDetailSheetView: View {
             Spacer()
             
             statusBadge(task.status)
+            
+            // 拷贝全部内容按钮
+            Button(action: {
+                let fullText = buildFullTaskSummary(task)
+                copyTextToClipboard(fullText, key: "all")
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: copiedKey == "all" ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 9))
+                    Text(copiedKey == "all" ? "已拷贝全部" : "拷贝全部")
+                        .font(.system(size: 10.5, weight: .medium))
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             
             Button(action: {
                 onClose()
@@ -414,16 +431,19 @@ public struct TaskDetailSheetView: View {
     }
     
     private func errorDiagnosisSection(for task: TaskExecutionRecord) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        let err = task.errorMessage ?? "未知执行异常"
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
                 Text("❌ 错误诊断与排查信息")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.red)
+                Spacer()
+                sectionCopyButton(text: err, key: "error")
             }
             
-            Text(task.errorMessage ?? "未知执行异常")
+            Text(err)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundColor(.red)
                 .padding(8)
@@ -439,12 +459,17 @@ public struct TaskDetailSheetView: View {
     }
     
     private func walkthroughReportSection(report: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("📄 执行记录报告 (Walkthrough)")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.secondary)
+        let text = cleanReport(report)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("📄 执行记录报告 (Walkthrough)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                sectionCopyButton(text: text, key: "walkthrough")
+            }
             
-            Text(cleanReport(report))
+            Text(text)
                 .font(.system(size: 10, design: .monospaced))
                 .padding(8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -452,6 +477,70 @@ public struct TaskDetailSheetView: View {
                 .cornerRadius(6)
                 .textSelection(.enabled)
         }
+    }
+    
+    @ViewBuilder
+    private func sectionCopyButton(text: String, key: String) -> some View {
+        let isCopied = copiedKey == key
+        Button(action: {
+            copyTextToClipboard(text, key: key)
+        }) {
+            HStack(spacing: 3) {
+                Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 8.5))
+                Text(isCopied ? "已复制" : "复制")
+                    .font(.system(size: 9.5))
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+    }
+    
+    private func copyTextToClipboard(_ text: String, key: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        withAnimation {
+            copiedKey = key
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if copiedKey == key {
+                withAnimation {
+                    copiedKey = nil
+                }
+            }
+        }
+    }
+    
+    private func buildFullTaskSummary(_ task: TaskExecutionRecord) -> String {
+        var lines: [String] = []
+        lines.append("任务目标: \(task.prompt)")
+        lines.append("状态: \(task.status.rawValue)")
+        lines.append("耗时: \(task.formattedDuration)")
+        if let model = task.plan.modelProviderInfo {
+            lines.append("模型引擎: \(model)")
+        }
+        if let thought = task.plan.thoughtProcess, !thought.isEmpty {
+            lines.append("\n【思考过程】\n\(thought)")
+        }
+        if let report = task.walkthroughReport, !report.isEmpty {
+            lines.append("\n【执行总结报告】\n\(cleanReport(report))")
+        }
+        if let err = task.errorMessage, !err.isEmpty {
+            lines.append("\n【错误信息】\n\(err)")
+        }
+        if !task.plan.actions.isEmpty {
+            lines.append("\n【文件操作列表】")
+            for action in task.plan.actions {
+                lines.append("- [\(action.operationType.rawValue)] \(action.sourceURL.path) -> \(action.targetURL?.path ?? "同源")")
+            }
+        }
+        let logs = task.executionLogs.isEmpty ? task.plan.executionLogs : task.executionLogs
+        if !logs.isEmpty {
+            lines.append("\n【执行日志】")
+            lines.append(contentsOf: logs)
+        }
+        return lines.joined(separator: "\n")
     }
     
     // MARK: - Helpers
@@ -492,6 +581,7 @@ public struct TaskDetailSheetView: View {
         case .completed: return .green
         case .failed: return .red
         case .reverted: return .purple
+        case .cancelled: return .secondary
         }
     }
 }

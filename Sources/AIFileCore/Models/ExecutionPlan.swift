@@ -30,6 +30,7 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
     public let sourceURL: URL
     public let targetURL: URL?
     public let detailDescription: String
+    public var customScript: String?
     public var isSelected: Bool
     public let isDestructive: Bool
     
@@ -39,6 +40,7 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
         sourceURL: URL,
         targetURL: URL? = nil,
         detailDescription: String,
+        customScript: String? = nil,
         isSelected: Bool = true,
         isDestructive: Bool = false
     ) {
@@ -47,6 +49,7 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
         self.sourceURL = sourceURL
         self.targetURL = targetURL
         self.detailDescription = detailDescription
+        self.customScript = customScript
         self.isSelected = isSelected
         self.isDestructive = isDestructive || operationType.isHighRisk
     }

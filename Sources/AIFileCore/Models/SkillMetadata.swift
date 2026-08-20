@@ -38,43 +38,80 @@ public enum SkillCategory: String, CaseIterable, Identifiable, Sendable, Codable
     
     public static func from(string: String) -> SkillCategory {
         switch string.lowercased() {
-        case "image", "图片", "photo": return .image
-        case "document", "doc", "pdf", "文档": return .document
-        case "organization", "rename", "整理", "命名": return .organization
-        case "collaboration", "office", "协同", "办公", "飞书", "钉钉", "企微": return .collaboration
-        case "custom", "script", "自定义": return .custom
-        case "cloudmarket", "cloud", "云端": return .cloudMarket
-        default: return .organization
+        case "image", "图片", "photo", "图片处理": return .image
+        case "document", "doc", "pdf", "文档", "文档与pdf": return .document
+        case "organization", "rename", "整理", "命名", "整理与命名": return .organization
+        case "collaboration", "office", "协同", "办公", "飞书", "钉钉", "企微", "企业协同": return .collaboration
+        case "custom", "script", "自定义", "自定义扩展": return .custom
+        case "cloudmarket", "cloud", "云端", "云端市场": return .cloudMarket
+        default: return .custom
         }
     }
 }
 
-/// 单个 Skill 的元数据与展示配置（支持基于 Markdown 独立文件持久化）
+/// 单个 Skill 的元数据与展示配置（支持基于 Markdown 独立文件持久化与动态自定义分类）
 public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
     public let id: String
     public let name: String
     public let icon: String
     public let category: SkillCategory
+    public var customCategory: String?
     public let summary: String
     public let supportedExtensions: [String]
     public let parametersDescription: [String: String]
     public let examplePrompts: [String]
     public var markdownContent: String?
+    public var executableScript: String?
+    public var scriptEngine: ScriptEngineType
     public var isEnabled: Bool
     public var isInstalled: Bool
     public var version: String
     public var author: String
+    
+    /// 获取当前技能对外展示的最终分类名称（支持自主创新的新分类）
+    public var categoryDisplayName: String {
+        if let custom = customCategory?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+            return custom
+        }
+        return category.rawValue
+    }
+    
+    /// 根据分类特征智能推断图标
+    public var categoryIcon: String {
+        if let custom = customCategory?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+            let s = custom.lowercased()
+            if s.contains("音") || s.contains("视频") || s.contains("video") || s.contains("audio") || s.contains("媒体") || s.contains("media") {
+                return "film.stack.fill"
+            } else if s.contains("数据") || s.contains("excel") || s.contains("csv") || s.contains("table") || s.contains("表格") {
+                return "tablecells.badge.ellipsis"
+            } else if s.contains("代码") || s.contains("开发") || s.contains("code") || s.contains("dev") || s.contains("git") {
+                return "curlybraces.square.fill"
+            } else if s.contains("ai") || s.contains("智能") || s.contains("模型") {
+                return "sparkles.rectangle.stack.fill"
+            } else if s.contains("网络") || s.contains("下载") || s.contains("http") {
+                return "network"
+            } else if s.contains("安全") || s.contains("加密") || s.contains("锁") {
+                return "lock.shield.fill"
+            } else {
+                return "puzzlepiece.extension.fill"
+            }
+        }
+        return category.icon
+    }
     
     public init(
         id: String,
         name: String,
         icon: String,
         category: SkillCategory,
+        customCategory: String? = nil,
         summary: String,
         supportedExtensions: [String],
         parametersDescription: [String: String] = [:],
         examplePrompts: [String] = [],
         markdownContent: String? = nil,
+        executableScript: String? = nil,
+        scriptEngine: ScriptEngineType = .bash,
         isEnabled: Bool = true,
         isInstalled: Bool = true,
         version: String = "1.0.0",
@@ -84,11 +121,14 @@ public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
         self.name = name
         self.icon = icon
         self.category = category
+        self.customCategory = customCategory
         self.summary = summary
         self.supportedExtensions = supportedExtensions
         self.parametersDescription = parametersDescription
         self.examplePrompts = examplePrompts
         self.markdownContent = markdownContent
+        self.executableScript = executableScript
+        self.scriptEngine = scriptEngine
         self.isEnabled = isEnabled
         self.isInstalled = isInstalled
         self.version = version

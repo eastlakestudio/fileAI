@@ -7,6 +7,7 @@ public struct TaskBoardView: View {
         case inProgress = "进行中"
         case completed = "已完成"
         case failed = "执行失败"
+        case cancelled = "已取消"
         
         public var id: String { rawValue }
         
@@ -16,6 +17,7 @@ public struct TaskBoardView: View {
             case .inProgress: return "hourglass"
             case .completed: return "checkmark.circle.fill"
             case .failed: return "xmark.circle.fill"
+            case .cancelled: return "minus.circle.fill"
             }
         }
     }
@@ -44,12 +46,17 @@ public struct TaskBoardView: View {
         tasks.filter { $0.status == .failed }
     }
     
+    private var cancelledTasks: [TaskExecutionRecord] {
+        tasks.filter { $0.status == .cancelled }
+    }
+    
     private var displayedTasks: [TaskExecutionRecord] {
         switch selectedFilter {
         case .all: return tasks
         case .inProgress: return inProgressTasks
         case .completed: return completedTasks
         case .failed: return failedTasks
+        case .cancelled: return cancelledTasks
         }
     }
     
@@ -58,13 +65,13 @@ public struct TaskBoardView: View {
             // 1. 首行一体化控制栏 (包含交通灯避让 + 返回按钮 + 标题 + 等宽过滤 Tab + 清理按钮)
             topHeaderControlBar
             
-            Divider().opacity(0.3)
+            Divider().opacity(0.2)
             
             // 2. 缩略小卡片列表
             taskCardListView
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             
-            Divider().opacity(0.2)
+            Divider().opacity(0.15)
             
             // 3. 底部状态栏
             bottomStatusBar
@@ -75,13 +82,20 @@ public struct TaskBoardView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.thickMaterial)
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.90))
+                    .fill(Color(nsColor: .windowBackgroundColor).opacity(0.85))
             }
         )
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                .stroke(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.35), Color.white.opacity(0.08)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         )
         .ignoresSafeArea(.all)
         .sheet(item: $selectedDetailTask) { task in
@@ -125,9 +139,9 @@ public struct TaskBoardView: View {
             
             Spacer()
             
-            // 四个 1:1 等宽 Tab 切换栏
+            // 5 个 1:1 等宽 Tab 切换栏 (Liquid Glass 磨砂风格)
             equalWidthSegmentedTabs
-                .frame(width: 330)
+                .frame(width: 410)
             
             // 全量清空按钮
             Button(action: { isShowingClearConfirm = true }) {
@@ -159,40 +173,63 @@ public struct TaskBoardView: View {
         .background(Color.primary.opacity(0.04))
     }
     
-    // MARK: - 4 个等宽 Tab 组件
+    // MARK: - 5 个等宽 Tab 组件 (Liquid Glass 磨砂玻璃风格)
     
     private var equalWidthSegmentedTabs: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             ForEach(TaskFilterTab.allCases) { tab in
                 let isSelected = selectedFilter == tab
                 Button(action: {
-                    withAnimation(.easeInOut(duration: 0.15)) {
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
                         selectedFilter = tab
                     }
                 }) {
-                    HStack(spacing: 3) {
+                    HStack(spacing: 3.5) {
                         Text(tab.rawValue)
                             .font(.system(size: 10.5, weight: isSelected ? .bold : .medium))
                         
                         Text("\(count(for: tab))")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                            .padding(.horizontal, 3.5)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .padding(.horizontal, 4)
                             .padding(.vertical, 1)
-                            .background(isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.06))
-                            .cornerRadius(3)
+                            .background(
+                                isSelected
+                                    ? Color.accentColor.opacity(0.2)
+                                    : Color.primary.opacity(0.06)
+                            )
+                            .cornerRadius(3.5)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .background(isSelected ? Color(nsColor: .controlBackgroundColor) : Color.clear)
+                    .padding(.vertical, 4.5)
+                    .background(
+                        Group {
+                            if isSelected {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.92))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .stroke(Color.white.opacity(0.25), lineWidth: 0.8)
+                                    )
+                                    .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
+                            } else {
+                                Color.clear
+                            }
+                        }
+                    )
                     .foregroundColor(isSelected ? .primary : .secondary)
-                    .cornerRadius(5)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(2)
-        .background(Color.primary.opacity(0.08))
-        .cornerRadius(6)
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 0.8)
+                )
+        )
     }
     
     private func count(for tab: TaskFilterTab) -> Int {
@@ -201,10 +238,11 @@ public struct TaskBoardView: View {
         case .inProgress: return inProgressTasks.count
         case .completed: return completedTasks.count
         case .failed: return failedTasks.count
+        case .cancelled: return cancelledTasks.count
         }
     }
     
-    // MARK: - 2. 缩略小卡片列表
+    // MARK: - 2. 缩略小卡片列表 (macOS 液态玻璃风格)
     
     private var taskCardListView: some View {
         ScrollView {
@@ -229,13 +267,19 @@ public struct TaskBoardView: View {
                 selectedDetailTask = task
             }) {
                 HStack(spacing: 12) {
-                    // 左侧状态图标
+                    // 左侧状态图标 (微晶玻璃芯片)
                     Image(systemName: iconForStatus(task.status))
-                        .font(.system(size: 15))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(badgeColor(task.status))
                         .frame(width: 32, height: 32)
-                        .background(badgeColor(task.status).opacity(0.12))
-                        .cornerRadius(6)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(badgeColor(task.status).opacity(0.14))
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(badgeColor(task.status).opacity(0.25), lineWidth: 0.8)
+                            }
+                        )
                     
                     // 中间：任务目标与内容
                     VStack(alignment: .leading, spacing: 3) {
@@ -254,10 +298,19 @@ public struct TaskBoardView: View {
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
+                            
+                            // 状态徽标 (如 用户取消 / 已完成)
+                            Text(task.status.rawValue)
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 1.5)
+                                .background(badgeColor(task.status).opacity(0.12))
+                                .foregroundColor(badgeColor(task.status))
+                                .cornerRadius(3)
                         }
                         
                         Text(task.plan.summary)
-                            .font(.system(size: 10))
+                            .font(.system(size: 10.5))
                             .foregroundColor(.secondary)
                             .lineLimit(1)
                     }
@@ -265,16 +318,26 @@ public struct TaskBoardView: View {
                     Spacer()
                 }
                 .padding(10)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor).opacity(0.65))
                 )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.30), Color.white.opacity(0.06)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 1.5)
             }
             .buttonStyle(.plain)
             
-            // 右侧独立快捷操作区：再次执行与单个删除
+            // 右侧独立快捷操作区：再次执行与单个删除 (等高按钮)
             HStack(spacing: 4) {
                 Button(action: {
                     onRerunTask?(task)
@@ -282,13 +345,14 @@ public struct TaskBoardView: View {
                 }) {
                     HStack(spacing: 3) {
                         Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 9))
+                            .font(.system(size: 9, weight: .bold))
                         Text("再次执行")
                             .font(.system(size: 10, weight: .medium))
                     }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
+                .frame(height: 24)
                 .help("重新运行此任务")
                 
                 Button(action: {
@@ -300,6 +364,7 @@ public struct TaskBoardView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
+                .frame(height: 24)
                 .help("删除此任务记录")
             }
         }
@@ -308,7 +373,7 @@ public struct TaskBoardView: View {
     // MARK: - 3. 底部状态栏
     
     private var bottomStatusBar: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             HStack(spacing: 4) {
                 Circle().fill(Color.blue).frame(width: 6, height: 6)
                 Text("进行中: \(inProgressTasks.count)")
@@ -321,17 +386,21 @@ public struct TaskBoardView: View {
                 Circle().fill(Color.red).frame(width: 6, height: 6)
                 Text("失败: \(failedTasks.count)")
             }
+            HStack(spacing: 4) {
+                Circle().fill(Color.gray).frame(width: 6, height: 6)
+                Text("已取消: \(cancelledTasks.count)")
+            }
             
             Spacer()
             
             Text("总记录: \(tasks.count) 项")
                 .foregroundColor(.secondary)
         }
-        .font(.system(size: 11))
+        .font(.system(size: 10.5))
         .foregroundColor(.secondary)
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        .background(Color.primary.opacity(0.03))
+        .background(Color.primary.opacity(0.02))
     }
     
     // MARK: - 空状态视图
@@ -349,6 +418,8 @@ public struct TaskBoardView: View {
         .frame(maxWidth: .infinity, minHeight: 200)
     }
     
+    @State private var copiedSectionKey: String? = nil
+    
     // MARK: - 详情弹窗
     
     @ViewBuilder
@@ -361,8 +432,25 @@ public struct TaskBoardView: View {
                     Text(task.prompt)
                         .font(.headline)
                         .lineLimit(1)
+                        .textSelection(.enabled)
                 }
                 Spacer()
+                
+                // 拷贝全部内容按钮
+                Button(action: {
+                    let fullText = buildFullTaskText(task)
+                    copyTextToClipboard(fullText, key: "all")
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: copiedSectionKey == "all" ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 10))
+                        Text(copiedSectionKey == "all" ? "已拷贝全部" : "拷贝全部")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                
                 Button("关闭") {
                     selectedDetailTask = nil
                 }
@@ -374,20 +462,54 @@ public struct TaskBoardView: View {
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 10) {
+                    // Walkthrough 总结报告
                     if let report = task.walkthroughReport, !report.isEmpty {
-                        Text("【执行总结报告 (Walkthrough)】")
-                            .font(.subheadline.bold())
+                        HStack {
+                            Text("【执行总结报告 (Walkthrough)】")
+                                .font(.subheadline.bold())
+                            Spacer()
+                            copyButton(text: report, key: "walkthrough")
+                        }
+                        
                         Text(report)
                             .font(.system(size: 11, design: .monospaced))
                             .padding(8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color.primary.opacity(0.04))
                             .cornerRadius(6)
+                            .textSelection(.enabled)
                     }
                     
+                    // 错误诊断
+                    if let err = task.errorMessage, !err.isEmpty {
+                        HStack {
+                            Text("【错误诊断与排查信息】")
+                                .font(.subheadline.bold())
+                                .foregroundColor(.red)
+                            Spacer()
+                            copyButton(text: err, key: "error")
+                        }
+                        
+                        Text(err)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(.red)
+                            .padding(8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.red.opacity(0.08))
+                            .cornerRadius(6)
+                            .textSelection(.enabled)
+                    }
+                    
+                    // 物理变动清单
                     if !task.plan.actions.isEmpty {
-                        Text("【物理变动清单 (\(task.plan.actions.count) 项)】")
-                            .font(.subheadline.bold())
+                        HStack {
+                            Text("【物理变动清单 (\(task.plan.actions.count) 项)】")
+                                .font(.subheadline.bold())
+                            Spacer()
+                            let actionSummary = task.plan.actions.map { "[\($0.operationType.rawValue)] \($0.sourceURL.path) -> \($0.targetURL?.path ?? "同源")" }.joined(separator: "\n")
+                            copyButton(text: actionSummary, key: "actions")
+                        }
+                        
                         ForEach(task.plan.actions) { action in
                             HStack {
                                 Text(action.operationType.rawValue)
@@ -403,12 +525,19 @@ public struct TaskBoardView: View {
                                         .font(.caption.monospaced().bold())
                                 }
                             }
+                            .textSelection(.enabled)
                         }
                     }
                     
+                    // 执行日志
                     if !task.executionLogs.isEmpty {
-                        Text("【执行实时日志】")
-                            .font(.subheadline.bold())
+                        HStack {
+                            Text("【执行实时日志】")
+                                .font(.subheadline.bold())
+                            Spacer()
+                            copyButton(text: task.executionLogs.joined(separator: "\n"), key: "logs")
+                        }
+                        
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(task.executionLogs, id: \.self) { log in
                                 Text(log)
@@ -420,12 +549,70 @@ public struct TaskBoardView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.black.opacity(0.1))
                         .cornerRadius(6)
+                        .textSelection(.enabled)
                     }
                 }
             }
         }
         .padding(16)
         .frame(minWidth: 500, minHeight: 400)
+    }
+    
+    @ViewBuilder
+    private func copyButton(text: String, key: String) -> some View {
+        let isCopied = copiedSectionKey == key
+        Button(action: {
+            copyTextToClipboard(text, key: key)
+        }) {
+            HStack(spacing: 3) {
+                Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 9))
+                Text(isCopied ? "已复制" : "复制")
+                    .font(.system(size: 10))
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.mini)
+    }
+    
+    private func copyTextToClipboard(_ text: String, key: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+        withAnimation {
+            copiedSectionKey = key
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if copiedSectionKey == key {
+                withAnimation {
+                    copiedSectionKey = nil
+                }
+            }
+        }
+    }
+    
+    private func buildFullTaskText(_ task: TaskExecutionRecord) -> String {
+        var lines: [String] = []
+        lines.append("任务目标: \(task.prompt)")
+        lines.append("任务状态: \(task.status.rawValue)")
+        lines.append("耗时: \(task.formattedDuration)")
+        if let report = task.walkthroughReport, !report.isEmpty {
+            lines.append("\n【执行总结报告】\n\(report)")
+        }
+        if let err = task.errorMessage, !err.isEmpty {
+            lines.append("\n【错误信息】\n\(err)")
+        }
+        if !task.plan.actions.isEmpty {
+            lines.append("\n【文件操作】")
+            for action in task.plan.actions {
+                lines.append("- [\(action.operationType.rawValue)] \(action.sourceURL.path) -> \(action.targetURL?.path ?? "同源")")
+            }
+        }
+        if !task.executionLogs.isEmpty {
+            lines.append("\n【执行日志】")
+            lines.append(contentsOf: task.executionLogs)
+        }
+        return lines.joined(separator: "\n")
     }
     
     // MARK: - Helpers
@@ -451,6 +638,7 @@ public struct TaskBoardView: View {
         case .completed: return "checkmark.circle.fill"
         case .failed: return "xmark.circle.fill"
         case .reverted: return "arrow.uturn.backward.circle.fill"
+        case .cancelled: return "minus.circle.fill"
         }
     }
     
@@ -460,6 +648,7 @@ public struct TaskBoardView: View {
         case .completed: return .green
         case .failed: return .red
         case .reverted: return .purple
+        case .cancelled: return .secondary
         }
     }
 }

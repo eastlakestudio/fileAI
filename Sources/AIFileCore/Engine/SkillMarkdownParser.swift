@@ -22,13 +22,34 @@ public final class SkillMarkdownParser {
         var extensions: [String] = []
         var parameters: [String: String] = [:]
         var examples: [String] = []
+        var script: String? = nil
+        var scriptEngine: ScriptEngineType = .bash
         
         var currentSection: String? = nil
+        var multiLineScriptBuffer: [String] = []
+        var isReadingMultiLineScript = false
         
         let lines = frontmatter.components(separatedBy: "\n")
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
             if trimmedLine.isEmpty || trimmedLine.hasPrefix("#") { continue }
+            
+            if isReadingMultiLineScript {
+                if line.hasPrefix("  ") || line.hasPrefix("\t") {
+                    // 缩进的多行脚本行，去除前导 2 个空格
+                    let unindented = line.hasPrefix("  ") ? String(line.dropFirst(2)) : String(line.dropFirst(1))
+                    multiLineScriptBuffer.append(unindented)
+                    continue
+                } else if trimmedLine.contains(":") && !trimmedLine.hasPrefix("-") {
+                    // 进入下一个字段，结束多行脚本读取
+                    isReadingMultiLineScript = false
+                    script = multiLineScriptBuffer.joined(separator: "\n")
+                    multiLineScriptBuffer.removeAll()
+                } else {
+                    multiLineScriptBuffer.append(line)
+                    continue
+                }
+            }
             
             if trimmedLine.hasPrefix("id:") {
                 id = trimmedLine.replacingOccurrences(of: "id:", with: "").trimmingCharacters(in: .whitespaces)
@@ -44,6 +65,27 @@ public final class SkillMarkdownParser {
                 currentSection = nil
             } else if trimmedLine.hasPrefix("summary:") {
                 summary = trimmedLine.replacingOccurrences(of: "summary:", with: "").trimmingCharacters(in: .whitespaces)
+                currentSection = nil
+            } else if trimmedLine.hasPrefix("script_engine:") || trimmedLine.hasPrefix("engine:") {
+                let engStr = trimmedLine.replacingOccurrences(of: "script_engine:", with: "").replacingOccurrences(of: "engine:", with: "").trimmingCharacters(in: .whitespaces).lowercased()
+                if engStr.contains("python") {
+                    scriptEngine = .python3
+                } else if engStr.contains("zsh") {
+                    scriptEngine = .zsh
+                } else if engStr.contains("apple") {
+                    scriptEngine = .applescript
+                } else {
+                    scriptEngine = .bash
+                }
+                currentSection = nil
+            } else if trimmedLine.hasPrefix("script:") {
+                let inlineScript = trimmedLine.replacingOccurrences(of: "script:", with: "").trimmingCharacters(in: .whitespaces)
+                if inlineScript == "|" || inlineScript == ">" || inlineScript.isEmpty {
+                    isReadingMultiLineScript = true
+                    multiLineScriptBuffer.removeAll()
+                } else {
+                    script = inlineScript
+                }
                 currentSection = nil
             } else if trimmedLine.hasPrefix("extensions:") {
                 let extStr = trimmedLine.replacingOccurrences(of: "extensions:", with: "").trimmingCharacters(in: .whitespaces)
@@ -73,19 +115,28 @@ public final class SkillMarkdownParser {
             }
         }
         
+        if isReadingMultiLineScript && !multiLineScriptBuffer.isEmpty {
+            script = multiLineScriptBuffer.joined(separator: "\n")
+        }
+        
         if id.isEmpty { id = "skill_\(UUID().uuidString.prefix(6))" }
         let cat = SkillCategory.from(string: categoryRaw)
+        let isStandardCode = ["all", "image", "document", "organization", "collaboration", "custom", "cloudMarket", "全部技能", "图片处理", "文档与pdf", "整理与命名", "企业协同", "自定义扩展", "云端市场"].contains(categoryRaw.lowercased())
+        let customCat: String? = isStandardCode ? nil : categoryRaw
         
         return SkillMetadata(
             id: id,
             name: name,
             icon: icon,
             category: cat,
+            customCategory: customCat,
             summary: summary,
             supportedExtensions: extensions,
             parametersDescription: parameters,
             examplePrompts: examples,
             markdownContent: body.isEmpty ? nil : body,
+            executableScript: script,
+            scriptEngine: scriptEngine,
             isEnabled: true
         )
     }
@@ -96,9 +147,22 @@ public final class SkillMarkdownParser {
         output += "id: \(metadata.id)\n"
         output += "name: \(metadata.name)\n"
         output += "icon: \(metadata.icon)\n"
-        output += "category: \(metadata.category.codeName)\n"
+        let catValue = metadata.customCategory ?? metadata.category.codeName
+        output += "category: \(catValue)\n"
         output += "summary: \(metadata.summary)\n"
         output += "extensions: [\(metadata.supportedExtensions.joined(separator: ", "))]\n"
+        output += "script_engine: \(metadata.scriptEngine.rawValue)\n"
+        
+        if let sc = metadata.executableScript, !sc.isEmpty {
+            if sc.contains("\n") {
+                output += "script: |\n"
+                for line in sc.components(separatedBy: "\n") {
+                    output += "  \(line)\n"
+                }
+            } else {
+                output += "script: \(sc)\n"
+            }
+        }
         
         if !metadata.parametersDescription.isEmpty {
             output += "parameters:\n"

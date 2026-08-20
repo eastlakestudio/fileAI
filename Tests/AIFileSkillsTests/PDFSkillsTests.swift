@@ -49,16 +49,28 @@ final class PDFSkillsTests: XCTestCase {
         XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
     }
     
-    func testExcelToPDFPlanGeneration() throws {
-        let xlsxURL = tempDirectory.appendingPathComponent("标段1-硬件清单.xlsx")
-        try "fake xlsx content".write(to: xlsxURL, atomically: true, encoding: .utf8)
+    func testDocToPDFMultiPagePagination() throws {
+        let longDocURL = tempDirectory.appendingPathComponent("long_document.md")
+        // 生成多页长文本内容（300 行段落）
+        var longText = "# 长文档多页转 PDF 测试报告\n\n"
+        for i in 1...300 {
+            longText += "第 \(i) 行：这是自动生成的长文档测试段落内容，用于验证多页矢量 CoreText 分页排版引擎是否能够逐页正确推进，彻底解决单页截断问题。\n\n"
+        }
+        try longText.write(to: longDocURL, atomically: true, encoding: .utf8)
         
-        let fileItem = FileMetadataEngine.shared.createFileItem(url: xlsxURL, isDirectory: false)
+        let fileItem = FileMetadataEngine.shared.createFileItem(url: longDocURL, isDirectory: false)
         let skill = DocToPDFSkill()
         
         let plan = try skill.generatePlan(from: [fileItem], parameters: [:])
         XCTAssertEqual(plan.actions.count, 1)
-        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "标段1-硬件清单.pdf")
-        XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
+        
+        let outputPDF = try skill.execute(action: plan.actions.first!)
+        XCTAssertNotNil(outputPDF)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputPDF!.path))
+        
+        let doc = PDFDocument(url: outputPDF!)
+        XCTAssertNotNil(doc)
+        // 验证多页有效分页，页数应大于 1（通常应为 5~10 页）
+        XCTAssertGreaterThan(doc!.pageCount, 1, "长文档转 PDF 必须正确分页，页数不能被截断为 1 页")
     }
 }

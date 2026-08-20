@@ -21,14 +21,28 @@ public struct ModernChatInputCardView: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.92))
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.85))
+            }
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.40),
+                            Color.white.opacity(0.10)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         )
-        .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 3)
+        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 3.5)
     }
     
     // MARK: - 2. 自然语言输入区
@@ -57,14 +71,8 @@ public struct ModernChatInputCardView: View {
             // + 菜单：添加文件与智能技能
             plusActionMenu
             
-            // 模式选择 (纯净标签，去除下拉箭头)
-            modeSelectorMenu
-            
-            // 模型选择 (如: ✨ DeepSeek V4 Flash ⌄ / ✨ Google Antigravity ⌄)
+            // 当前活跃的大模型 / CLI 引擎指示与快速切换 (如: ✨ DeepSeek V4 / 💻 Ollama)
             modelSelectorMenu
-            
-            // 思考强度 (如: High ⌄ / Medium ⌄ / Low ⌄)
-            effortSelectorMenu
             
             Spacer()
             
@@ -128,12 +136,12 @@ public struct ModernChatInputCardView: View {
     @ViewBuilder
     private var dynamicSkillsSections: some View {
         let skills = SkillManager.shared.allSkills.filter { $0.isEnabled }
-        let displayCategories: [SkillCategory] = [.image, .document, .organization, .collaboration, .custom]
+        let categoryNames = Array(Set(skills.map { $0.categoryDisplayName })).sorted()
         
-        ForEach(displayCategories, id: \.self) { cat in
-            let categorySkills = skills.filter { $0.category == cat }
+        ForEach(categoryNames, id: \.self) { catName in
+            let categorySkills = skills.filter { $0.categoryDisplayName == catName }
             if !categorySkills.isEmpty {
-                Section(categorySectionTitle(for: cat)) {
+                Section(categorySectionTitle(for: catName)) {
                     ForEach(categorySkills) { (s: SkillMetadata) in
                         Button(action: {
                             let text = s.examplePrompts.first ?? s.summary
@@ -147,45 +155,24 @@ public struct ModernChatInputCardView: View {
         }
     }
     
-    private func categorySectionTitle(for category: SkillCategory) -> String {
-        switch category {
-        case .image: return "🖼️ 图片处理 Skill"
-        case .document: return "📄 文档与 PDF Skill"
-        case .organization: return "🏷️ 整理与重命名 Skill"
-        case .collaboration: return "🏢 企业生态协同"
-        case .custom: return "🧩 扩展自定义技能"
-        default: return "🧩 \(category.rawValue)"
+    private func categorySectionTitle(for categoryName: String) -> String {
+        switch categoryName {
+        case "图片处理": return "🖼️ 图片处理 Skill"
+        case "文档与PDF": return "📄 文档与 PDF Skill"
+        case "整理与命名": return "🏷️ 整理与重命名 Skill"
+        case "企业协同": return "🏢 企业生态协同"
+        case "自定义扩展": return "🧩 自定义扩展技能"
+        default: return "✨ \(categoryName)"
         }
-    }
-    
-    private var modeSelectorMenu: some View {
-        Menu {
-            Button("🤖 Agent 模式 (智能自动规划)") {
-                viewModel.executionMode = "Agent 模式"
-            }
-            Button("⚡ 极速模式 (本地规则秒级分流)") {
-                viewModel.executionMode = "极速模式"
-            }
-            Button("👁️ 仅预览 (Diff 检查不自动执行)") {
-                viewModel.executionMode = "仅预览"
-            }
-        } label: {
-            Text(viewModel.executionMode)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.primary.opacity(0.85))
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
-        }
-        .menuIndicator(.hidden)
-        .menuStyle(.borderlessButton)
     }
     
     private var modelSelectorMenu: some View {
-        Menu {
-            Section("当前活跃模型引擎") {
+        let isCLI = viewModel.activeModelDisplayName.contains("CLI") || viewModel.activeModelDisplayName.contains("Ollama") || viewModel.activeModelDisplayName.contains("Claude")
+        return Menu {
+            Section("当前活跃模型/CLI 引擎") {
                 Button(action: {
                     withAnimation {
-                        viewModel.currentPage = .settings(initialTab: .cloudModel)
+                        viewModel.currentPage = .settings(initialTab: isCLI ? .cliModel : .cloudModel)
                     }
                 }) {
                     Label("\(viewModel.activeModelDisplayName)", systemImage: "checkmark")
@@ -199,13 +186,21 @@ public struct ModernChatInputCardView: View {
                     viewModel.currentPage = .settings(initialTab: .cloudModel)
                 }
             }) {
-                Label("切换/配置更多模型与 CLI...", systemImage: "gearshape")
+                Label("切换云端大模型...", systemImage: "icloud")
+            }
+            
+            Button(action: {
+                withAnimation {
+                    viewModel.currentPage = .settings(initialTab: .cliModel)
+                }
+            }) {
+                Label("切换/扫描本地 CLI 引擎...", systemImage: "terminal")
             }
         } label: {
             HStack(spacing: 3) {
-                Image(systemName: "sparkles")
+                Image(systemName: isCLI ? "terminal.fill" : "sparkles")
                     .font(.system(size: 10))
-                    .foregroundColor(.purple.opacity(0.9))
+                    .foregroundColor(isCLI ? .accentColor : .purple.opacity(0.9))
                 
                 Text(viewModel.activeModelDisplayName)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
@@ -213,39 +208,19 @@ public struct ModernChatInputCardView: View {
                     .lineLimit(1)
                 
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.7))
+                    .font(.system(size: 7.5, weight: .bold))
+                    .foregroundColor(.secondary.opacity(0.6))
             }
             .padding(.horizontal, 4)
             .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.primary.opacity(0.04))
+            )
         }
         .menuStyle(.borderlessButton)
-    }
-    
-    private var effortSelectorMenu: some View {
-        Menu {
-            Button("🧠 High (完整深度思考)") {
-                viewModel.reasoningEffort = "High"
-            }
-            Button("💡 Medium (标准思考推理)") {
-                viewModel.reasoningEffort = "Medium"
-            }
-            Button("⚡ Low (极速低延迟)") {
-                viewModel.reasoningEffort = "Low"
-            }
-        } label: {
-            HStack(spacing: 3) {
-                Text(viewModel.reasoningEffort)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.primary.opacity(0.85))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.7))
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
-        }
-        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("当前使用的模型/CLI引擎，点击可快速切换或配置")
     }
     
     private var sendOrLoadingButton: some View {
