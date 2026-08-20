@@ -19,11 +19,18 @@ public enum FileListViewMode: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+public enum MainViewContentTab: String, CaseIterable, Identifiable {
+    case chatTimeline = "对话流"
+    case fileList = "选中文件"
+    public var id: String { rawValue }
+}
+
 @MainActor
 public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var rawURLs: [URL] = []
     @Published public var fileItems: [FileItem] = []
     @Published public var viewMode: FileListViewMode = .list
+    @Published public var mainTab: MainViewContentTab = .chatTimeline
     @Published public var currentPage: AppNavigationPage = .main
     
     @Published public var isRecursive: Bool = false {
@@ -43,6 +50,9 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var currentPlan: ExecutionPlan? = nil
     @Published public var isShowingDiffPreview: Bool = false
     @Published public var activeTask: TaskExecutionRecord? = nil
+    @Published public var sessionTasks: [TaskExecutionRecord] = []
+    @Published public var taskHistory: [TaskExecutionRecord] = []
+    @Published public var selectedDetailTask: TaskExecutionRecord? = nil
     
     @Published public var isShowingModelSettings: Bool = false
     
@@ -51,6 +61,8 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     private var consentContinuation: CheckedContinuation<ConsentDecision, Never>?
     
     @Published public var smartSuggestions: [SkillSuggestion] = []
+    @Published public var executionMode: String = "Agent 模式"
+    @Published public var reasoningEffort: String = "High"
     
     private let customDispatcher: AgentDispatcher?
     
@@ -66,6 +78,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         
         ContentConsentGate.shared.delegate = self
         updateSuggestions()
+        loadTaskHistory()
     }
     
     public var dispatcher: AgentDispatcher {
@@ -123,6 +136,20 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         refreshFiles()
     }
     
+    /// 移除当前选中的单个文件项
+    public func removeFileItem(id: String) {
+        if let item = fileItems.first(where: { $0.id == id }) {
+            self.rawURLs.removeAll(where: { $0.path == item.url.path })
+            refreshFiles()
+        }
+    }
+    
+    /// 清空当前所有选中的文件
+    public func clearSelectedFiles() {
+        self.rawURLs = []
+        refreshFiles()
+    }
+    
     /// 刷新元数据提取结果
     public func refreshFiles() {
         var allowedExts: Set<String>? = nil
@@ -177,9 +204,26 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             return
         }
         
+        self.inputText = "" // 发送后清空输入框
+        self.mainTab = .chatTimeline // 发送指令后自动聚焦到对话任务流
         isThinking = true
         thinkingElapsedSeconds = 0.0
         statusMessage = "AI 正在分析意图并规划操作方案... (⏱️ 0.0s)"
+        
+        // 1. 任务提交瞬间立即在 MainActor 同步创建卡片，推入聊天任务流
+        let targetPaths = self.fileItems.map { $0.url.path }
+        let initialPlan = ExecutionPlan(summary: "正在规划意图...", actions: [])
+        let taskRecord = TaskExecutionRecord(
+            prompt: prompt,
+            status: .inProgress,
+            plan: initialPlan,
+            targetFilePaths: targetPaths
+        )
+        self.activeTask = taskRecord
+        self.sessionTasks.removeAll(where: { $0.id == taskRecord.id })
+        self.sessionTasks.insert(taskRecord, at: 0)
+        self.taskHistory.removeAll(where: { $0.id == taskRecord.id })
+        self.taskHistory.insert(taskRecord, at: 0)
         
         // 启动实时秒表计时器
         let startTime = Date()
@@ -193,11 +237,8 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             }
         
         Task {
-            // 1. 任务提交瞬间立即持久化记录为【进行中】，绑定目标文件路径
-            let targetPaths = self.fileItems.map { $0.url.path }
-            let initialPlan = ExecutionPlan(summary: "正在规划意图...", actions: [])
-            let taskRecord = await TaskManager.shared.createTask(prompt: prompt, plan: initialPlan, targetFilePaths: targetPaths)
-            self.activeTask = taskRecord
+            // 异步持久化到 TaskManager
+            await TaskManager.shared.recordTask(taskRecord)
             
             do {
                 let plan = try await dispatcher.generatePlan(userPrompt: prompt, fileItems: fileItems)
@@ -207,19 +248,38 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 self.thinkingTimerCancellable?.cancel()
                 self.statusMessage = nil
                 
-                // 更新持久化任务中的 plan
+                // 更新会话任务与持久化任务中的 plan
+                self.updateSessionTask(id: taskRecord.id) { task in
+                    task.plan = plan
+                    if task.targetFilePaths.isEmpty {
+                        task.targetFilePaths = targetPaths
+                    }
+                }
                 await TaskManager.shared.updateTaskPlan(id: taskRecord.id, plan: plan, targetFilePaths: targetPaths)
+                await self.loadTaskHistory()
                 
                 if !plan.actions.isEmpty {
                     self.isShowingDiffPreview = true
                 } else if !plan.summary.isEmpty && plan.summary != "计划执行 0 项操作" {
                     self.statusMessage = "\(plan.summary) (⏱️ \(String(format: "%.2fs", elapsed)))"
                     // 问答/查询/统计类操作（无物理文件变动），直接记录为已完成并写入 AI 回复
+                    self.updateSessionTask(id: taskRecord.id) { task in
+                        task.status = .completed
+                        task.completedAt = Date()
+                        task.walkthroughReport = plan.summary
+                    }
                     await TaskManager.shared.completeTask(id: taskRecord.id, transactionId: nil, walkthrough: plan.summary)
+                    await self.loadTaskHistory()
                     self.activeTask = nil
                 } else {
                     self.statusMessage = "💡 未匹配到需要变动的文件，请尝试调整指令或参考上方推荐 Skill (⏱️ \(String(format: "%.2fs", elapsed)))"
+                    self.updateSessionTask(id: taskRecord.id) { task in
+                        task.status = .failed
+                        task.completedAt = Date()
+                        task.errorMessage = "未匹配到需要变动的文件"
+                    }
                     await TaskManager.shared.failTask(id: taskRecord.id, error: "未匹配到需要变动的文件")
+                    await self.loadTaskHistory()
                     self.activeTask = nil
                 }
             } catch {
@@ -227,8 +287,14 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 self.isThinking = false
                 self.thinkingTimerCancellable?.cancel()
                 self.statusMessage = "规划失败: \(error.localizedDescription) (⏱️ \(String(format: "%.1fs", elapsed)))"
-                // 规划阶段出错时，立即持久化记录为【执行失败】，写入任务看板！
+                // 规划阶段出错时，立即记录为【执行失败】
+                self.updateSessionTask(id: taskRecord.id) { task in
+                    task.status = .failed
+                    task.completedAt = Date()
+                    task.errorMessage = error.localizedDescription
+                }
                 await TaskManager.shared.failTask(id: taskRecord.id, error: error.localizedDescription)
+                await self.loadTaskHistory()
                 self.activeTask = nil
             }
         }
@@ -270,16 +336,37 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 let walkthrough = "✅ 成功完成 \(count) 项物理操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
                 
                 if let task = self.activeTask {
+                    var execLogs = task.executionLogs.isEmpty ? task.plan.executionLogs : task.executionLogs
+                    execLogs.append("⚡ 安全沙盒开始执行 \(plan.actions.count) 个文件物理操作...")
+                    execLogs.append("💾 写入事务安全日志 (ID: \(record.id.uuidString.prefix(8)))")
+                    execLogs.append("✅ 全部文件物理变更执行完成")
+                    
+                    self.updateSessionTask(id: task.id) { item in
+                        item.status = .completed
+                        item.completedAt = Date()
+                        item.transactionId = record.id
+                        item.walkthroughReport = walkthrough
+                        item.executionLogs = execLogs
+                    }
                     await TaskManager.shared.completeTask(id: task.id, transactionId: record.id, walkthrough: walkthrough)
+                    await self.loadTaskHistory()
                 }
                 
-                statusMessage = "✅ 成功完成 \(count) 项操作！已写入任务看板，可随时 ⌘Z 撤销"
+                self.currentPlan = nil
+                self.activeTask = nil
+                self.statusMessage = "✅ 执行完成 (共 \(count) 项操作)"
                 refreshFiles()
                 currentPlan = nil
                 activeTask = nil
             } catch {
                 if let task = self.activeTask {
+                    self.updateSessionTask(id: task.id) { item in
+                        item.status = .failed
+                        item.completedAt = Date()
+                        item.errorMessage = error.localizedDescription
+                    }
                     await TaskManager.shared.failTask(id: task.id, error: error.localizedDescription)
+                    await self.loadTaskHistory()
                 }
                 statusMessage = "❌ 执行失败: \(error.localizedDescription)"
             }
@@ -311,13 +398,41 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     public func cancelCurrentExecution() {
         isShowingDiffPreview = false
         if let task = activeTask {
+            updateSessionTask(id: task.id) { item in
+                item.status = .failed
+                item.completedAt = Date()
+                item.errorMessage = "用户取消了执行确认"
+            }
             Task {
                 await TaskManager.shared.cancelTask(id: task.id)
+                await self.loadTaskHistory()
             }
         }
         currentPlan = nil
         activeTask = nil
         statusMessage = "已取消执行"
+    }
+    
+    /// 从持久化存储中重新加载全部任务卡片历史
+    public func loadTaskHistory() async {
+        let tasks = await TaskManager.shared.allTasks
+        self.taskHistory = tasks
+    }
+    
+    public func loadTaskHistory() {
+        Task {
+            await self.loadTaskHistory()
+        }
+    }
+    
+    public func liveTask(for id: UUID) -> TaskExecutionRecord? {
+        return sessionTasks.first(where: { $0.id == id }) ?? taskHistory.first(where: { $0.id == id })
+    }
+    
+    private func updateSessionTask(id: UUID, _ mutation: (inout TaskExecutionRecord) -> Void) {
+        if let index = sessionTasks.firstIndex(where: { $0.id == id }) {
+            mutation(&sessionTasks[index])
+        }
     }
     
     /// 点击推荐胶囊：填充指令文本，避免直接静默提交
@@ -369,6 +484,11 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             do {
                 if let record = try await TransactionJournal.shared.undoLatest() {
                     await TaskManager.shared.markReverted(transactionId: record.id)
+                    for i in 0..<self.sessionTasks.count {
+                        if self.sessionTasks[i].transactionId == record.id {
+                            self.sessionTasks[i].status = .reverted
+                        }
+                    }
                     statusMessage = "↩️ 已成功撤销: \(record.description)"
                     refreshFiles()
                 } else {

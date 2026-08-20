@@ -24,7 +24,7 @@ public final class SafeFileExecutor: Sendable {
     /// - Returns: 执行生成的事务记录
     public func execute(
         plan: ExecutionPlan,
-        customHandler: ((FileActionItem) throws -> URL?)? = nil
+        customHandler: (@Sendable (FileActionItem) async throws -> URL?)? = nil
     ) async throws -> TransactionRecord {
         let txId = plan.id
         guard !plan.selectedActions.isEmpty else {
@@ -83,7 +83,7 @@ public final class SafeFileExecutor: Sendable {
             case .resizeImage, .convertImageFormat, .convertToPDF, .mergePDF, .splitPDF, .custom:
                 // 委托给具体的 Skill Handler 处理
                 if let handler = customHandler {
-                    if let generatedURL = try handler(action) {
+                    if let generatedURL = try await handler(action) {
                         reverseActions.append(ReverseAction(
                             kind: .deleteCreated,
                             currentURL: generatedURL,

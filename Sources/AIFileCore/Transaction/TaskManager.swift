@@ -31,6 +31,13 @@ public actor TaskManager {
         return task
     }
     
+    /// 登记已构造好的任务记录并持久化
+    public func recordTask(_ task: TaskExecutionRecord) {
+        tasks.removeAll(where: { $0.id == task.id })
+        tasks.insert(task, at: 0)
+        persistTask(task)
+    }
+    
     /// 更新任务的执行计划与摘要
     public func updateTaskPlan(id: UUID, plan: ExecutionPlan, targetFilePaths: [String]? = nil) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }

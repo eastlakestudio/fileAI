@@ -18,7 +18,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
     public init(
         tool: DiscoveredCLITool,
         modelName: String? = nil,
-        timeoutSeconds: TimeInterval = 30
+        timeoutSeconds: TimeInterval = 60
     ) {
         self.tool = tool
         self.modelName = modelName ?? tool.availableModels.first ?? "default"
@@ -37,16 +37,34 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             )
         }
         
-        // 构造发送给 CLI 的提示词（系统提示词 + 用户指令 + JSON Schema 约束）
+        // 构造发送给 CLI 的提示词（系统提示词 + 可用 Tools Schema + 用户指令 + JSON Schema 约束）
         let systemMsg = messages.first(where: { $0["role"] == "system" })?["content"] ?? ""
         let userMsg = messages.last(where: { $0["role"] == "user" })?["content"] ?? ""
         
+        var toolsBlock = ""
+        if let tools = tools, !tools.isEmpty,
+           let data = try? JSONSerialization.data(withJSONObject: tools, options: [.prettyPrinted]),
+           let schemaString = String(data: data, encoding: .utf8) {
+            toolsBlock = """
+            
+            【可用 Tool Calling Schema】:
+            \(schemaString)
+            """
+        }
+        
         let promptPayload = """
         \(systemMsg)
+        \(toolsBlock)
         
         【用户指令】: \(userMsg)
         
-        请直接输出严格遵守上述 Schema 的纯 JSON 执行计划，不要输出任何额外的 Markdown 代码块或解释文字。
+        【输出格式要求】:
+        请根据上述已启用的 Skill 技能池与 Tool Calling Schema，直接输出纯 JSON 执行计划（可包含 <think>...</think> 思考内容）。
+        格式示例：
+        {"tool": "image_resize", "arguments": {"targetWidth": 1920, "targetHeight": 1080}}
+        或
+        {"tool": "doc_to_pdf", "arguments": {}}
+        不要输出任何与 JSON 无关的代码块标记外的多余说明。
         """
         
         // 根据 CLI 工具类型组装启动参数
@@ -72,8 +90,51 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             arguments = ["-p", promptPayload, "--temp", "0.2"]
         }
         
-        let rawOutput = try await executeSubprocess(executablePath: execPath, arguments: arguments)
-        return parseCLIOutput(rawOutput)
+        // 控制台与日志全量打印 CLI 请求输入
+        print("""
+        ======================================================================
+        🚀 [CLI Request Input]
+        Tool: \(tool.name) (\(tool.type.rawValue))
+        Executable: \(execPath)
+        Arguments: \(arguments.prefix(1)) ... (共 \(arguments.count) 项参数)
+        Model: \(modelName)
+        Prompt Payload:
+        \(promptPayload)
+        ======================================================================
+        """)
+        
+        let startTime = Date()
+        let result = try await executeSubprocess(executablePath: execPath, arguments: arguments)
+        let elapsed = Date().timeIntervalSince(startTime)
+        
+        // 控制台与日志全量打印 CLI 响应输出
+        print("""
+        ======================================================================
+        📥 [CLI Response Output]
+        Tool: \(tool.name)
+        Exit Code: 0
+        Duration: \(String(format: "%.2fs", elapsed))
+        Raw Output:
+        \(result)
+        ======================================================================
+        """)
+        
+        var traceLogs: [String] = []
+        traceLogs.append("🚀 调用 CLI 引擎: \(tool.name) (\(execPath))")
+        traceLogs.append("📋 注入可用 Tools 清单 (共 \(tools?.count ?? 0) 个 Skill)")
+        traceLogs.append("📥 CLI 进程正常退出 (耗时 \(String(format: "%.2fs", elapsed)))")
+        let preview = result.replacingOccurrences(of: "\n", with: " ")
+        traceLogs.append("📄 收到 CLI 原始响应: \(preview.prefix(120))...")
+        
+        var response = parseCLIOutput(result)
+        response = LLMResponse(
+            textContent: response.textContent,
+            toolCalls: response.toolCalls,
+            rawThinking: response.rawThinking,
+            rawOutput: response.rawOutput,
+            executionTraceLogs: traceLogs
+        )
+        return response
     }
     
     // MARK: - Private Execution & Parsing
@@ -97,6 +158,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 
                 var isResumed = false
                 let lock = NSLock()
+                let startTime = Date()
                 
                 // 超时监控定时器
                 let timeoutTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
@@ -109,6 +171,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                         if process.isRunning {
                             process.terminate()
                         }
+                        print("❌ [CLI Error] \(self.tool.name) 执行超时（超过 \(Int(self.timeoutSeconds)) 秒）")
                         continuation.resume(throwing: NSError(
                             domain: "CLIModelClient",
                             code: 408,
@@ -130,16 +193,29 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                     
                     let data = outPipe.fileHandleForReading.readDataToEndOfFile()
                     let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let elapsed = Date().timeIntervalSince(startTime)
                     
                     if process.terminationStatus == 0 && !output.isEmpty {
                         continuation.resume(returning: output)
                     } else {
-                        let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                        let errStr = String(data: errData, encoding: .utf8) ?? "未知错误"
+                        print("""
+                        ======================================================================
+                        ❌ [CLI Failure Output]
+                        Tool: \(self.tool.name)
+                        Exit Code: \(process.terminationStatus)
+                        Duration: \(String(format: "%.2fs", elapsed))
+                        Stderr:
+                        \(errStr)
+                        Stdout:
+                        \(output)
+                        ======================================================================
+                        """)
                         continuation.resume(throwing: NSError(
                             domain: "CLIModelClient",
                             code: Int(process.terminationStatus),
-                            userInfo: [NSLocalizedDescriptionKey: "CLI 执行失败 (\(process.terminationStatus)): \(errStr)"]
+                            userInfo: [NSLocalizedDescriptionKey: "CLI 执行失败 (\(process.terminationStatus)): \(errStr.isEmpty ? output : errStr)"]
                         ))
                     }
                 } catch {
@@ -148,6 +224,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                     defer { lock.unlock() }
                     if !isResumed {
                         isResumed = true
+                        print("❌ [CLI Launch Exception] \(error)")
                         continuation.resume(throwing: error)
                     }
                 }
@@ -157,6 +234,19 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
     
     private func parseCLIOutput(_ rawOutput: String) -> LLMResponse {
         var cleanJSON = rawOutput
+        var extractedThinking: String? = nil
+        
+        // 提取 <think>...</think> 或 <thought>...</thought>
+        if let startThink = cleanJSON.range(of: "<think>"),
+           let endThink = cleanJSON.range(of: "</think>") {
+            extractedThinking = String(cleanJSON[startThink.upperBound..<endThink.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            cleanJSON.removeSubrange(startThink.lowerBound..<endThink.upperBound)
+        } else if let startThink = cleanJSON.range(of: "<thought>"),
+                  let endThink = cleanJSON.range(of: "</thought>") {
+            extractedThinking = String(cleanJSON[startThink.upperBound..<endThink.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+            cleanJSON.removeSubrange(startThink.lowerBound..<endThink.upperBound)
+        }
+        
         // 剥离可能存在的 ```json ``` 包裹
         if let start = cleanJSON.range(of: "```json") {
             cleanJSON = String(cleanJSON[start.upperBound...])
@@ -180,9 +270,12 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             if let data = jsonSubstring.data(using: .utf8),
                let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 
+                let jsonThinking = (jsonDict["thought"] ?? jsonDict["reasoning"] ?? jsonDict["explanation"]) as? String
+                let finalThinking = extractedThinking ?? jsonThinking
+                
                 // 格式 A: {"tool": "...", "arguments": {...}}
-                if let toolName = jsonDict["tool"] as? String,
-                   let args = jsonDict["arguments"] as? [String: Any],
+                if let toolName = (jsonDict["tool"] ?? jsonDict["function"] ?? jsonDict["skill"]) as? String,
+                   let args = (jsonDict["arguments"] ?? jsonDict["parameters"]) as? [String: Any],
                    let argsData = try? JSONSerialization.data(withJSONObject: args),
                    let argsString = String(data: argsData, encoding: .utf8) {
                     
@@ -191,7 +284,12 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                         functionName: toolName,
                         argumentsJSON: argsString
                     )
-                    return LLMResponse(textContent: "由 \(tool.name) 自动规划", toolCalls: [call])
+                    return LLMResponse(
+                        textContent: "已通过 \(tool.name) 智能解析意图",
+                        toolCalls: [call],
+                        rawThinking: finalThinking,
+                        rawOutput: rawOutput
+                    )
                 }
                 
                 // 格式 B: {"name": "...", "parameters": {...}}
@@ -205,11 +303,21 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                         functionName: funcName,
                         argumentsJSON: argsString
                     )
-                    return LLMResponse(textContent: "由 \(tool.name) 自动规划", toolCalls: [call])
+                    return LLMResponse(
+                        textContent: "已通过 \(tool.name) 智能解析意图",
+                        toolCalls: [call],
+                        rawThinking: finalThinking,
+                        rawOutput: rawOutput
+                    )
                 }
             }
         }
         
-        return LLMResponse(textContent: rawOutput, toolCalls: [])
+        return LLMResponse(
+            textContent: rawOutput,
+            toolCalls: [],
+            rawThinking: extractedThinking,
+            rawOutput: rawOutput
+        )
     }
 }

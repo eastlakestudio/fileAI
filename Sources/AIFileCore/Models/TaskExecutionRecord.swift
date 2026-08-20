@@ -29,6 +29,7 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
     public var targetFilePaths: [String]
     
     public var errorMessage: String?
+    public var executionLogs: [String]
     
     public init(
         id: UUID = UUID(),
@@ -40,7 +41,8 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         walkthroughReport: String? = nil,
         transactionId: UUID? = nil,
         targetFilePaths: [String] = [],
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        executionLogs: [String] = []
     ) {
         self.id = id
         self.prompt = prompt
@@ -52,6 +54,7 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         self.transactionId = transactionId
         self.targetFilePaths = targetFilePaths
         self.errorMessage = errorMessage
+        self.executionLogs = executionLogs.isEmpty ? plan.executionLogs : executionLogs
     }
     
     /// 任务总耗时（秒）

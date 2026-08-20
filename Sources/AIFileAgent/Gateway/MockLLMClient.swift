@@ -34,26 +34,47 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
                     let extSummary = extCounts.map { ".\($0.key) (\($0.value)个)" }.joined(separator: ", ")
                     return LLMResponse(
                         textContent: "📊 当前选中的上下文共有 \(totalCount) 个文件/目录，格式包含：\(extSummary.isEmpty ? "无扩展名" : extSummary)。",
-                        toolCalls: []
+                        toolCalls: [],
+                        executionTraceLogs: ["📊 Mock 本地模型统计分析了 \(totalCount) 个文件"]
                     )
                 }
             }
-            return LLMResponse(textContent: "📊 当前未检测到已选文件，请在 Finder 中选中文件或点击顶部文件夹图标选取。", toolCalls: [])
+            return LLMResponse(
+                textContent: "📊 当前未检测到已选文件，请在 Finder 中选中文件或点击顶部文件夹图标选取。",
+                toolCalls: [],
+                executionTraceLogs: ["📊 Mock 本地模型处理了上下文查询"]
+            )
         }
         
         // 简单启发式匹配（供测试默认行为）
         if userMessage.contains("分辨率") || userMessage.contains("尺寸") || userMessage.contains("1920") {
             let args = "{\"targetWidth\": 1920, \"targetHeight\": 1080}"
             let call = ToolCallRequest(id: "call_resize_1", functionName: "image_resize", argumentsJSON: args)
-            return LLMResponse(textContent: "为您规划了调整图片尺寸的操作", toolCalls: [call])
+            return LLMResponse(
+                textContent: "为您规划了调整图片尺寸的操作",
+                toolCalls: [call],
+                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 image_resize Tool Call"]
+            )
         } else if userMessage.contains("pdf") || userMessage.contains("PDF") {
             let call = ToolCallRequest(id: "call_pdf_1", functionName: "doc_to_pdf", argumentsJSON: "{}")
-            return LLMResponse(textContent: "为您规划了转为 PDF 的操作", toolCalls: [call])
+            return LLMResponse(
+                textContent: "为您规划了转为 PDF 的操作",
+                toolCalls: [call],
+                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 doc_to_pdf Tool Call"]
+            )
         } else if userMessage.contains("重命名") || userMessage.contains("前缀") || userMessage.contains("整理") {
             let call = ToolCallRequest(id: "call_rename_1", functionName: "batch_rename", argumentsJSON: "{\"prefix\": \"已整理_\"}")
-            return LLMResponse(textContent: "为您规划了批量重命名操作", toolCalls: [call])
+            return LLMResponse(
+                textContent: "为您规划了批量重命名操作",
+                toolCalls: [call],
+                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 batch_rename Tool Call"]
+            )
         }
         
-        return LLMResponse(textContent: "已为您分析指令「\(userMessage)」，当前上下文未包含适用该操作的文件类型，请参考上方推荐的 Skill 胶囊。", toolCalls: [])
+        return LLMResponse(
+            textContent: "已为您分析指令「\(userMessage)」，当前上下文未包含适用该操作的文件类型，请参考上方推荐的 Skill 胶囊。",
+            toolCalls: [],
+            executionTraceLogs: ["ℹ️ Mock 引擎未生成 Tool Call"]
+        )
     }
 }

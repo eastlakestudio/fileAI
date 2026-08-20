@@ -89,12 +89,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupFloatingPanel() {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 768, height: 530),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView, .nonactivatingPanel],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.isFloatingPanel = true
-        panel.level = .floating
+        panel.isFloatingPanel = false
+        panel.level = .normal
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.titlebarSeparatorStyle = .none

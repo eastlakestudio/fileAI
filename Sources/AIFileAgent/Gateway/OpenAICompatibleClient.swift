@@ -46,17 +46,42 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
             payload["tool_choice"] = "auto"
         }
         
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        let bodyData = try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted])
+        request.httpBody = bodyData
         
+        let payloadString = String(data: bodyData, encoding: .utf8) ?? ""
+        print("""
+        ======================================================================
+        🌐 [LLM API Request Input]
+        Provider: \(providerName)
+        Endpoint: \(endpoint.absoluteString)
+        Model: \(modelName)
+        Payload:
+        \(payloadString)
+        ======================================================================
+        """)
+        
+        let startTime = Date()
         let (data, response) = try await session.data(for: request)
+        let elapsed = Date().timeIntervalSince(startTime)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NSError(domain: "OpenAIClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "无效的网络响应"])
         }
         
+        let rawText = String(data: data, encoding: .utf8) ?? ""
+        print("""
+        ======================================================================
+        🌐 [LLM API Response Output]
+        Status Code: \(httpResponse.statusCode)
+        Duration: \(String(format: "%.2fs", elapsed))
+        Raw Response:
+        \(rawText)
+        ======================================================================
+        """)
+        
         guard (200...299).contains(httpResponse.statusCode) else {
-            let errorText = String(data: data, encoding: .utf8) ?? "未知错误"
-            throw NSError(domain: "OpenAIClient", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "API 错误 (\(httpResponse.statusCode)): \(errorText)"])
+            throw NSError(domain: "OpenAIClient", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "API 错误 (\(httpResponse.statusCode)): \(rawText)"])
         }
         
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -67,6 +92,7 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
         }
         
         let content = message["content"] as? String
+        let reasoning = (message["reasoning_content"] ?? message["thought"] ?? message["reasoning"]) as? String
         var toolCalls: [ToolCallRequest] = []
         
         if let rawToolCalls = message["tool_calls"] as? [[String: Any]] {
@@ -80,6 +106,19 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
             }
         }
         
-        return LLMResponse(textContent: content, toolCalls: toolCalls)
+        var traceLogs: [String] = []
+        traceLogs.append("🌐 调用云端模型 API: \(providerName) (\(modelName))")
+        traceLogs.append("📥 API 响应成功 (状态码 \(httpResponse.statusCode), 耗时 \(String(format: "%.2fs", elapsed)))")
+        if !toolCalls.isEmpty {
+            traceLogs.append("🧩 解析出 \(toolCalls.count) 个 Tool Call: \(toolCalls.map { $0.functionName }.joined(separator: ", "))")
+        }
+        
+        return LLMResponse(
+            textContent: content,
+            toolCalls: toolCalls,
+            rawThinking: reasoning,
+            rawOutput: rawText,
+            executionTraceLogs: traceLogs
+        )
     }
 }

@@ -16,6 +16,10 @@ public struct FileItem: Identifiable, Hashable, Sendable, Codable {
     public var imageHeight: Int?
     public var pdfPageCount: Int?
     
+    // 目录包含的子项统计
+    public var childFileCount: Int?
+    public var childDirectoryCount: Int?
+    
     public init(
         url: URL,
         isDirectory: Bool,
@@ -23,7 +27,9 @@ public struct FileItem: Identifiable, Hashable, Sendable, Codable {
         modifiedDate: Date? = nil,
         imageWidth: Int? = nil,
         imageHeight: Int? = nil,
-        pdfPageCount: Int? = nil
+        pdfPageCount: Int? = nil,
+        childFileCount: Int? = nil,
+        childDirectoryCount: Int? = nil
     ) {
         self.url = url
         self.path = url.path
@@ -35,6 +41,17 @@ public struct FileItem: Identifiable, Hashable, Sendable, Codable {
         self.imageWidth = imageWidth
         self.imageHeight = imageHeight
         self.pdfPageCount = pdfPageCount
+        self.childFileCount = childFileCount
+        self.childDirectoryCount = childDirectoryCount
+    }
+    
+    /// 转换为波浪号可读全路径（例如 ~/Downloads/项目资料/工作指南.pdf）
+    public var prettyPath: String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path.hasPrefix(home) {
+            return path.replacingOccurrences(of: home, with: "~")
+        }
+        return path
     }
     
     /// 人类可读的文件大小
@@ -46,6 +63,7 @@ public struct FileItem: Identifiable, Hashable, Sendable, Codable {
     public var privacySafeSummary: [String: Any] {
         var dict: [String: Any] = [
             "name": name,
+            "path": prettyPath,
             "ext": fileExtension,
             "isDir": isDirectory,
             "size": formattedSize
@@ -55,6 +73,12 @@ public struct FileItem: Identifiable, Hashable, Sendable, Codable {
         }
         if let pages = pdfPageCount {
             dict["pages"] = pages
+        }
+        if let files = childFileCount {
+            dict["childFiles"] = files
+        }
+        if let dirs = childDirectoryCount {
+            dict["childDirs"] = dirs
         }
         return dict
     }

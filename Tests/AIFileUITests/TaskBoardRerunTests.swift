@@ -35,8 +35,9 @@ final class TaskBoardRerunTests: XCTestCase {
         // 触发再次执行
         viewModel.rerunTask(record)
         
-        // 验证：目标文件已成功切回硬件清单 xlsx，且 inputText 已填入 prompt
-        XCTAssertEqual(viewModel.inputText, prompt)
+        // 验证：目标文件已成功切回硬件清单 xlsx，且已生成对应的重试任务卡片
+        XCTAssertEqual(viewModel.taskHistory.first?.prompt, prompt)
         XCTAssertEqual(viewModel.fileItems.first?.name, "hardware_list.xlsx")
+        XCTAssertEqual(viewModel.mainTab, .chatTimeline)
     }
 }

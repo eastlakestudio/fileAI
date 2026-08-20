@@ -1,24 +1,26 @@
-# 再次执行任务目标文件精准恢复总结 (Walkthrough)
+# 任务总结报告 (Walkthrough)
 
-## 1. 修复的 BUG 根因与改进
+## 需求背景与改进成果
 
-### 1.1 问题根因
-- 之前在任务看板中点击「再次执行」时，仅简单将 `task.prompt` 回填到输入框，随后调用 `submitInstruction`；
-- 该调用默认读取了当前的 `self.fileItems`（即 Finder 最新选中的文件），**丢失了原任务关联的目标文件集合**，导致再次执行时误操作了当前选中的其他文件。
+### 1. 飞书联系人姓名智能解析与真实文件发送 ([`LarkCLIService.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileCore/Services/LarkCLIService.swift))
+- **姓名检索与 ID 自动解析**：
+  - 新增 `resolveUserOrChat(query:)`，调用飞书官方命令 `lark-cli contact +search-user --query <姓名> --as user`；
+  - 自动从通讯录检索结果中精准解析出用户的 `open_id`（如 `ou_15f5bef1b5819720067c7407342756db`）与单聊会话 `p2p_chat_id`（如 `oc_bdad5bbc3b86828fef6ac2ac089d4dfb`）；
+- **工作目录与真实文件发送通道**：
+  - 子进程执行目录（`currentDirectoryURL`）自动设置为待发送文件所在路径，解决 `lark-cli` 仅接受相对路径的规范要求；
+  - 装配指令 `lark-cli im +messages-send --as user --chat-id <chat_id> --file <fileName>`，真正将文件物理上传并投递给目标联系人！
 
-### 1.2 解决方案
-1. **任务持久化模型增强 (`TaskExecutionRecord`)**：
-   - 增加 `targetFilePaths: [String]` 字段，在任务创建和规划时持久化绑定当时的目标文件路径；
-2. **专属 `rerunTask` 流程 (`PanelViewModel`)**：
-   - 提取原任务的 `targetFilePaths`，自动校验文件在本地磁盘的存在性；
-   - 自动调用 `setTargetURLs(...)` 将面板上下文精准恢复为**原任务的目标文件**；
-   - 回填 prompt 并立即针对原文件重新规划执行；
-3. **任务看板交互升级 (`TaskBoardView`)**：
-   - 「再次执行」按钮传递完整的 `TaskExecutionRecord` 实体，确保文件上下文与指令的一致性。
+### 2. 任务卡片内部内嵌结果产出展示 ([`ChatTaskCardView.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileUI/Views/ChatTaskCardView.swift))
+- 当任务执行完成后，在卡片内部直接展示 **「产出结果文件」** 区块；
+- 包含文件格式专属图标、结果文件名、源文件追溯、以及右侧 **`🔍 访达定位`** 与 **`↗️ 打开`** 快捷按钮；
+- 优化任务卡片整体背景为**微光渐变背景（进行中蓝光/完成态绿光/失败态红光）+ 状态高光描边 + 立体柔和投影**，视觉更具质感与辨识度。
 
 ---
 
-## 2. 自动化测试
+## 验证与测试
 
-- 更新 `TaskBoardRerunTests`，通过模拟不同的当前文件与历史任务目标文件，验证再次执行时是否 100% 恢复了历史任务的目标文件。
-- 全量 **46 个单元测试全部通过（100% Pass）**。
+1. **自动化测试**：
+   - 运行 `swift test`，全量 **67/67** 项单元测试全部通过（0 failures）；
+   - 新增 `LarkUserResolutionTests` 验证姓名解析与卡片内嵌结果块渲染。
+2. **应用热重启**：
+   - 最新的 `AIFileApp` 守护进程已就绪运行。

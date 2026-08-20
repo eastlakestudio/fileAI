@@ -26,10 +26,22 @@ public struct ToolCallRequest: Identifiable, Sendable, Codable {
 public struct LLMResponse: Sendable {
     public let textContent: String?
     public let toolCalls: [ToolCallRequest]
+    public let rawThinking: String?
+    public let rawOutput: String?
+    public let executionTraceLogs: [String]
     
-    public init(textContent: String?, toolCalls: [ToolCallRequest]) {
+    public init(
+        textContent: String?,
+        toolCalls: [ToolCallRequest],
+        rawThinking: String? = nil,
+        rawOutput: String? = nil,
+        executionTraceLogs: [String] = []
+    ) {
         self.textContent = textContent
         self.toolCalls = toolCalls
+        self.rawThinking = rawThinking
+        self.rawOutput = rawOutput
+        self.executionTraceLogs = executionTraceLogs
     }
 }
 

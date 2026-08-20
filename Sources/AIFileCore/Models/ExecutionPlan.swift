@@ -52,23 +52,38 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
     }
 }
 
-/// 一次任务完整的执行计划（包含所有待变动的文件项）
+/// 一次任务完整的执行计划（包含所有待变动的文件项与 AI 思考推理详情）
 public struct ExecutionPlan: Identifiable, Sendable, Codable {
     public let id: UUID
     public let summary: String
     public var actions: [FileActionItem]
     public let createdAt: Date
+    public var thoughtProcess: String?
+    public var selectedSkillName: String?
+    public var parameters: [String: String]
+    public var modelProviderInfo: String?
+    public var executionLogs: [String]
     
     public init(
         id: UUID = UUID(),
         summary: String,
         actions: [FileActionItem],
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        thoughtProcess: String? = nil,
+        selectedSkillName: String? = nil,
+        parameters: [String: String] = [:],
+        modelProviderInfo: String? = nil,
+        executionLogs: [String] = []
     ) {
         self.id = id
         self.summary = summary
         self.actions = actions
         self.createdAt = createdAt
+        self.thoughtProcess = thoughtProcess
+        self.selectedSkillName = selectedSkillName
+        self.parameters = parameters
+        self.modelProviderInfo = modelProviderInfo
+        self.executionLogs = executionLogs
     }
     
     /// 是否存在高危变动项

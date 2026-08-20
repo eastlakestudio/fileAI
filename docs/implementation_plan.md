@@ -1,45 +1,36 @@
-# 再次执行任务目标文件精准重绑实施方案 (Implementation Plan)
+# 实施方案：飞书联系人姓名解析与任务卡片内嵌结果产出展示
 
-## 1. 问题描述与根因分析
-
-### 1.1 用户反馈
-> *"有个BUG，再次执行任务时，没有针对目标中的文件/文件夹，而是错误地使用了当前识别的选择文件内容"*
-
-### 1.2 根因分析
-- 之前在 `TaskBoardView` 中点击「再次执行」时，仅将 `task.prompt` 回填到了输入框并触发 `submitInstruction`；
-- 此时 `PanelViewModel` 直接使用了当前实时的 `self.fileItems`（即此时 Finder 最新选中的文件，或者空白文件），**丢失了原任务关联的目标文件集合**；
-- 导致再次执行时操作了错误的文件对象，甚至因为当前选中的文件类型不符而报错。
+## 需求背景
+根据用户最新指令：
+1. **飞书姓名适配打通**：通过 `lark-cli contact +search-user --query <姓名> --as user` 自动将“刘明华”或联系人姓名解析为 `open_id` 与 `p2p_chat_id`，并使用工作目录相对路径将文件真实发送给对方；
+2. **完成结果文件内嵌任务卡片**：任务完成后，生成的产出结果文件直接在任务卡片内部以精致文件块展示，并带有「🔍 访达定位」与「↗️ 打开」操作；
+3. **卡片背景色视觉突出**：任务卡片采用高质感微光渐变背景（进行中蓝光/完成态绿光/失败态红光）+ 高对比度边框与立体投影。
 
 ---
 
-## 2. 解决方案设计
+## 核心设计与改造方案
 
-### 2.1 任务模型记录目标文件路径 (`TaskExecutionRecord`)
-- 在 `TaskExecutionRecord` 中增加字段：
-  ```swift
-  public var targetFilePaths: [String] = []
-  ```
-- 在 `TaskManager.createTask` 以及 `updateTaskPlan` 时，完整记录任务涉及的所有原始输入文件路径与 Plan 中的 `sourceURL` 路径。
+### 1. [MODIFY] `LarkCLIService.swift` 增加联系人姓名解析与工作目录文件发送
+- **实现 `resolveUserOrChat(query:)`**：
+  - 调用 `lark-cli contact +search-user --query <query> --as user`；
+  - 自动从响应中提取首个联系人的 `open_id`、`p2p_chat_id` 与姓名；
+- **优化 `executeAction`**：
+  - 先自动解析联系人，获得 `chat_id` 或 `open_id`；
+  - 将子进程执行目录 `currentDirectoryURL` 设置为目标文件的所在目录；
+  - 参数传递 `--file <文件名>` 与 `--as user`；
+  - 完整记录发送状态与响应。
 
-### 2.2 PanelViewModel 增加专用 `rerunTask` 流程
-- 新增 `public func rerunTask(_ task: TaskExecutionRecord)`：
-  1. 从 `task.targetFilePaths`（或 fallback 到 `task.plan.actions.map { $0.sourceURL.path }`）提取原任务的目标文件路径；
-  2. 校验文件在磁盘上的存在性；若文件不存在则弹出清晰的警告提示；
-  3. 自动将上下文目标文件切换回原任务的目标文件（`setTargetURLs(targetURLs)` 并刷新 `fileItems`）；
-  4. 回填 `inputText = task.prompt`；
-  5. 切换回主视图并自动触发针对该文件集合的 `submitInstruction`。
-
-### 2.3 TaskBoardView 与 MainFloatingPanel 重构
-- 将 `onRerunTask` 回调入参从单纯的 `String` 升级为完整的 `TaskExecutionRecord`，确保上下文完整性。
+### 2. [MODIFY] `ChatTaskCardView.swift` 内嵌产出结果列表与视觉突出重构
+- **产出结果文件区块 (`completedResultFilesBlock`)**:
+  - 当 `task.status == .completed` 时展示；
+  - 列出每个生成的结果文件（格式专属图标、文件名、来源说明、大小）；
+  - 每项右侧配备 `🔍 访达定位` 和 `↗️ 打开` 快捷按钮；
+- **背景与边框视觉突出**:
+  - 采用微光渐变与高对比度状态描边（`statusColor.opacity(0.4)`），搭配柔和立体阴影，在聊天流中层次分明。
 
 ---
 
-## 3. 待修改文件清单
-
-1. `Sources/AIFileCore/Models/TaskExecutionRecord.swift` [MODIFY]
-2. `Sources/AIFileCore/Transaction/TaskManager.swift` [MODIFY]
-3. `Sources/AIFileUI/ViewModels/PanelViewModel.swift` [MODIFY]
-4. `Sources/AIFileUI/Views/TaskBoardView.swift` [MODIFY]
-5. `Sources/AIFileUI/Views/MainFloatingPanel.swift` [MODIFY]
-6. `Tests/AIFileUITests/TaskBoardRerunTests.swift` [MODIFY]
-7. `Tests/AIFileCoreTests/TaskManagerTests.swift` [MODIFY]
+## 验证计划
+1. **单元测试**: 编写 `LarkUserResolutionTests.swift` 验证联系人姓名查询解析与卡片产出文件列表提取。
+2. **测试套件运行**: `swift test` 确保 100% 单元测试通过。
+3. **真实调用验证**: 重新编译运行 `AIFileApp`，发送「通过飞书发给刘明华」，验证自动检索刘明华账号 -> 成功调用飞书 CLI 发送文件 -> 任务卡片内部展示生成的产出结果与定位按钮。

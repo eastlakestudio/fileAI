@@ -75,28 +75,56 @@ public final class FileMetadataEngine: Sendable {
         return allowed.contains(url.pathExtension.lowercased())
     }
     
-    /// 构建单个 FileItem，轻量探测图像和 PDF 元数据
+    /// 构建单个 FileItem，轻量探测图像、PDF 元数据及目录子项统计
     public func createFileItem(url: URL, isDirectory: Bool) -> FileItem {
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
-        let size = Int64(values?.fileSize ?? 0)
+        var size = Int64(values?.fileSize ?? 0)
         let modified = values?.contentModificationDate
         
         var imgW: Int? = nil
         var imgH: Int? = nil
         var pdfPages: Int? = nil
+        var childFiles: Int? = nil
+        var childDirs: Int? = nil
         
         let ext = url.pathExtension.lowercased()
         
-        // 轻量探测图片分辨率（不加载像素数据）
-        if ["jpg", "jpeg", "png", "heic", "webp", "gif", "tiff"].contains(ext) {
-            if let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
-               let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any] {
-                imgW = properties[kCGImagePropertyPixelWidth] as? Int
-                imgH = properties[kCGImagePropertyPixelHeight] as? Int
+        if isDirectory {
+            var fileCount = 0
+            var dirCount = 0
+            var totalDirSize: Int64 = 0
+            
+            if let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            ) {
+                for case let itemURL as URL in enumerator {
+                    let isSubDir = (try? itemURL.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                    if isSubDir {
+                        dirCount += 1
+                    } else {
+                        fileCount += 1
+                        let itemSize = (try? itemURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                        totalDirSize += Int64(itemSize)
+                    }
+                }
             }
-        } else if ext == "pdf" {
-            if let pdfDoc = PDFDocument(url: url) {
-                pdfPages = pdfDoc.pageCount
+            childFiles = fileCount
+            childDirs = dirCount
+            size = totalDirSize
+        } else {
+            // 轻量探测图片分辨率（不加载像素数据）
+            if ["jpg", "jpeg", "png", "heic", "webp", "gif", "tiff"].contains(ext) {
+                if let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+                   let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil) as? [CFString: Any] {
+                    imgW = properties[kCGImagePropertyPixelWidth] as? Int
+                    imgH = properties[kCGImagePropertyPixelHeight] as? Int
+                }
+            } else if ext == "pdf" {
+                if let pdfDoc = PDFDocument(url: url) {
+                    pdfPages = pdfDoc.pageCount
+                }
             }
         }
         
@@ -107,7 +135,9 @@ public final class FileMetadataEngine: Sendable {
             modifiedDate: modified,
             imageWidth: imgW,
             imageHeight: imgH,
-            pdfPageCount: pdfPages
+            pdfPageCount: pdfPages,
+            childFileCount: childFiles,
+            childDirectoryCount: childDirs
         )
     }
     
