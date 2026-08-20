@@ -63,6 +63,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var smartSuggestions: [SkillSuggestion] = []
     @Published public var executionMode: String = "Agent 模式"
     @Published public var reasoningEffort: String = "High"
+    @Published public var isMiniMode: Bool = false
     
     private let customDispatcher: AgentDispatcher?
     
@@ -427,6 +428,30 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     
     public func liveTask(for id: UUID) -> TaskExecutionRecord? {
         return sessionTasks.first(where: { $0.id == id }) ?? taskHistory.first(where: { $0.id == id })
+    }
+    
+    /// 删除单个任务
+    public func deleteTask(id: UUID) {
+        sessionTasks.removeAll(where: { $0.id == id })
+        taskHistory.removeAll(where: { $0.id == id })
+        if activeTask?.id == id {
+            activeTask = nil
+        }
+        Task {
+            await TaskManager.shared.deleteTask(id: id)
+            await loadTaskHistory()
+        }
+    }
+    
+    /// 清空所有历史任务
+    public func clearAllTasks() {
+        sessionTasks.removeAll()
+        taskHistory.removeAll()
+        activeTask = nil
+        Task {
+            await TaskManager.shared.clearAllTasks()
+            await loadTaskHistory()
+        }
     }
     
     private func updateSessionTask(id: UUID, _ mutation: (inout TaskExecutionRecord) -> Void) {

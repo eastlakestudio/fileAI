@@ -1,7 +1,7 @@
 import SwiftUI
 import AIFileCore
 
-/// 聊天面板顶部常驻展示的「当前目标文件与目录」上下文栏（不可关闭，高对比度视觉突出）
+/// 聊天面板顶部常驻展示的「当前目标文件与目录」一体化大胶囊卡片（不可关闭，高对比度突出背景色）
 public struct PinnedTargetFilesHeaderView: View {
     @ObservedObject var viewModel: PanelViewModel
     
@@ -10,50 +10,85 @@ public struct PinnedTargetFilesHeaderView: View {
     }
     
     public var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 10) {
-                // 左侧标题与统计摘要
+        HStack(spacing: 0) {
+            // 一体化大胶囊容器
+            HStack(alignment: .center, spacing: 8) {
+                // 1. 左侧目标文件标题（迷你模式下附带纯图标恢复大窗）
                 headerSummaryView
                 
-                // 中间：多文件 / 目录 详细胶囊卡片（支持横向滑动）
+                verticalDivider
+                
+                // 2. 中间：选中的文件 / 目录 详细信息（单文件撑满头部省略，多文件支持横向滑动）
                 if viewModel.fileItems.isEmpty {
                     emptyContextPlaceholder
                 } else {
-                    fileCapsulesScrollView
+                    fileCapsulesArea
                 }
                 
-                Spacer()
+                Spacer(minLength: 4)
                 
-                // 右侧快捷操作按钮（选取与刷新）
+                verticalDivider
+                
+                // 3. 右侧快捷操作按钮（选取与刷新）
                 actionButtons
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 LinearGradient(
                     colors: [
-                        Color(nsColor: .windowBackgroundColor).opacity(0.95),
-                        Color(nsColor: .controlBackgroundColor).opacity(0.85)
+                        Color.accentColor.opacity(0.18),
+                        Color.blue.opacity(0.10),
+                        Color(nsColor: .controlBackgroundColor).opacity(0.95)
                     ],
-                    startPoint: .top,
-                    endPoint: .bottom
+                    startPoint: .leading,
+                    endPoint: .trailing
                 )
             )
-            
-            Divider().opacity(0.18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 9)
+                    .stroke(Color.accentColor.opacity(0.40), lineWidth: 1.2)
+            )
+            .cornerRadius(9)
+            .shadow(color: Color.black.opacity(0.10), radius: 4, x: 0, y: 1.5)
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
     }
     
-    // MARK: - 左侧汇总视图
+    // MARK: - 纵向分割细线
+    
+    private var verticalDivider: some View {
+        Rectangle()
+            .fill(Color.accentColor.opacity(0.25))
+            .frame(width: 1, height: 22)
+            .padding(.horizontal, 2)
+    }
+    
+    // MARK: - 1. 左侧汇总视图 (无图钉图标，纯文字“目标文件”，迷你模式附带纯图标恢复大窗)
     
     private var headerSummaryView: some View {
         HStack(spacing: 6) {
-            Image(systemName: "pin.circle.fill")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(.accentColor)
+            if viewModel.isMiniMode {
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.isMiniMode = false
+                    }
+                }) {
+                    Image(systemName: "rectangle.expand.vertical")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.accentColor)
+                        .frame(width: 22, height: 22)
+                        .background(Color.accentColor.opacity(0.18))
+                        .cornerRadius(5)
+                }
+                .buttonStyle(.plain)
+                .help("恢复大窗")
+            }
             
             VStack(alignment: .leading, spacing: 1) {
-                Text("目标上下文")
+                Text("目标文件")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.primary)
                 
@@ -77,109 +112,111 @@ public struct PinnedTargetFilesHeaderView: View {
                 }
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
     
     // MARK: - 空状态提示
     
     private var emptyContextPlaceholder: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Image(systemName: "info.circle")
                 .font(.system(size: 10))
-            Text("尚未选择文件或目录 (在访达中选中或点击右侧选取)")
-                .font(.system(size: 11))
+            Text("尚未选择文件 (在访达中选中或点击右侧选取)")
+                .font(.system(size: 10.5))
         }
-        .foregroundColor(.secondary.opacity(0.8))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Color.primary.opacity(0.04))
-        .cornerRadius(6)
+        .foregroundColor(.secondary.opacity(0.85))
+        .padding(.horizontal, 6)
     }
     
-    // MARK: - 详细胶囊卡片列表
+    // MARK: - 2. 详细文件展示区 (单文件弹性占满，多文件横向滚动)
     
-    private var fileCapsulesScrollView: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(viewModel.fileItems) { item in
-                    capsuleCard(for: item)
+    @ViewBuilder
+    private var fileCapsulesArea: some View {
+        if viewModel.fileItems.count == 1, let singleItem = viewModel.fileItems.first {
+            capsuleCard(for: singleItem)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(viewModel.fileItems) { item in
+                        capsuleCard(for: item)
+                    }
                 }
+                .padding(.vertical, 1)
             }
-            .padding(.vertical, 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     
-    // MARK: - 单个胶囊卡片（高对比度视觉突出）
+    // MARK: - 单个文件/目录卡片项
     
     @ViewBuilder
     private func capsuleCard(for item: FileItem) -> some View {
         if item.isDirectory {
-            // 目录胶囊卡片 (琥珀金微光渐变背景)
-            HStack(spacing: 6) {
+            // 目录项
+            HStack(spacing: 5) {
                 Image(systemName: "folder.fill")
-                    .font(.system(size: 13))
-                    .foregroundColor(.yellow)
+                    .font(.system(size: 11))
+                    .foregroundColor(.orange)
                 
-                VStack(alignment: .leading, spacing: 1.5) {
-                    HStack(spacing: 4) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 3) {
                         Text(item.prettyPath)
-                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                             .foregroundColor(.primary)
                             .lineLimit(1)
+                            .truncationMode(.head)
+                            .layoutPriority(1)
                         
                         Text("目录")
-                            .font(.system(size: 8, weight: .bold))
-                            .padding(.horizontal, 3.5)
-                            .padding(.vertical, 1)
+                            .font(.system(size: 7.5, weight: .bold))
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 0.5)
                             .background(Color.orange.opacity(0.3))
                             .foregroundColor(.orange)
-                            .cornerRadius(3)
+                            .cornerRadius(2.5)
+                            .fixedSize()
                     }
                     
-                    HStack(spacing: 4) {
-                        Text("包含 \(item.childFileCount ?? 0) 个文件")
+                    HStack(spacing: 3) {
+                        Text("含 \(item.childFileCount ?? 0) 文件")
                         if let dirs = item.childDirectoryCount, dirs > 0 {
-                            Text("• \(dirs) 个子目录")
+                            Text("• \(dirs) 子目录")
                         }
                         Text("• \(item.formattedSize)")
                     }
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 9))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color.orange.opacity(0.18),
-                        Color.yellow.opacity(0.10)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3.5)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
             .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(Color.orange.opacity(0.45), lineWidth: 1.2)
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.orange.opacity(0.35), lineWidth: 0.9)
             )
-            .cornerRadius(7)
-            .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
+            .cornerRadius(6)
             .help("完整路径: \(item.path)")
             
         } else {
-            // 文件胶囊卡片 (科技品蓝/微紫高对比度背景)
-            HStack(spacing: 6) {
+            // 文件项
+            HStack(spacing: 5) {
                 Image(systemName: fileIcon(for: item.fileExtension))
-                    .font(.system(size: 13))
+                    .font(.system(size: 11))
                     .foregroundColor(.accentColor)
                 
-                VStack(alignment: .leading, spacing: 1.5) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(item.prettyPath)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                         .foregroundColor(.primary)
                         .lineLimit(1)
+                        .truncationMode(.head)
+                        .layoutPriority(1)
                     
-                    HStack(spacing: 4) {
+                    HStack(spacing: 3) {
                         Text(item.formattedSize)
                         if let p = item.pdfPageCount {
                             Text("• \(p) 页")
@@ -187,56 +224,49 @@ public struct PinnedTargetFilesHeaderView: View {
                             Text("• \(w)x\(h)")
                         }
                     }
-                    .font(.system(size: 9.5))
+                    .font(.system(size: 9))
                     .foregroundColor(.secondary)
+                    .lineLimit(1)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color.accentColor.opacity(0.20),
-                        Color.purple.opacity(0.10)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3.5)
+            .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
             .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(Color.accentColor.opacity(0.45), lineWidth: 1.2)
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.accentColor.opacity(0.35), lineWidth: 0.9)
             )
-            .cornerRadius(7)
-            .shadow(color: Color.black.opacity(0.08), radius: 3, x: 0, y: 1)
+            .cornerRadius(6)
             .help("完整路径: \(item.path)")
         }
     }
     
-    // MARK: - 右侧按钮
+    // MARK: - 3. 右侧操作按钮
     
     private var actionButtons: some View {
         HStack(spacing: 4) {
             Button(action: { viewModel.pickFilesManually() }) {
-                HStack(spacing: 3) {
+                HStack(spacing: 2.5) {
                     Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 9))
+                        .font(.system(size: 8.5))
                     Text("选取")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 9.5, weight: .medium))
                 }
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
             .controlSize(.mini)
             .help("手动选取更多文件或目录")
             
             Button(action: { viewModel.fetchFromFinder() }) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 9))
+                    .font(.system(size: 8.5))
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
             .help("重新从当前前台访达抓取选中的文件与目录")
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
     
     private func fileIcon(for ext: String) -> String {

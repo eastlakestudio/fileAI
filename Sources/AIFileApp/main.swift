@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import AIFileUI
 import AIFileFinderIntegration
 
@@ -39,6 +40,7 @@ func acquireSingleInstanceLock() -> Bool {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSPanel?
     private let viewModel = PanelViewModel()
+    private var cancellables = Set<AnyCancellable>()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 0. 监听单进程唤醒广播：当外部尝试重复启动时，激活当前窗口
@@ -77,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 3. 构建悬浮 Panel
         setupFloatingPanel()
+        
+        // 4. 监听 Mini 模式切换并平滑缩放物理窗口尺寸 (Spotlight 极简质感)
+        viewModel.$isMiniMode
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isMini in
+                self?.handleWindowModeChange(isMini: isMini)
+            }
+            .store(in: &cancellables)
     }
     
     func applicationWillTerminate(_ notification: Notification) {
@@ -112,6 +123,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.center()
         
         self.window = panel
+    }
+    
+    private func handleWindowModeChange(isMini: Bool) {
+        guard let window = window else { return }
+        let currentFrame = window.frame
+        let targetHeight: CGFloat = isMini ? 200 : 530
+        let targetWidth: CGFloat = currentFrame.width
+        let targetY = currentFrame.origin.y + (currentFrame.height - targetHeight)
+        let newFrame = NSRect(x: currentFrame.origin.x, y: targetY, width: targetWidth, height: targetHeight)
+        
+        updateTrafficLightButtons(isMini: isMini)
+        
+        if isMini {
+            window.minSize = NSSize(width: 640, height: 160)
+            window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: 235)
+        } else {
+            window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            window.minSize = NSSize(width: 640, height: 450)
+        }
+        
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            window.animator().setFrame(newFrame, display: true)
+        }
+    }
+    
+    private func updateTrafficLightButtons(isMini: Bool) {
+        guard let window = window else { return }
+        window.standardWindowButton(.closeButton)?.isHidden = isMini
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = isMini
+        window.standardWindowButton(.zoomButton)?.isHidden = isMini
     }
     
     func showWindow() {

@@ -49,7 +49,7 @@ public struct MainFloatingPanel: View {
                     .transition(.opacity)
             }
         }
-        .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 640, maxWidth: .infinity, minHeight: viewModel.isMiniMode ? 160 : 450, maxHeight: viewModel.isMiniMode ? 235 : .infinity, alignment: .top)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -99,22 +99,79 @@ public struct MainFloatingPanel: View {
     }
     
     private var mainPanelBody: some View {
-        VStack(spacing: 0) {
-            // 1. 顶部单行一体化控制栏 (与系统红绿灯 100% 同行对齐，填入最顶端)
-            unifiedTopBar
-            
-            Divider().opacity(0.3)
-            
-            // 2. 主内容展示区 (对话任务流 / 文件展示区，弹性撑满整个高度)
-            mainContentArea
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            Divider().opacity(0.2)
-            
-            // 3. 底部自然语言交互栏 (内置 + 号 Skill 呼出菜单)
-            bottomChatInputBar
+        Group {
+            if viewModel.isMiniMode {
+                // 迷你模式：彻底无系统标题栏，聊天框始终贴紧底端，预留空间居中于目标文件与聊天框之间
+                VStack(spacing: 0) {
+                    // 1. 顶部目标文件胶囊
+                    PinnedTargetFilesHeaderView(viewModel: viewModel)
+                        .padding(.top, 6)
+                    
+                    // 2. 中间弹性预留区（展示执行状态与结果定位，位于聊天框正上方）
+                    VStack(spacing: 4) {
+                        Spacer(minLength: 4)
+                        
+                        if let msg = viewModel.statusMessage {
+                            HStack(spacing: 5) {
+                                Image(systemName: msg.contains("✅") ? "checkmark.circle.fill" : (msg.contains("❌") ? "xmark.circle.fill" : "info.circle.fill"))
+                                    .font(.system(size: 10.5))
+                                    .foregroundColor(msg.contains("✅") ? .green : (msg.contains("❌") ? .red : .accentColor))
+                                
+                                Text(msg)
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundColor(msg.contains("✅") ? .green : (msg.contains("❌") ? .red : .primary))
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                if !viewModel.latestOutputURLs.isEmpty {
+                                    Button("在访达中定位结果 ↗") {
+                                        viewModel.openLatestOutputDirectory()
+                                    }
+                                    .font(.system(size: 9.5, weight: .medium))
+                                    .buttonStyle(.plain)
+                                    .foregroundColor(.accentColor)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 3.5)
+                            .background(Color.primary.opacity(0.04))
+                            .cornerRadius(6)
+                            .padding(.horizontal, 14)
+                            .transition(.opacity)
+                        }
+                        
+                        Spacer(minLength: 4)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    
+                    // 3. 底部自然语言输入卡片（始终紧贴底端）
+                    ModernChatInputCardView(viewModel: viewModel)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                }
+                .padding(.horizontal, 10)
+                .frame(minWidth: 640, maxWidth: .infinity, minHeight: 160, maxHeight: 235)
+            } else {
+                // 标准模式：完整标题栏 + 时间线对话/任务流 + 底部输入框
+                VStack(spacing: 0) {
+                    // 1. 顶部单行一体化控制栏
+                    unifiedTopBar
+                    
+                    Divider().opacity(0.3)
+                    
+                    // 2. 主内容展示区 (对话任务流 / 文件展示区)
+                    mainContentArea
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    
+                    Divider().opacity(0.2)
+                    
+                    // 3. 底部自然语言交互栏
+                    bottomChatInputBar
+                }
+                .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
+            }
         }
-        .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
     }
     
     // MARK: - Single Unified Top Bar (极简纯净顶栏)
@@ -139,58 +196,59 @@ public struct MainFloatingPanel: View {
             
             Spacer()
             
-            // 任务看板全页切换
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    viewModel.currentPage = .taskBoard
+            // 顶栏右侧快捷功能入口
+            HStack(spacing: 6) {
+                // 任务看板入口
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.currentPage = .taskBoard
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checklist")
+                            .font(.system(size: 11))
+                        Text("任务看板")
+                            .font(.system(size: 11, weight: .medium))
+                        if !viewModel.sessionTasks.isEmpty {
+                            Text("\(viewModel.sessionTasks.count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.accentColor.opacity(0.2))
+                                .clipShape(Capsule())
+                        }
+                    }
                 }
-            }) {
-                HStack(spacing: 3) {
-                    Image(systemName: "list.clipboard")
-                    Text("任务看板")
-                }
-                .font(.system(size: 11, weight: .medium))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            
-            // 统一配置管理全页切换
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    viewModel.currentPage = .settings(initialTab: .cloudModel)
-                }
-            }) {
-                HStack(spacing: 3) {
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("查看已执行/正在执行的任务记录")
+                
+                // 配置管理入口
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.currentPage = .settings(initialTab: .cloudModel)
+                    }
+                }) {
                     Image(systemName: "slider.horizontal.3")
-                    Text("配置管理")
+                        .font(.system(size: 11))
                 }
-                .font(.system(size: 11, weight: .medium))
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("配置管理（LLM API、CLI 引擎与本地技能库）")
+                
+                // 迷你模式切换按钮
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        viewModel.isMiniMode.toggle()
+                    }
+                }) {
+                    Image(systemName: viewModel.isMiniMode ? "rectangle.expand.vertical" : "rectangle.compress.vertical")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help(viewModel.isMiniMode ? "展开为标准完整面板" : "收起为迷你悬浮卡片")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            
-            // 撤销
-            Button(action: { viewModel.undoLastOperation() }) {
-                Image(systemName: "arrow.uturn.backward")
-                    .font(.system(size: 10))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("撤销上次操作 (⌘Z)")
-            .keyboardShortcut("z", modifiers: .command)
-            
-            // 退出应用
-            Button(action: {
-                NSApplication.shared.terminate(nil)
-            }) {
-                Image(systemName: "power")
-                    .font(.system(size: 10))
-                    .foregroundColor(.red.opacity(0.85))
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .help("退出文件魔法棒 (⌘Q)")
-            .keyboardShortcut("q", modifiers: .command)
         }
         .padding(.leading, 78) // 预留左侧 78px 红黄绿系统按钮位置
         .padding(.trailing, 14)
@@ -219,57 +277,31 @@ public struct MainFloatingPanel: View {
     }
     
     private var bottomChatInputBar: some View {
-        VStack(spacing: 6) {
-            // 最近生成文件的快捷定位与打开横幅
-            if !viewModel.latestOutputURLs.isEmpty {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(.green)
+        VStack(spacing: 5) {
+            if let msg = viewModel.statusMessage {
+                HStack(spacing: 5) {
+                    Image(systemName: msg.contains("✅") ? "checkmark.circle.fill" : (msg.contains("❌") ? "xmark.circle.fill" : "info.circle.fill"))
+                        .font(.system(size: 10.5))
+                        .foregroundColor(msg.contains("✅") ? .green : (msg.contains("❌") ? .red : .accentColor))
                     
-                    Text("已生成 \(viewModel.latestOutputURLs.count) 个结果文件")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.primary)
+                    Text(msg)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(msg.contains("✅") ? .green : (msg.contains("❌") ? .red : .primary))
+                        .lineLimit(1)
                     
                     Spacer()
                     
-                    Button(action: { viewModel.revealLatestOutputFiles() }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 10, weight: .bold))
-                            Text("在访达中高亮定位")
-                                .font(.system(size: 10, weight: .bold))
+                    if !viewModel.latestOutputURLs.isEmpty {
+                        Button("在访达中定位结果 ↗") {
+                            viewModel.openLatestOutputDirectory()
                         }
+                        .font(.system(size: 9.5, weight: .medium))
+                        .buttonStyle(.plain)
+                        .foregroundColor(.accentColor)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.mini)
-                    
-                    Button(action: { viewModel.openLatestOutputDirectory() }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "folder")
-                                .font(.system(size: 10))
-                            Text("打开目录")
-                                .font(.system(size: 10))
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.green.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(Color.green.opacity(0.25), lineWidth: 1)
-                )
-                .cornerRadius(6)
-            }
-            
-            if let msg = viewModel.statusMessage {
-                Text(msg)
-                    .font(.system(size: 11))
-                    .foregroundColor(msg.contains("❌") ? .red : .accentColor)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+                .transition(.opacity)
             }
             
             // 现代化一体输入卡片组件（内嵌选中文件悬浮胶囊、多行输入与底部工具栏）

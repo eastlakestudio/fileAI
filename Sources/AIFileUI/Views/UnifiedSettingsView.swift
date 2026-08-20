@@ -43,6 +43,7 @@ public struct UnifiedSettingsView: View {
     @State private var localSkills: [SkillMetadata] = []
     @State private var cloudSkills: [SkillMetadata] = []
     @State private var expandedSkillId: String? = nil
+    @State private var expandedCategories: Set<SkillCategory> = [.image, .document, .organization, .collaboration, .custom]
     @State private var isShowingImportModal: Bool = false
     @State private var importMarkdownText: String = ""
     @State private var importErrorMessage: String? = nil
@@ -57,6 +58,10 @@ public struct UnifiedSettingsView: View {
     ) {
         let initialSettings = ModelSettingsManager.shared.settings
         self._modelSettings = State(initialValue: initialSettings)
+        self._discoveredCLIs = State(initialValue: CLIDiscoveryEngine.shared.lastDiscoveredTools)
+        self._availableProviders = State(initialValue: ProviderConfigRegistry.shared.providers)
+        self._localSkills = State(initialValue: SkillManager.shared.allSkills)
+        self._cloudSkills = State(initialValue: SkillManager.shared.cloudMarketSkills)
         
         // 若未显式指定，根据当前活跃 Provider 自动定位到云端或本地 CLI 导航
         let activeTab: SettingsNavTab = {
@@ -178,13 +183,13 @@ public struct UnifiedSettingsView: View {
             // 引擎 1：云端 API
             tabNavRow(
                 tab: .cloudModel,
-                badge: !isUsingLocalCLI ? "当前使用" : "\(cloudProviders.count) 个"
+                badge: !isUsingLocalCLI ? "当前" : "\(cloudProviders.count) 个"
             )
             
             // 引擎 2：本地 CLI
             tabNavRow(
                 tab: .cliModel,
-                badge: isUsingLocalCLI ? "当前使用" : "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
+                badge: isUsingLocalCLI ? "当前" : "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
             )
             
             Text("功能扩展")
@@ -250,7 +255,7 @@ public struct UnifiedSettingsView: View {
             selectedTab = tab
             testStatus = nil
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: tab.icon)
                     .font(.system(size: 12))
                     .foregroundColor(isSelected ? .accentColor : .secondary)
@@ -259,24 +264,27 @@ public struct UnifiedSettingsView: View {
                 Text(tab.rawValue)
                     .font(.system(size: 12, weight: isSelected ? .bold : .regular))
                     .foregroundColor(isSelected ? .primary : .secondary)
+                    .lineLimit(1)
                 
-                Spacer()
+                Spacer(minLength: 2)
                 
                 Text(badge)
                     .font(.system(size: 9, weight: isCurrentEngine ? .bold : .regular, design: .monospaced))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
                     .background(isCurrentEngine ? Color.green.opacity(0.18) : (isSelected ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06)))
                     .foregroundColor(isCurrentEngine ? .green : (isSelected ? .accentColor : .secondary))
                     .cornerRadius(3)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(isSelected ? Color.accentColor.opacity(0.12) : Color.clear)
             .cornerRadius(6)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
     }
     
     // MARK: - 3. Right Content Area
@@ -589,77 +597,120 @@ public struct UnifiedSettingsView: View {
         .cornerRadius(6)
     }
     
-    // MARK: - Tab: Skill 技能库
+    // MARK: - Tab: Skill 技能库 (风琴模式展示)
     
     private var skillLibraryContentView: some View {
         VStack(spacing: 0) {
-            // 分类胶囊栏
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(SkillCategory.allCases.filter { $0 != .cloudMarket }) { cat in
-                        let isCatSelected = selectedSkillCategory == cat
-                        let count = cat == .all ? localSkills.count : localSkills.filter { $0.category == cat }.count
-                        Button(action: { selectedSkillCategory = cat }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: cat.icon)
-                                    .font(.system(size: 9))
-                                Text("\(cat.rawValue) (\(count))")
-                                    .font(.system(size: 11, weight: isCatSelected ? .bold : .regular))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(isCatSelected ? Color.accentColor : Color.primary.opacity(0.06))
-                            .foregroundColor(isCatSelected ? .white : .primary)
-                            .cornerRadius(5)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        importErrorMessage = nil
-                        importMarkdownText = defaultMarkdownTemplate
-                        isShowingImportModal = true
-                    }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: "plus")
-                            Text("导入 Skill")
-                        }
-                        .font(.system(size: 10, weight: .medium))
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+            // 顶栏说明与导入按钮
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("本地已安装 Skill 技能库")
+                        .font(.system(size: 13, weight: .bold))
+                    Text("所有分类均可折叠展开，支持随时切换启用状态与查看配置参数：")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(.secondary)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                
+                Spacer()
+                
+                Button(action: {
+                    importErrorMessage = nil
+                    importMarkdownText = defaultMarkdownTemplate
+                    isShowingImportModal = true
+                }) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "plus")
+                        Text("导入 Skill")
+                    }
+                    .font(.system(size: 10.5, weight: .medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
             .background(Color.primary.opacity(0.02))
             
             Divider().opacity(0.15)
             
-            // 技能卡片列表
+            // 风琴折叠分类列表
             ScrollView {
-                LazyVStack(spacing: 8) {
-                    if displayedLocalSkills.isEmpty {
-                        VStack(spacing: 6) {
-                            Image(systemName: "tray")
-                                .font(.title3)
-                                .foregroundColor(.secondary)
-                            Text("当前分类暂无已安装的 Skill")
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                    } else {
-                        ForEach(displayedLocalSkills) { skill in
-                            skillCardRow(skill: skill)
+                VStack(spacing: 10) {
+                    let displayCategories: [SkillCategory] = [.image, .document, .organization, .collaboration, .custom]
+                    
+                    ForEach(displayCategories, id: \.self) { cat in
+                        let catSkills = localSkills.filter { $0.category == cat }
+                        if !catSkills.isEmpty {
+                            categoryAccordionSection(category: cat, skills: catSkills)
                         }
                     }
                 }
                 .padding(14)
             }
         }
+    }
+    
+    @ViewBuilder
+    private func categoryAccordionSection(category: SkillCategory, skills: [SkillMetadata]) -> some View {
+        let isExpanded = expandedCategories.contains(category)
+        
+        VStack(alignment: .leading, spacing: 0) {
+            // 风琴头部
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if isExpanded {
+                        expandedCategories.remove(category)
+                    } else {
+                        expandedCategories.insert(category)
+                    }
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 12)
+                    
+                    Image(systemName: category.icon)
+                        .font(.system(size: 12))
+                        .foregroundColor(.accentColor)
+                    
+                    Text(category.rawValue)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.primary)
+                    
+                    Text("\(skills.count) 个技能")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("\(skills.filter { $0.isEnabled }.count) 已启用")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundColor(.green)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.8))
+            }
+            .buttonStyle(.plain)
+            
+            // 风琴展开内容
+            if isExpanded {
+                VStack(spacing: 6) {
+                    ForEach(skills) { skill in
+                        skillCardRow(skill: skill)
+                    }
+                }
+                .padding(8)
+                .background(Color.primary.opacity(0.02))
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
+        )
+        .cornerRadius(8)
     }
     
     @ViewBuilder
@@ -837,64 +888,6 @@ public struct UnifiedSettingsView: View {
                         ))
                         .toggleStyle(.switch)
                         .controlSize(.small)
-                    }
-                    
-                    Divider().opacity(0.15)
-                    
-                    // 窗口交互呈现模式
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("窗口交互呈现模式:")
-                            .font(.system(size: 11, weight: .medium))
-                        
-                        HStack(spacing: 8) {
-                            Button(action: { uiWindowMode = "standard" }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "macwindow")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(uiWindowMode == "standard" ? .accentColor : .secondary)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text("标准面板模式")
-                                            .font(.system(size: 11, weight: .bold))
-                                        Text("完整文件树、多文件批量与看板")
-                                            .font(.system(size: 9))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(uiWindowMode == "standard" ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(uiWindowMode == "standard" ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: 1)
-                                )
-                                .cornerRadius(6)
-                            }
-                            .buttonStyle(.plain)
-                            
-                            Button(action: { uiWindowMode = "mini" }) {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "rectangle.compress.vertical")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(uiWindowMode == "mini" ? .accentColor : .secondary)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text("Mini 聊天框模式")
-                                            .font(.system(size: 11, weight: .bold))
-                                        Text("极简悬浮输入胶囊与即时触发")
-                                            .font(.system(size: 9))
-                                            .foregroundColor(.secondary)
-                                    }
-                                }
-                                .padding(8)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(uiWindowMode == "mini" ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(uiWindowMode == "mini" ? Color.accentColor : Color.primary.opacity(0.1), lineWidth: 1)
-                                )
-                                .cornerRadius(6)
-                            }
-                            .buttonStyle(.plain)
-                        }
                     }
                 }
                 .padding(12)

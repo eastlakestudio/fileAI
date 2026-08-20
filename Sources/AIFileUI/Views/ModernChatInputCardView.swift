@@ -35,7 +35,7 @@ public struct ModernChatInputCardView: View {
     
     private var mainTextInputArea: some View {
         TextField(
-            "随便问点什么， / 可查看命令， @ 可添加上下文...",
+            "",
             text: $viewModel.inputText,
             axis: .vertical
         )
@@ -57,7 +57,7 @@ public struct ModernChatInputCardView: View {
             // + 菜单：添加文件与智能技能
             plusActionMenu
             
-            // 模式选择 (如: Agent 模式 ⌄)
+            // 模式选择 (纯净标签，去除下拉箭头)
             modeSelectorMenu
             
             // 模型选择 (如: ✨ DeepSeek V4 Flash ⌄ / ✨ Google Antigravity ⌄)
@@ -170,17 +170,13 @@ public struct ModernChatInputCardView: View {
                 viewModel.executionMode = "仅预览"
             }
         } label: {
-            HStack(spacing: 3) {
-                Text(viewModel.executionMode)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.primary.opacity(0.85))
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.7))
-            }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
+            Text(viewModel.executionMode)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.primary.opacity(0.85))
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
         }
+        .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
     }
     

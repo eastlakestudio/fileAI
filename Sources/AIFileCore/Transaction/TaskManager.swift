@@ -86,6 +86,16 @@ public actor TaskManager {
         try? FileManager.default.removeItem(at: fileURL)
     }
     
+    /// 清空所有任务记录与持久化文件
+    public func clearAllTasks() {
+        tasks.removeAll()
+        if let files = try? FileManager.default.contentsOfDirectory(at: storageDirectory, includingPropertiesForKeys: nil) {
+            for file in files {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+    
     /// 取消/放弃指定进行中的任务
     public func cancelTask(id: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
