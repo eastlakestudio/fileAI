@@ -118,7 +118,7 @@ public struct ChatTaskCardView: View {
                         .foregroundColor(.secondary)
                 }
                 
-                Text(task.createdAt.formatted(date: .omitted, time: .shortened))
+                Text(task.humanFriendlyTime)
                     .font(.system(size: 9))
                     .foregroundColor(.secondary.opacity(0.8))
             }

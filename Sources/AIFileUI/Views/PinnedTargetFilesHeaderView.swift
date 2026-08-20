@@ -70,7 +70,7 @@ public struct PinnedTargetFilesHeaderView: View {
                 restoreWindowButton
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 14)
         .padding(.top, 8)
         .padding(.bottom, 6)
     }

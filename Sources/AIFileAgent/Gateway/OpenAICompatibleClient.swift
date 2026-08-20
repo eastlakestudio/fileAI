@@ -106,6 +106,11 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
             }
         }
         
+        // 兼容模型直接将 Tool Call JSON 输出到 content 的情况（如 DeepSeek/Qwen/Ollama/本地模型）
+        if toolCalls.isEmpty, let content = content {
+            toolCalls = extractToolCallsFromText(content)
+        }
+        
         var traceLogs: [String] = []
         traceLogs.append("🌐 调用云端模型 API: \(providerName) (\(modelName))")
         traceLogs.append("📥 API 响应成功 (状态码 \(httpResponse.statusCode), 耗时 \(String(format: "%.2fs", elapsed)))")
@@ -120,5 +125,50 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
             rawOutput: rawText,
             executionTraceLogs: traceLogs
         )
+    }
+    
+    private func extractToolCallsFromText(_ text: String) -> [ToolCallRequest] {
+        var cleanJSON = text
+        
+        // 剥离可能存在的 ```json ... ``` 包裹
+        if let start = cleanJSON.range(of: "```json") {
+            cleanJSON = String(cleanJSON[start.upperBound...])
+            if let end = cleanJSON.range(of: "```") {
+                cleanJSON = String(cleanJSON[..<end.lowerBound])
+            }
+        } else if let start = cleanJSON.range(of: "```") {
+            cleanJSON = String(cleanJSON[start.upperBound...])
+            if let end = cleanJSON.range(of: "```") {
+                cleanJSON = String(cleanJSON[..<end.lowerBound])
+            }
+        }
+        
+        cleanJSON = cleanJSON.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if let startBrace = cleanJSON.firstIndex(of: "{"),
+           let endBrace = cleanJSON.lastIndex(of: "}"),
+           startBrace < endBrace {
+            let jsonSubstring = String(cleanJSON[startBrace...endBrace])
+            if let data = jsonSubstring.data(using: .utf8),
+               let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                
+                // 格式 A: {"tool": "...", "arguments": {...}}
+                if let toolName = (jsonDict["tool"] ?? jsonDict["function"] ?? jsonDict["skill"]) as? String,
+                   let args = (jsonDict["arguments"] ?? jsonDict["parameters"]) as? [String: Any],
+                   let argsData = try? JSONSerialization.data(withJSONObject: args),
+                   let argsString = String(data: argsData, encoding: .utf8) {
+                    return [ToolCallRequest(id: "call_json_\(UUID().uuidString.prefix(6))", functionName: toolName, argumentsJSON: argsString)]
+                }
+                
+                // 格式 B: {"name": "...", "parameters": {...}}
+                if let funcName = jsonDict["name"] as? String,
+                   let args = (jsonDict["parameters"] ?? jsonDict["arguments"]) as? [String: Any],
+                   let argsData = try? JSONSerialization.data(withJSONObject: args),
+                   let argsString = String(data: argsData, encoding: .utf8) {
+                    return [ToolCallRequest(id: "call_json_\(UUID().uuidString.prefix(6))", functionName: funcName, argumentsJSON: argsString)]
+                }
+            }
+        }
+        return []
     }
 }

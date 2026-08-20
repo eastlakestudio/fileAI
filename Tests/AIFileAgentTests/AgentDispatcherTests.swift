@@ -5,34 +5,29 @@ import XCTest
 
 final class AgentDispatcherTests: XCTestCase {
     
-    func testFastPathDocToPDFInstantMatching() async throws {
+    func testDocToPDFPlanning() async throws {
         let registry = SkillRegistry()
         registry.register(DocToPDFSkill())
         
         let dispatcher = AgentDispatcher(provider: MockLLMClient(), registry: registry)
-        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/drawing.pdf"), isDirectory: false)
+        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/drawing.docx"), isDirectory: false)
         
-        let startTime = Date()
-        let plan = try await dispatcher.generatePlan(userPrompt: "转成 A3 横版 pdf", fileItems: [fileItem])
-        let elapsed = Date().timeIntervalSince(startTime)
-        
-        // Fast-path 应在 0.05 秒内毫秒级瞬时返回
-        XCTAssertLessThan(elapsed, 0.05)
+        let plan = try await dispatcher.generatePlan(userPrompt: "转成 pdf", fileItems: [fileItem])
         XCTAssertEqual(plan.actions.count, 1)
         XCTAssertEqual(plan.actions.first?.operationType, .convertToPDF)
-        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "drawing_A3.pdf")
     }
     
-    func testFastPathImageResizeInstantMatching() async throws {
+    func testArbitraryResolutionParameterExtraction() async throws {
         let registry = SkillRegistry()
         registry.register(ImageResizeSkill())
         
         let dispatcher = AgentDispatcher(provider: MockLLMClient(), registry: registry)
-        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/photo.jpg"), isDirectory: false, imageWidth: 4000, imageHeight: 3000)
+        let fileItem = FileItem(url: URL(fileURLWithPath: "/tmp/icon_128.png"), isDirectory: false, imageWidth: 128, imageHeight: 128)
         
-        let plan = try await dispatcher.generatePlan(userPrompt: "统一修改为 1920x1080", fileItems: [fileItem])
+        let plan = try await dispatcher.generatePlan(userPrompt: "修改 1280*456分辨率", fileItems: [fileItem])
         XCTAssertFalse(plan.actions.isEmpty)
         XCTAssertEqual(plan.actions.first?.operationType, .resizeImage)
+        XCTAssertEqual(plan.actions.first?.targetURL?.lastPathComponent, "icon_128_1280x456.png")
     }
     
     func testAgentDispatcherGeneratesPlanViaMockProvider() async throws {

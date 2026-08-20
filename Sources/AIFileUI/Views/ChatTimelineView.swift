@@ -45,7 +45,7 @@ public struct ChatTimelineView: View {
                     if tasks.isEmpty {
                         emptyWelcomeView
                     } else {
-                        // 倒序展示：最新任务在最下方（经典聊天流习惯）或正序排列
+                        // 倒序展示：最新任务在最下方（经典聊天流习惯）
                         ForEach(tasks.reversed()) { task in
                             ChatTaskCardView(
                                 task: task,
@@ -59,16 +59,43 @@ public struct ChatTimelineView: View {
                             )
                             .id(task.id)
                         }
+                        
+                        // 底部定位锚点，确保新创建的任务卡片完全滚入视野
+                        Color.clear
+                            .frame(height: 1)
+                            .id("chat_bottom_anchor")
                     }
                 }
                 .padding(14)
             }
             .onChange(of: tasks.count) { _ in
-                if let last = tasks.first {
-                    withAnimation {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: activeTaskId) { _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onChange(of: tasks.first?.id) { _ in
+                scrollToBottom(proxy: proxy)
+            }
+            .onAppear {
+                scrollToBottom(proxy: proxy)
+            }
+        }
+    }
+    
+    private func scrollToBottom(proxy: ScrollViewProxy) {
+        // 分两次微调度触发，确保 SwiftUI 完成首轮卡片高度布局与子视图展开后精准触底
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.25)) {
+                if let newestTask = tasks.first {
+                    proxy.scrollTo(newestTask.id, anchor: .bottom)
                 }
+                proxy.scrollTo("chat_bottom_anchor", anchor: .bottom)
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeOut(duration: 0.25)) {
+                proxy.scrollTo("chat_bottom_anchor", anchor: .bottom)
             }
         }
     }

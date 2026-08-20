@@ -170,7 +170,6 @@ public struct MainFloatingPanel: View {
                         .padding(.horizontal, 14)
                         .padding(.bottom, 10)
                 }
-                .padding(.horizontal, 10)
                 .frame(minWidth: 640, maxWidth: .infinity, minHeight: 160, maxHeight: 235)
             } else {
                 // 标准模式：完整标题栏 + 时间线对话/任务流 + 底部输入框

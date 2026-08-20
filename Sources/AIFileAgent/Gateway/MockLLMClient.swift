@@ -46,14 +46,25 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
             )
         }
         
-        // 简单启发式匹配（供测试默认行为）
-        if userMessage.contains("分辨率") || userMessage.contains("尺寸") || userMessage.contains("1920") {
-            let args = "{\"targetWidth\": 1920, \"targetHeight\": 1080}"
+        // 尺寸与分辨率匹配（供测试默认行为）
+        if userMessage.contains("分辨率") || userMessage.contains("尺寸") || userMessage.contains("缩放") || userMessage.contains("1920") || userMessage.contains("1280") {
+            var width = 1920
+            var height = 1080
+            if let regex = try? NSRegularExpression(pattern: #"(\d{2,5})\s*[*xX×,-]\s*(\d{2,5})"#),
+               let match = regex.firstMatch(in: userMessage, range: NSRange(userMessage.startIndex..., in: userMessage)),
+               let wRange = Range(match.range(at: 1), in: userMessage),
+               let hRange = Range(match.range(at: 2), in: userMessage),
+               let w = Int(userMessage[wRange]),
+               let h = Int(userMessage[hRange]) {
+                width = w
+                height = h
+            }
+            let args = "{\"targetWidth\": \(width), \"targetHeight\": \(height)}"
             let call = ToolCallRequest(id: "call_resize_1", functionName: "image_resize", argumentsJSON: args)
             return LLMResponse(
-                textContent: "为您规划了调整图片尺寸的操作",
+                textContent: "为您规划了调整图片尺寸为 \(width)x\(height) 的操作",
                 toolCalls: [call],
-                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 image_resize Tool Call"]
+                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 image_resize Tool Call (width=\(width), height=\(height))"]
             )
         } else if userMessage.contains("pdf") || userMessage.contains("PDF") {
             let call = ToolCallRequest(id: "call_pdf_1", functionName: "doc_to_pdf", argumentsJSON: "{}")
@@ -71,8 +82,8 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
             )
         } else if userMessage.contains("音频") || userMessage.contains("视频") || userMessage.contains("水印") || userMessage.contains("写") || userMessage.contains("创建") || userMessage.contains("新技能") {
             var cat = "音视频处理"
-            var name = "音视频提取转换"
-            var id = "media_transcoder"
+            var name = "音频批量提取"
+            var id = "audio_extractor"
             if userMessage.contains("水印") {
                 cat = "图片处理"
                 name = "图片批量水印"

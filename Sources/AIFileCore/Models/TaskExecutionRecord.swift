@@ -73,4 +73,69 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
             return String(format: "%.1fs", dur)
         }
     }
+    
+    /// 人性化相对/绝对时间展示
+    public var humanFriendlyTime: String {
+        return TaskExecutionRecord.formatHumanFriendlyTime(date: createdAt)
+    }
+    
+    /// 静态格式化方法（支持注入当前基准时间，方便单元测试）
+    public static func formatHumanFriendlyTime(date: Date, relativeTo now: Date = Date()) -> String {
+        let calendar = Calendar.current
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateFormat = "HH:mm"
+        let timeStr = timeFormatter.string(from: date)
+        
+        let interval = now.timeIntervalSince(date)
+        
+        // 1. 未来时间或极短时间（< 60秒）
+        if interval < 60 && interval >= -5 {
+            return "刚刚"
+        }
+        
+        // 2. 1小时内（< 3600秒）：X分钟前
+        if interval < 3600 && interval >= 60 {
+            let minutes = max(1, Int(interval / 60))
+            return "\(minutes)分钟前"
+        }
+        
+        // 3. 今天（同一自然天，>= 1小时）：今天 HH:mm
+        if calendar.isDate(date, inSameDayAs: now) {
+            return "今天 \(timeStr)"
+        }
+        
+        // 4. 昨天：昨天 HH:mm
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "昨天 \(timeStr)"
+        }
+        
+        // 5. 本周内（同自然周）：周X HH:mm
+        let currentWeek = calendar.component(.weekOfYear, from: now)
+        let currentYear = calendar.component(.yearForWeekOfYear, from: now)
+        let targetWeek = calendar.component(.weekOfYear, from: date)
+        let targetYear = calendar.component(.yearForWeekOfYear, from: date)
+        
+        if currentYear == targetYear && currentWeek == targetWeek {
+            let weekday = calendar.component(.weekday, from: date)
+            let weekdayNames = ["", "周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+            let name = (weekday >= 1 && weekday <= 7) ? weekdayNames[weekday] : "本周"
+            return "\(name) \(timeStr)"
+        }
+        
+        // 6. 本年内（非本周非昨天）：MM-dd HH:mm（短格式，不显示年份）
+        let nowYear = calendar.component(.year, from: now)
+        let dateYear = calendar.component(.year, from: date)
+        
+        if nowYear == dateYear {
+            let df = DateFormatter()
+            df.dateFormat = "MM-dd HH:mm"
+            return df.string(from: date)
+        }
+        
+        // 7. 往年（跨年）：yyyy-MM-dd HH:mm
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd HH:mm"
+        return df.string(from: date)
+    }
 }

@@ -307,12 +307,35 @@ public struct TaskBoardView: View {
                                 .background(badgeColor(task.status).opacity(0.12))
                                 .foregroundColor(badgeColor(task.status))
                                 .cornerRadius(3)
+                            
+                            Spacer()
+                            
+                            // 人性化相对/绝对时间展示
+                            HStack(spacing: 3) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 8.5))
+                                Text(task.humanFriendlyTime)
+                                    .font(.system(size: 9.5, weight: .medium))
+                            }
+                            .foregroundColor(.secondary.opacity(0.9))
                         }
                         
-                        Text(task.plan.summary)
-                            .font(.system(size: 10.5))
-                            .foregroundColor(.secondary)
-                            .lineLimit(1)
+                        HStack(spacing: 6) {
+                            Text(task.plan.summary)
+                                .font(.system(size: 10.5))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 2) {
+                                Image(systemName: "stopwatch")
+                                    .font(.system(size: 8))
+                                Text(task.formattedDuration)
+                                    .font(.system(size: 9, design: .monospaced))
+                            }
+                            .foregroundColor(.secondary.opacity(0.7))
+                        }
                     }
                     
                     Spacer()
