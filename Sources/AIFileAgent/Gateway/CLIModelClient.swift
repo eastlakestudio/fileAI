@@ -59,12 +59,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         【用户指令】: \(userMsg)
         
         【输出格式要求】:
-        请根据上述已启用的 Skill 技能池与 Tool Calling Schema，直接输出纯 JSON 执行计划（可包含 <think>...</think> 思考内容）。
-        格式示例：
-        {"tool": "image_resize", "arguments": {"targetWidth": 1920, "targetHeight": 1080}}
-        或
-        {"tool": "doc_to_pdf", "arguments": {}}
-        不要输出任何与 JSON 无关的代码块标记外的多余说明。
+        根据上述可用技能池与任务规划法则，直接输出规范的纯 JSON 计划（可包含 <think>...</think> 思考分析过程）：
+        - 如果调用工具：输出形如 {"tool": "skill_id", "arguments": { ... }} 或创建新技能 {"tool": "create_skill", "arguments": { ... }}；
+        - 如果是纯问答/信息查询：在思考后直接输出回答文本；
+        严禁输出任何与任务执行无关的多余说明。
         """
         
         // 根据 CLI 工具类型组装启动参数

@@ -10,6 +10,9 @@ public actor TaskManager {
     public init(storageDirectory: URL? = nil) {
         if let dir = storageDirectory {
             self.storageDirectory = dir
+        } else if NSClassFromString("XCTest") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("AIFileAssistantTests_tasks", isDirectory: true)
+            self.storageDirectory = tempDir
         } else {
             let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             self.storageDirectory = appSupport.appendingPathComponent("AIFileAssistant/tasks", isDirectory: true)

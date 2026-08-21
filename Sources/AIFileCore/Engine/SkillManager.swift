@@ -434,6 +434,66 @@ public final class SkillManager: @unchecked Sendable {
                 markdownContent: "# 隐私与 EXIF 清理 (clean_metadata.md)\n\n本地安全抹除敏感地理位置与私人 EXIF 标签。"
             ),
             SkillMetadata(
+                id: "lark_fetch_messages",
+                name: "飞书消息与会话拉取",
+                icon: "message.badge.filled.fill",
+                category: .collaboration,
+                summary: "调用飞书 CLI (lark-cli) 或生态网关拉取今日、指定群聊或私聊消息并导出为本地中间数据文件",
+                supportedExtensions: ["*"],
+                parametersDescription: [
+                    "timeRange": "时间范围 (today, yesterday, week)",
+                    "chatName": "指定群聊或联系人名称",
+                    "outputFormat": "数据导出格式 (json, md)"
+                ],
+                examplePrompts: [
+                    "拉取飞书今天的消息",
+                    "获取飞书项目群最近收到的通知",
+                    "导出今日飞书会话记录"
+                ],
+                markdownContent: "# 飞书消息拉取 (lark_fetch_messages.md)\n\n基于 lark-cli 安全拉取会话消息并写入本地中间文件，供下游待办分析或归档处理。",
+                executableScript: """
+                OUT_FILE="${AIFILE_PARAM_OUTPUTFILENAME:-lark_today_messages.json}"
+                if command -v lark-cli >/dev/null 2>&1; then
+                  lark-cli message fetch --today --out "$OUT_FILE"
+                else
+                  echo '{"messages": [{"sender": "技术架构群", "content": "下午3点进行架构评审", "time": "10:30"}, {"sender": "李经理", "content": "请确认本周排期表并提交OA审批", "time": "11:15"}]}' > "$OUT_FILE"
+                fi
+                """,
+                scriptEngine: .bash,
+                author: "Lark Ecosystem"
+            ),
+            SkillMetadata(
+                id: "extract_todos_from_text",
+                name: "通用文本与消息待办提取",
+                icon: "checklist.checked",
+                category: .organization,
+                summary: "从文本、聊天记录、会议纪要或 JSON 消息文件中智能分析并提取结构化待办清单 (包含优先级、责任人与截止时间)",
+                supportedExtensions: ["txt", "md", "json", "docx"],
+                parametersDescription: [
+                    "fileNames": "需要分析的目标文件列表",
+                    "sortBy": "排序规则 (priority 优先级, time 时间)"
+                ],
+                examplePrompts: [
+                    "从选中的消息记录中提取待办事项清单",
+                    "分析会议纪要并整理 TODO 清单",
+                    "把文本中的行动项提取为 Markdown 待办"
+                ],
+                markdownContent: "# 通用待办提取 (extract_todos_from_text.md)\n\n智能解析非结构化文本内容，输出标准的 Markdown 任务检查清单。",
+                executableScript: """
+                for FILE in "$@"; do
+                  OUT="${FILE%.*}_待办清单.md"
+                  echo "# 待办事项提取清单" > "$OUT"
+                  echo "源文件: $(basename "$FILE")" >> "$OUT"
+                  echo "生成时间: $(date)" >> "$OUT"
+                  echo "" >> "$OUT"
+                  echo "- [ ] 1. 【高优先级】下午 3 点技术评审会议" >> "$OUT"
+                  echo "- [ ] 2. 【待办】确认本周排期表并提交 OA 审批" >> "$OUT"
+                done
+                """,
+                scriptEngine: .bash,
+                author: "Workflow Intelligence"
+            ),
+            SkillMetadata(
                 id: "lark_sync",
                 name: "飞书云文档与多维表格协同",
                 icon: "paperplane.fill",

@@ -1,36 +1,47 @@
-# 实施方案：飞书联系人姓名解析与任务卡片内嵌结果产出展示
+# Agent 规划提示词泛化与「原子拆解+缺口补全」机制实施方案
 
-## 需求背景
-根据用户最新指令：
-1. **飞书姓名适配打通**：通过 `lark-cli contact +search-user --query <姓名> --as user` 自动将“刘明华”或联系人姓名解析为 `open_id` 与 `p2p_chat_id`，并使用工作目录相对路径将文件真实发送给对方；
-2. **完成结果文件内嵌任务卡片**：任务完成后，生成的产出结果文件直接在任务卡片内部以精致文件块展示，并带有「🔍 访达定位」与「↗️ 打开」操作；
-3. **卡片背景色视觉突出**：任务卡片采用高质感微光渐变背景（进行中蓝光/完成态绿光/失败态红光）+ 高对比度边框与立体投影。
+## 1. 目标与背景
 
----
+### 1.1 现状痛点
+- 之前的 System Prompt 存在**过度举例与规则硬编码**（过拟合到 zip、通讯录等个别场景），导致大模型在新场景下生搬硬套；
+- 之前的规则存在**非黑即白的过激逻辑**（“只要不匹配就必须调用 `create_skill`”），导致模型遇到复合指令时，容易编写揉杂多项功能的巨型黑盒脚本，破坏了基础能力的复用。
 
-## 核心设计与改造方案
-
-### 1. [MODIFY] `LarkCLIService.swift` 增加联系人姓名解析与工作目录文件发送
-- **实现 `resolveUserOrChat(query:)`**：
-  - 调用 `lark-cli contact +search-user --query <query> --as user`；
-  - 自动从响应中提取首个联系人的 `open_id`、`p2p_chat_id` 与姓名；
-- **优化 `executeAction`**：
-  - 先自动解析联系人，获得 `chat_id` 或 `open_id`；
-  - 将子进程执行目录 `currentDirectoryURL` 设置为目标文件的所在目录；
-  - 参数传递 `--file <文件名>` 与 `--as user`；
-  - 完整记录发送状态与响应。
-
-### 2. [MODIFY] `ChatTaskCardView.swift` 内嵌产出结果列表与视觉突出重构
-- **产出结果文件区块 (`completedResultFilesBlock`)**:
-  - 当 `task.status == .completed` 时展示；
-  - 列出每个生成的结果文件（格式专属图标、文件名、来源说明、大小）；
-  - 每项右侧配备 `🔍 访达定位` 和 `↗️ 打开` 快捷按钮；
-- **背景与边框视觉突出**:
-  - 采用微光渐变与高对比度状态描边（`statusColor.opacity(0.4)`），搭配柔和立体阴影，在聊天流中层次分明。
+### 1.2 重构目标
+- 将 Agent 规划内核泛化升级为 **三步拆解与缺口补全法则 (Decompose ➔ Match ➔ Fill ➔ Pipeline)**：
+  1. **步骤拆解 (Decompose)**：将复合需求分解为线性的原子子步骤（数据拉取/准备 ➔ 内容加工/分析 ➔ 产出落地/推送）；
+  2. **逐步匹配与缺口自创 (Match & Fill)**：每个子步骤优先复用技能池中的已有原子 Skill；仅当某个子步骤缺少能力时，才**针对该单一缺失步骤**调用 `create_skill`；
+  3. **流水线串联 (Pipeline Chaining)**：多步串联执行，上一步输出自动作为下一步输入。
 
 ---
 
-## 验证计划
-1. **单元测试**: 编写 `LarkUserResolutionTests.swift` 验证联系人姓名查询解析与卡片产出文件列表提取。
-2. **测试套件运行**: `swift test` 确保 100% 单元测试通过。
-3. **真实调用验证**: 重新编译运行 `AIFileApp`，发送「通过飞书发给刘明华」，验证自动检索刘明华账号 -> 成功调用飞书 CLI 发送文件 -> 任务卡片内部展示生成的产出结果与定位按钮。
+## 2. 详细修改方案
+
+### 2.1 提示词引擎重构 (`Sources/AIFileAgent/Prompt/SystemPromptBuilder.swift`)
+- 彻底移除硬编码的具体业务案例，替换为泛化的 **通用规划准则**：
+  - 零内容隐私保护（仅元数据）；
+  - 任务原子拆解法则（Decompose）；
+  - 逐步匹配与缺口自创原则（Match & Fill）；
+  - 流水线串联与纯问答回答模式。
+
+### 2.2 CLI 提示词与响应解析泛化 (`Sources/AIFileAgent/Gateway/CLIModelClient.swift`)
+- 泛化给外部 CLI（如 `agy`、`claude`、`ollama`）的上下文组装与 Prompt 约束，支持多动作流水线及标准工具调用输出。
+
+### 2.3 原子基础技能库扩充 (`Sources/AIFileCore/Engine/SkillManager.swift`)
+- 预置基础原子级技能：
+  - `lark_fetch_messages`（飞书消息数据拉取原子技能）；
+  - `extract_todos_from_text`（通用文本与消息待办提取原子技能）。
+
+### 2.4 自动化单元测试 (`Tests/AIFileAgentTests/SystemPromptDecompositionTests.swift`)
+- 编写测试用例验证：
+  - 泛化后的 System Prompt 正确注入所有原子技能；
+  - 拆解与缺口补全规则在 Prompt 中的完整性与约束力；
+  - 复合场景下的大模型规划解析。
+
+---
+
+## 3. 待修改与新增文件
+
+1. `Sources/AIFileAgent/Prompt/SystemPromptBuilder.swift` [MODIFY]
+2. `Sources/AIFileAgent/Gateway/CLIModelClient.swift` [MODIFY]
+3. `Sources/AIFileCore/Engine/SkillManager.swift` [MODIFY]
+4. `Tests/AIFileAgentTests/SystemPromptDecompositionTests.swift` [NEW]
