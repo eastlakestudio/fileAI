@@ -226,7 +226,7 @@ public struct MainFloatingPanel: View {
                     HStack(spacing: 4) {
                         Image(systemName: "checklist")
                             .font(.system(size: 11))
-                        Text("任务看板")
+                        Text("任务")
                             .font(.system(size: 11, weight: .medium))
                         if !viewModel.sessionTasks.isEmpty {
                             Text("\(viewModel.sessionTasks.count)")
