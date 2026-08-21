@@ -1,10 +1,21 @@
-# 清理历史遗留自创技能与修正 lark-cli 适配说明 (Walkthrough)
+# 彻底移除硬编码并完全由 AI 驱动执行记录 (Walkthrough)
 
-## 1. 问题根因
-- 之前大模型在旧版提示词下曾自创并安装过一个 `lark_fetch_todo.md` 技能到用户本地技能库；
-- 该技能中 AI 自创了错误的命令 `lark-cli message fetch --today`，而真实安装的飞书官方 `lark-cli` 架构为 `lark-cli im`、`lark-cli task` 与 `lark-cli calendar`，导致出现 `unknown command "message" for "lark-cli"` 退出码 2 报错。
+## 1. 变更说明
 
-## 2. 修复方案
-1. **清理历史遗留瑕疵技能**：从用户技能库中彻底删除了旧版自创的 `lark_fetch_todo.md`；
-2. **规范官方原子能力适配**：更新了系统预置的 `lark_fetch_messages` 脚本，全面对接官方 `lark-cli im +messages-search` / `lark-cli task`；
-3. **单元测试与热重启**：87 项自动化测试全量通过，应用已热重启完成。
+### 1.1 彻底清理硬编码业务逻辑 (`AgentDispatcher.swift`)
+- 删除了所有针对任务类型（如 `isShareTask`, `isZipTask`, `contains("飞书")`, `contains("zip")` 等）的硬编码字符串分支判断；
+- 转换为 **100% 依赖 AI 拆解与 Skill 自声明元数据**：
+  - 任务描述直接从技能元数据（`installed.name`、`installed.summary`）和 AI 传入的结构化参数动态生成；
+  - 杜绝了拉取/读取类任务被误判拼接为“发送文件”的缺陷。
+
+### 1.2 接入 Plan 智能自审机制 (`PlanReviewEngine.swift`)
+- 在初版计划生成后，自动将用户原始意图、拟定工具调用与可用技能池传给模型进行自审校验；
+- 能够智能识别复合意图下的单步遗漏，自动补全为多步流水线（如 `拉取消息 ➔ 提取待办`）。
+
+---
+
+## 2. 自动化测试与验证
+
+- 新增 `PlanReviewEngineTests`，验证自审通过、多步补全与精准描述；
+- 全量 **89 个单元测试 100% 全部通过**；
+- 应用程序已热重启完成。

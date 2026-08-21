@@ -44,6 +44,27 @@ public final class AgentDispatcher: Sendable {
             effectiveToolCalls = extractToolCallsFromText(text)
         }
         
+        var initialThinking = response.rawThinking
+        
+        // 3. Plan 智能自审与反思校验机制 (Plan Reviewer / Critic)
+        if !effectiveToolCalls.isEmpty {
+            let reviewResult = await PlanReviewEngine.reviewAndRefinePlan(
+                userPrompt: userPrompt,
+                fileItems: fileItems,
+                draftToolCalls: effectiveToolCalls,
+                provider: provider
+            )
+            effectiveToolCalls = reviewResult.refinedCalls
+            logs.append(contentsOf: reviewResult.reviewLogs)
+            if let reviewThought = reviewResult.reviewThinking, !reviewThought.isEmpty {
+                if let current = initialThinking, !current.isEmpty {
+                    initialThinking = current + "\n\n【Plan 自审校验】\n" + reviewThought
+                } else {
+                    initialThinking = reviewThought
+                }
+            }
+        }
+        
         var combinedActions: [FileActionItem] = []
         var summaryNotes: [String] = []
         var matchedSkillNames: [String] = []
@@ -118,50 +139,34 @@ public final class AgentDispatcher: Sendable {
                 }
                 logs.append("🧩 匹配到已安装扩展技能: \(installed.name)")
                 
-                let isShareTask = installed.id.lowercased().contains("share") || installed.name.contains("飞书") || installed.name.contains("发送") || userPrompt.contains("飞书") || userPrompt.contains("发送") || userPrompt.contains("推送")
-                let targetUser = call.argumentsDict["targetUser"] as? String ?? call.argumentsDict["recipient"] as? String ?? call.argumentsDict["targetChatId"] as? String ?? (userPrompt.contains("刘明华") ? "刘明华" : "目标联系人")
-                if isShareTask {
-                    extractedParams["targetUser"] = targetUser
-                }
+                // 完全依靠 AI 拆解与 Skill 元数据驱动各步骤，彻底杜绝代码中硬编码的业务分支与文案拼接
+                let paramsSummary = call.argumentsDict.isEmpty ? "" : " (\(call.argumentsDict.map { "\($0.key): \($0.value)" }.joined(separator: ", ")))"
                 
-                let isZipTask = installed.id.lowercased().contains("zip") || installed.name.lowercased().contains("zip") || installed.name.contains("压缩") || userPrompt.lowercased().contains("zip") || userPrompt.contains("压缩")
-                
-                for item in fileItems {
-                    let targetZipURL = isZipTask ? item.url.deletingPathExtension().appendingPathExtension("zip") : nil
-                    let zipName = targetZipURL?.lastPathComponent ?? "\(item.name).zip"
-                    
-                    let desc: String
-                    if isZipTask && isShareTask {
-                        desc = "【\(installed.name)】1. 在源目录将 \(item.name) 压缩打包为 \(zipName)；2. 协同发送至「\(targetUser)」"
-                    } else if isZipTask {
-                        desc = "【\(installed.name)】在源目录将 \(item.name) 压缩打包为 \(zipName)"
-                    } else if isShareTask {
-                        desc = "【\(installed.name)】准备协同发送 \(item.name) 至「\(targetUser)」"
-                    } else {
-                        desc = "【\(installed.name)】执行处理 \(item.name)"
-                    }
-                    
+                if fileItems.isEmpty {
                     let action = FileActionItem(
                         operationType: .custom,
-                        sourceURL: item.url,
-                        targetURL: targetZipURL,
-                        detailDescription: desc,
+                        sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                        targetURL: nil,
+                        detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
                         customScript: installed.executableScript
                     )
                     combinedActions.append(action)
+                } else {
+                    for item in fileItems {
+                        let action = FileActionItem(
+                            operationType: .custom,
+                            sourceURL: item.url,
+                            targetURL: nil,
+                            detailDescription: "【\(installed.name)】处理 \(item.name)\(paramsSummary)",
+                            customScript: installed.executableScript
+                        )
+                        combinedActions.append(action)
+                    }
                 }
                 
-                let countStr = fileItems.isEmpty ? "目标文件" : "\(fileItems.count) 个文件"
-                if isZipTask && isShareTask {
-                    summaryNotes.append("计划先将 \(countStr) 压缩为 ZIP 归档，再通过【\(installed.name)】发送至「\(targetUser)」")
-                } else if isZipTask {
-                    summaryNotes.append("计划通过【\(installed.name)】将 \(countStr) 压缩打包为同名 .zip 归档")
-                } else if isShareTask {
-                    summaryNotes.append("计划通过【\(installed.name)】发送 \(countStr) 至「\(targetUser)」")
-                } else {
-                    summaryNotes.append("计划通过【\(installed.name)】执行处理 \(countStr)")
-                }
-                logs.append("📂 成功为 \(fileItems.count) 个文件生成【\(installed.name)】待执行任务清单")
+                let countStr = fileItems.isEmpty ? "全局环境" : "\(fileItems.count) 个文件"
+                summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
+                logs.append("📂 成功为 \(countStr) 生成【\(installed.name)】待执行任务清单")
             } else {
                 logs.append("⚠️ 模型请求了未在系统中注册的 Skill: \(call.functionName)")
             }
@@ -172,7 +177,7 @@ public final class AgentDispatcher: Sendable {
         
         let selectedSkill = matchedSkillNames.isEmpty ? "未匹配物理 Skill (意图咨询或未安装对应外部插件)" : matchedSkillNames.joined(separator: ", ")
         
-        var thought = response.rawThinking
+        var thought = initialThinking
         if thought == nil || thought?.isEmpty == true {
             if !matchedSkillNames.isEmpty {
                 thought = "经过语义分析，识别用户意图需调用「\(selectedSkill)」，已自动提取参数并完成文件路径映射。"
