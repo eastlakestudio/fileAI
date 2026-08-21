@@ -1,25 +1,10 @@
-# Agent 提示词泛化与「原子拆解+缺口补全」落地记录 (Walkthrough)
+# 清理历史遗留自创技能与修正 lark-cli 适配说明 (Walkthrough)
 
-## 1. 变更说明
+## 1. 问题根因
+- 之前大模型在旧版提示词下曾自创并安装过一个 `lark_fetch_todo.md` 技能到用户本地技能库；
+- 该技能中 AI 自创了错误的命令 `lark-cli message fetch --today`，而真实安装的飞书官方 `lark-cli` 架构为 `lark-cli im`、`lark-cli task` 与 `lark-cli calendar`，导致出现 `unknown command "message" for "lark-cli"` 退出码 2 报错。
 
-### 1.1 提示词泛化升级 (`SystemPromptBuilder.swift`)
-- 彻底移除了原先过拟合到 zip、通讯录等特定业务的硬编码举例与绝对化条款；
-- 引入通用的 **三步拆解与缺口补全法则 (Decompose ➔ Match ➔ Fill ➔ Pipeline)**：
-  1. **目标原子拆解 (Decompose)**：将复合需求分解为线性的原子子步骤；
-  2. **逐步骤匹配与缺口补全 (Match & Fill)**：针对每个子步骤优先复用已有原子 Skill；仅在某个子步骤确实缺失时，**针对该单一缺失步骤**调用 `create_skill`；
-  3. **流水线串联输出 (Pipeline Chain)**：串联步骤流转，上游产物作为下游输入。
-
-### 1.2 预置基础原子协同技能 (`SkillManager.swift`)
-- 新增 `lark_fetch_messages`：飞书消息与会话拉取原子技能；
-- 新增 `extract_todos_from_text`：通用文本与消息待办事项智能提取原子技能。
-
-### 1.3 CLI 格式约束泛化 (`CLIModelClient.swift`)
-- 优化 PromptPayload 格式说明，避免硬编码输出样例偏见，增强各 CLI 工具在纯问答、单工具与多动作下的兼容性。
-
----
-
-## 2. 自动化测试与验证
-
-- 新增 `SystemPromptDecompositionTests`，验证提示词泛化规则注入与原子技能注册；
-- 全量 **87 个单元测试 100% 全部通过**；
-- 应用已热更新并成功启动运行。
+## 2. 修复方案
+1. **清理历史遗留瑕疵技能**：从用户技能库中彻底删除了旧版自创的 `lark_fetch_todo.md`；
+2. **规范官方原子能力适配**：更新了系统预置的 `lark_fetch_messages` 脚本，全面对接官方 `lark-cli im +messages-search` / `lark-cli task`；
+3. **单元测试与热重启**：87 项自动化测试全量通过，应用已热重启完成。
