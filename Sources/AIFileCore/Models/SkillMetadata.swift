@@ -161,3 +161,70 @@ public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
         self.author = author
     }
 }
+
+extension SkillMetadata {
+    /// 将 Skill 元数据动态派生为符合 OpenAI / Anthropic 规范的标准 Function Calling Tool Definition
+    public var toolDefinition: [String: Any] {
+        var properties: [String: Any] = [:]
+        
+        // 1. 若为输入处理型（非 zeroInput），默认提供输入文件列表描述
+        if batchMode != .zeroInput {
+            properties["fileNames"] = [
+                "type": "array",
+                "items": ["type": "string"],
+                "description": "参与处理的文件名列表（例如 ['data.xlsx', 'report.pdf']）"
+            ]
+        }
+        
+        // 2. 映射自定义参数字典
+        for (paramKey, paramDesc) in parametersDescription {
+            if paramKey == "fileNames" || paramKey == "files" {
+                properties["fileNames"] = [
+                    "type": "array",
+                    "items": ["type": "string"],
+                    "description": paramDesc.isEmpty ? "参与处理的文件名列表" : paramDesc
+                ]
+                continue
+            }
+            
+            var propDict: [String: Any] = [
+                "type": "string",
+                "description": paramDesc
+            ]
+            
+            let lowerDesc = paramDesc.lowercased()
+            let lowerKey = paramKey.lowercased()
+            
+            if lowerDesc.contains("整数") || lowerDesc.contains("像素") || lowerDesc.contains("数量") || lowerKey.contains("width") || lowerKey.contains("height") || lowerKey.contains("count") {
+                propDict["type"] = "integer"
+            } else if lowerDesc.contains("浮点") || lowerDesc.contains("比例") || lowerDesc.contains("倍数") || lowerKey.contains("factor") || lowerKey.contains("ratio") || lowerKey.contains("scale") {
+                propDict["type"] = "number"
+            } else if lowerDesc.contains("布尔") || lowerDesc.contains("是否") || lowerKey.hasPrefix("is") || lowerKey.hasPrefix("has") {
+                propDict["type"] = "boolean"
+            }
+            
+            properties[paramKey] = propDict
+        }
+        
+        // 3. 聚合模式补充 outputFileName 参数支持
+        if batchMode == .aggregate && properties["outputFileName"] == nil && properties["outputZip"] == nil && properties["outputImage"] == nil && properties["output_file"] == nil {
+            properties["outputFileName"] = [
+                "type": "string",
+                "description": "聚合生成的新产物文件名（例如 output.zip, summary.png, merged.pdf）"
+            ]
+        }
+        
+        return [
+            "type": "function",
+            "function": [
+                "name": id,
+                "description": "【\(name)】\(summary)",
+                "parameters": [
+                    "type": "object",
+                    "properties": properties,
+                    "required": []
+                ]
+            ]
+        ]
+    }
+}

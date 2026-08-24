@@ -31,9 +31,15 @@ public final class SkillRegistry: @unchecked Sendable {
         return Array(skills.values)
     }
     
-    /// 导出所有已注册 Skill 的 Tools 数组加上自主编写元工具 create_skill
+    /// 导出系统全部可用 Skill 的 Tool Definitions（内置原生 + 全部外置已启用的 Markdown Skill + create_skill 元工具）
     public var toolsDefinition: [[String: Any]] {
         var list = allSkills.map { $0.toolDefinition }
+        
+        // 动态派生并聚合所有已启用的外部 Markdown Skills
+        let externalTools = SkillManager.shared.allSkills.filter { $0.isEnabled }.map { $0.toolDefinition }
+        list.append(contentsOf: externalTools)
+        
+        // 增加自主编写元工具
         list.append(SkillRegistry.createSkillToolDefinition)
         return list
     }
@@ -86,6 +92,10 @@ public final class SkillRegistry: @unchecked Sendable {
                             "type": "string",
                             "enum": ["aggregate", "perFile", "zeroInput"],
                             "description": "批处理模式：'aggregate'（多文件聚合打包/生成汇总图）、'perFile'（逐文件处理）、'zeroInput'（无输入直接生成）"
+                        ],
+                        "parameters": [
+                            "type": "object",
+                            "description": "技能自定义参数名称与说明字典（例如 {\"outputFormat\": \"目标格式\", \"quality\": \"压缩质量（整数）\"}）"
                         ],
                         "markdownDocumentation": [
                             "type": "string",

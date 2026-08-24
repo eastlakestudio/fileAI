@@ -153,6 +153,8 @@ public final class AgentDispatcher: Sendable {
                     mode = nil
                 }
                 
+                let customParams = (call.argumentsDict["parameters"] as? [String: String]) ?? (call.argumentsDict["parametersDescription"] as? [String: String]) ?? [:]
+                
                 // 1. 自主合成并安装新 Skill 到本地技能库 (自动持久化为 .md 文件)
                 let newMeta = SkillManager.shared.synthesizeAndInstallSkill(
                     id: id,
@@ -164,7 +166,7 @@ public final class AgentDispatcher: Sendable {
                     scriptEngine: engine,
                     markdown: markdownDoc,
                     icon: icon,
-                    parameters: [:],
+                    parameters: customParams,
                     examplePrompts: exPrompts,
                     batchMode: mode
                 )
