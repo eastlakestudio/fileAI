@@ -49,8 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.viewModel.fetchFromFinder()
-            self?.showWindow()
+            Task { @MainActor in
+                self?.viewModel.fetchFromFinder()
+                self?.showWindow()
+            }
         }
         
         // 1. 设置状态栏

@@ -72,13 +72,13 @@ public struct ChatTimelineView: View {
                 }
                 .padding(14)
             }
-            .onChange(of: tasks.count) { _ in
+            .onChange(of: tasks.count) {
                 scrollToBottom(proxy: proxy)
             }
-            .onChange(of: activeTaskId) { _ in
+            .onChange(of: activeTaskId) {
                 scrollToBottom(proxy: proxy)
             }
-            .onChange(of: tasks.first?.id) { _ in
+            .onChange(of: tasks.first?.id) {
                 scrollToBottom(proxy: proxy)
             }
             .onAppear {

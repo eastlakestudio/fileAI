@@ -53,6 +53,7 @@ public final class StatusBarManager: NSObject, ObservableObject {
     /// 弹出状态栏右键上下文菜单
     public func showContextMenu() {
         let menu = NSMenu(title: "文件魔法棒")
+        menu.delegate = self
         
         let openItem = NSMenuItem(title: "显示文件魔法棒 (⌥M)", action: #selector(openPanel), keyEquivalent: "")
         openItem.target = self
@@ -74,7 +75,16 @@ public final class StatusBarManager: NSObject, ObservableObject {
         quitItem.target = self
         menu.addItem(quitItem)
         
-        statusItem?.popUpMenu(menu)
+        statusItem?.menu = menu
+        statusItem?.button?.performClick(nil)
+    }
+    
+    // MARK: - NSMenuDelegate
+    
+    nonisolated public func menuDidClose(_ menu: NSMenu) {
+        Task { @MainActor in
+            self.statusItem?.menu = nil
+        }
     }
     
     @objc private func openPanel() {
@@ -93,3 +103,4 @@ public final class StatusBarManager: NSObject, ObservableObject {
         NSApplication.shared.terminate(nil)
     }
 }
+extension StatusBarManager: @preconcurrency NSMenuDelegate {}
