@@ -8,6 +8,8 @@ options:
 settings:
   MACOSX_DEPLOYMENT_TARGET: "14.0"
   SWIFT_VERSION: "5.10"
+  ARCHS: "arm64"
+  VALID_ARCHS: "arm64"
   GENERATE_INFOPLIST_FILE: "YES"
   MARKETING_VERSION: "1.0.0"
   CURRENT_PROJECT_VERSION: "1"
@@ -64,14 +66,27 @@ targets:
     platform: macOS
     sources:
       - path: Sources/AIFileApp
+      - path: Support/zh-Hans.lproj/InfoPlist.strings
+      - path: Support/en.lproj/InfoPlist.strings
     dependencies:
       - target: AIFileCore
       - target: AIFileSkills
       - target: AIFileAgent
       - target: AIFileFinderIntegration
       - target: AIFileUI
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleName: "文件魔法棒"
+        CFBundleDisplayName: "文件魔法棒"
+        CFBundleDevelopmentRegion: "zh_CN"
+        LSApplicationCategoryType: "public.app-category.utilities"
+        ITSAppUsesNonExemptEncryption: false
+        LSUIElement: false
+        NSHighResolutionCapable: true
+        NSPrincipalClass: "NSApplication"
     settings:
-      INFOPLIST_FILE: Support/Info.plist
+      PRODUCT_NAME: "文件魔法棒"
       CODE_SIGN_ENTITLEMENTS: Support/AIFileApp.entitlements
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       PRODUCT_BUNDLE_IDENTIFIER: com.eastlakestudio.aifiles
