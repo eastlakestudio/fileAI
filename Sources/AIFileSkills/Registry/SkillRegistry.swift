@@ -75,7 +75,17 @@ public final class SkillRegistry: @unchecked Sendable {
                         ],
                         "executableScript": [
                             "type": "string",
-                            "description": "可执行的 Shell 命令模板或脚本内容"
+                            "description": "完整、真实可执行的脚本源码或 Shell 命令（如 python3 源码请勿加 python3 -c 包装）"
+                        ],
+                        "scriptEngine": [
+                            "type": "string",
+                            "enum": ["bash", "python3", "applescript", "zsh"],
+                            "description": "脚本执行引擎：'bash'（默认，用于 Shell 命令行）或 'python3'（用于纯 Python 3 源代码）"
+                        ],
+                        "batchMode": [
+                            "type": "string",
+                            "enum": ["aggregate", "perFile", "zeroInput"],
+                            "description": "批处理模式：'aggregate'（多文件聚合打包/生成汇总图）、'perFile'（逐文件处理）、'zeroInput'（无输入直接生成）"
                         ],
                         "markdownDocumentation": [
                             "type": "string",
@@ -87,7 +97,7 @@ public final class SkillRegistry: @unchecked Sendable {
                             "description": "示例自然语言指令"
                         ]
                     ],
-                    "required": ["id", "name", "summary", "category"]
+                    "required": ["id", "name", "summary", "category", "executableScript"]
                 ]
             ]
         ]

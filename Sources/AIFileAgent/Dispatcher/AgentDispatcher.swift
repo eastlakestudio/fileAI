@@ -125,7 +125,35 @@ public final class AgentDispatcher: Sendable {
                 let markdownDoc = call.argumentsDict["markdownDocumentation"] as? String
                 let exPrompts = (call.argumentsDict["examplePrompts"] as? [String]) ?? [userPrompt]
                 
-                // 1. 自主合成并安装新 Skill 到本地技能库
+                let scriptEngineStr = (call.argumentsDict["scriptEngine"] as? String ?? call.argumentsDict["engine"] as? String)?.lowercased() ?? ""
+                let engine: ScriptEngineType
+                if scriptEngineStr.contains("python") {
+                    engine = .python3
+                } else if scriptEngineStr.contains("apple") {
+                    engine = .applescript
+                } else if scriptEngineStr.contains("zsh") {
+                    engine = .zsh
+                } else if scriptEngineStr.contains("bash") || scriptEngineStr.contains("sh") {
+                    engine = .bash
+                } else if let sc = script {
+                    engine = AgentDispatcher.detectScriptEngine(script: sc)
+                } else {
+                    engine = .bash
+                }
+                
+                let batchModeStr = (call.argumentsDict["batchMode"] as? String ?? call.argumentsDict["mode"] as? String)?.lowercased() ?? ""
+                let mode: BatchProcessingMode?
+                if batchModeStr.contains("aggregate") || batchModeStr.contains("reduce") {
+                    mode = .aggregate
+                } else if batchModeStr.contains("zero") || batchModeStr.contains("direct") {
+                    mode = .zeroInput
+                } else if batchModeStr.contains("per") || batchModeStr.contains("file") {
+                    mode = .perFile
+                } else {
+                    mode = nil
+                }
+                
+                // 1. 自主合成并安装新 Skill 到本地技能库 (自动持久化为 .md 文件)
                 let newMeta = SkillManager.shared.synthesizeAndInstallSkill(
                     id: id,
                     name: name,
@@ -133,14 +161,16 @@ public final class AgentDispatcher: Sendable {
                     summary: summary,
                     supportedExtensions: exts,
                     script: script,
+                    scriptEngine: engine,
                     markdown: markdownDoc,
                     icon: icon,
                     parameters: [:],
-                    examplePrompts: exPrompts
+                    examplePrompts: exPrompts,
+                    batchMode: mode
                 )
                 
-                matchedSkillNames.append("\(newMeta.name) (已自动归入「\(newMeta.categoryDisplayName)」并安装)")
-                logs.append("✨ CLI 自主编写并自动安装新技能【\(newMeta.name)】(分类: \(newMeta.categoryDisplayName)) 至本地技能库")
+                matchedSkillNames.append("\(newMeta.name) (已自动归入「\(newMeta.categoryDisplayName)」并持久化存储)")
+                logs.append("✨ CLI 自主编写并持久化安装新技能【\(newMeta.name)】(分类: \(newMeta.categoryDisplayName)) 至本地技能库")
                 
                 // 2. 检查后续是否有显式调用该新技能的 ToolCall。若有，则此处不生成重复 Action
                 let hasSubsequentCall = effectiveToolCalls.contains(where: { $0.functionName == id || $0.functionName == name })
@@ -151,7 +181,8 @@ public final class AgentDispatcher: Sendable {
                             sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                             targetURL: nil,
                             detailDescription: "【\(newMeta.name)】执行处理",
-                            customScript: script
+                            customScript: script,
+                            scriptEngine: engine
                         )
                         combinedActions.append(action)
                     } else if newMeta.batchMode == .aggregate {
@@ -161,7 +192,8 @@ public final class AgentDispatcher: Sendable {
                             inputURLs: currentPipelineFiles.map { $0.url },
                             targetURL: nil,
                             detailDescription: "【\(newMeta.name)】批量聚合处理 \(currentPipelineFiles.count) 个文件",
-                            customScript: script
+                            customScript: script,
+                            scriptEngine: engine
                         )
                         combinedActions.append(action)
                     } else {
@@ -171,14 +203,15 @@ public final class AgentDispatcher: Sendable {
                                 sourceURL: item.url,
                                 targetURL: nil,
                                 detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
-                                customScript: script
+                                customScript: script,
+                                scriptEngine: engine
                             )
                             combinedActions.append(action)
                         }
                     }
                     
                     let countStr = currentPipelineFiles.isEmpty ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
-                    summaryNotes.append("CLI 已自动编写并安装技能【\(newMeta.name)】，正在为 \(countStr) 执行处理")
+                    summaryNotes.append("CLI 已自动编写并持久化技能【\(newMeta.name)】，正在为 \(countStr) 执行处理")
                     logs.append("📂 成功为 \(countStr) 生成【\(newMeta.name)】执行任务清单")
                 }
             } else if let skill = registry.skill(for: call.functionName) {
@@ -213,7 +246,8 @@ public final class AgentDispatcher: Sendable {
                         inputURLs: [],
                         targetURL: targetURL,
                         detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
-                        customScript: installed.executableScript
+                        customScript: installed.executableScript,
+                        scriptEngine: installed.scriptEngine
                     )
                     combinedActions.append(action)
                     if let newTarget = targetURL {
@@ -231,7 +265,8 @@ public final class AgentDispatcher: Sendable {
                             inputURLs: [],
                             targetURL: nil,
                             detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
-                            customScript: installed.executableScript
+                            customScript: installed.executableScript,
+                            scriptEngine: installed.scriptEngine
                         )
                         combinedActions.append(action)
                     } else {
@@ -256,7 +291,8 @@ public final class AgentDispatcher: Sendable {
                             inputURLs: allURLs,
                             targetURL: targetZipURL,
                             detailDescription: "【\(installed.name)】批量聚合处理 \(allURLs.count) 个文件\(paramsSummary)",
-                            customScript: installed.executableScript
+                            customScript: installed.executableScript,
+                            scriptEngine: installed.scriptEngine
                         )
                         combinedActions.append(action)
                         
@@ -275,7 +311,8 @@ public final class AgentDispatcher: Sendable {
                             sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                             targetURL: nil,
                             detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
-                            customScript: installed.executableScript
+                            customScript: installed.executableScript,
+                            scriptEngine: installed.scriptEngine
                         )
                         combinedActions.append(action)
                     } else {
@@ -286,7 +323,8 @@ public final class AgentDispatcher: Sendable {
                                 sourceURL: item.url,
                                 targetURL: nil,
                                 detailDescription: "【\(installed.name)】处理 \(item.name)\(paramsSummary)",
-                                customScript: installed.executableScript
+                                customScript: installed.executableScript,
+                                scriptEngine: installed.scriptEngine
                             )
                             combinedActions.append(action)
                             transformedOutputs.append(item)
@@ -343,7 +381,7 @@ public final class AgentDispatcher: Sendable {
             if action.operationType == .custom {
                 // 1. 如果携带了可执行脚本内容，通过 PythonSkillRunner 统一安全执行 (传入全部有效输入文件列表)
                 if let script = action.customScript, !script.isEmpty {
-                    let engine: ScriptEngineType = (script.contains("import ") || script.contains("def ") || script.contains("sys.argv")) ? .python3 : .bash
+                    let engine: ScriptEngineType = action.scriptEngine ?? AgentDispatcher.detectScriptEngine(script: script)
                     let inputFilesToRun = action.effectiveInputURLs
                     let result = try await PythonSkillRunner.shared.runScript(
                         script: script,
@@ -532,5 +570,35 @@ public final class AgentDispatcher: Sendable {
     /// 将用户选择的澄清选项融合进原指令，生成明确意图的新指令
     public static func resolveClarifiedPrompt(originalPrompt: String, option: ClarificationOption) -> String {
         return "\(originalPrompt) (指定协同渠道与处理选项: \(option.label))"
+    }
+    
+    /// 启发式智能识别脚本执行引擎（区分纯 Python 源码与 Shell 命令行）
+    public static func detectScriptEngine(script: String) -> ScriptEngineType {
+        let trimmed = script.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("#!/bin/bash") || trimmed.hasPrefix("#!/bin/sh") || trimmed.hasPrefix("#!/bin/zsh") {
+            return .bash
+        }
+        if trimmed.hasPrefix("#!/usr/bin/env python") || trimmed.hasPrefix("#!/usr/bin/python") {
+            return .python3
+        }
+        if trimmed.hasPrefix("#!/usr/bin/osascript") {
+            return .applescript
+        }
+        
+        let firstLine = trimmed.components(separatedBy: "\n").first?.trimmingCharacters(in: .whitespaces) ?? ""
+        if firstLine.hasPrefix("python3 ") || firstLine.hasPrefix("python ") ||
+           firstLine.hasPrefix("bash ") || firstLine.hasPrefix("sh ") ||
+           firstLine.hasPrefix("zip ") || firstLine.hasPrefix("tar ") ||
+           firstLine.hasPrefix("curl ") || firstLine.hasPrefix("echo ") ||
+           firstLine.hasPrefix("for ") || firstLine.hasPrefix("if ") ||
+           firstLine.hasPrefix("lark-cli ") || firstLine.hasPrefix("cat ") {
+            return .bash
+        }
+        
+        if (trimmed.contains("import sys") || trimmed.contains("import os") || trimmed.contains("def ") || trimmed.contains("class ")) && !firstLine.hasPrefix("python") {
+            return .python3
+        }
+        
+        return .bash
     }
 }

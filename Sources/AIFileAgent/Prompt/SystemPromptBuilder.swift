@@ -102,6 +102,13 @@ public struct SystemPromptBuilder: Sendable {
              ]
              ```
            - 当多步调用中前一步骤产生了新产物文件时（例如第一步调用压缩工具产出 `report.zip`），后序步骤（如协同发送工具）的 `fileNames` 或目标文件参数，必须显式填入前一步骤的产物文件名 `["report.zip"]`，严禁继续传入第一步之前的未加工原始文件！
+        
+        7. 【自主编写与持久化新技能规范 (Autonomous Skill Synthesis & Persistence)】：
+           - 当用户需求无法由现有技能池覆盖时（如数据分析生成图表、信息图概括等），必须调用 `create_skill` 自主编写新技能。系统将自动把新技能**持久化存储为本地技能库中的独立 .md 文件**；
+           - 【脚本编写铁律】：
+             · 若编写 Python 脚本：`scriptEngine` 填 `"python3"`，`executableScript` 必须是**真实完整的 Python 3 源代码**（通过 `sys.argv[1:]` 获取输入文件路径，可直接使用 `openpyxl`, `PIL` (Pillow) 等读取数据并绘制保存 PNG 图像，严禁加 `python3 -c` 命令行包装！）；
+             · 若编写 Shell 脚本：`scriptEngine` 填 `"bash"`，`executableScript` 必须是标准 Bash 脚本；
+             · 若生成汇总图表/单个目标文件，`batchMode` 必须填 `"aggregate"`。
         \(skillsDescriptionBlock)
         \(toolsSchemaBlock)
         
