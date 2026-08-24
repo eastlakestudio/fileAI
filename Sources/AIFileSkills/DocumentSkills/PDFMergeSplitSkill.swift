@@ -63,6 +63,7 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
             actions.append(FileActionItem(
                 operationType: .mergePDF,
                 sourceURL: pdfItems.first!.url,
+                inputURLs: pdfItems.map { $0.url },
                 targetURL: targetURL,
                 detailDescription: "合并 \(pdfItems.count) 个 PDF 为 \(outputName)"
             ))

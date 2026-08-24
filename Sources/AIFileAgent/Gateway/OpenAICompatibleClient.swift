@@ -145,6 +145,33 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
         
         cleanJSON = cleanJSON.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        // 1. 优先尝试提取外层 [ ... ] JSON 数组 (多步流水线计划)
+        if let startBracket = cleanJSON.firstIndex(of: "["),
+           let endBracket = cleanJSON.lastIndex(of: "]"),
+           startBracket < endBracket {
+            let arraySubstring = String(cleanJSON[startBracket...endBracket])
+            if let data = arraySubstring.data(using: .utf8),
+               let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                var toolCalls: [ToolCallRequest] = []
+                for (idx, dict) in list.enumerated() {
+                    if let toolName = (dict["tool"] ?? dict["function"] ?? dict["skill"] ?? dict["name"]) as? String {
+                        let args = (dict["arguments"] ?? dict["parameters"]) as? [String: Any] ?? [:]
+                        let argsData = (try? JSONSerialization.data(withJSONObject: args)) ?? Data()
+                        let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
+                        toolCalls.append(ToolCallRequest(
+                            id: "call_api_\(idx + 1)_\(UUID().uuidString.prefix(4))",
+                            functionName: toolName,
+                            argumentsJSON: argsString
+                        ))
+                    }
+                }
+                if !toolCalls.isEmpty {
+                    return toolCalls
+                }
+            }
+        }
+        
+        // 2. 尝试提取单层 { ... } JSON 字典
         if let startBrace = cleanJSON.firstIndex(of: "{"),
            let endBrace = cleanJSON.lastIndex(of: "}"),
            startBrace < endBrace {
@@ -153,18 +180,18 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
                let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 
                 // 格式 A: {"tool": "...", "arguments": {...}}
-                if let toolName = (jsonDict["tool"] ?? jsonDict["function"] ?? jsonDict["skill"]) as? String,
-                   let args = (jsonDict["arguments"] ?? jsonDict["parameters"]) as? [String: Any],
-                   let argsData = try? JSONSerialization.data(withJSONObject: args),
-                   let argsString = String(data: argsData, encoding: .utf8) {
+                if let toolName = (jsonDict["tool"] ?? jsonDict["function"] ?? jsonDict["skill"]) as? String {
+                    let args = (jsonDict["arguments"] ?? jsonDict["parameters"]) as? [String: Any] ?? [:]
+                    let argsData = (try? JSONSerialization.data(withJSONObject: args)) ?? Data()
+                    let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
                     return [ToolCallRequest(id: "call_json_\(UUID().uuidString.prefix(6))", functionName: toolName, argumentsJSON: argsString)]
                 }
                 
                 // 格式 B: {"name": "...", "parameters": {...}}
-                if let funcName = jsonDict["name"] as? String,
-                   let args = (jsonDict["parameters"] ?? jsonDict["arguments"]) as? [String: Any],
-                   let argsData = try? JSONSerialization.data(withJSONObject: args),
-                   let argsString = String(data: argsData, encoding: .utf8) {
+                if let funcName = jsonDict["name"] as? String {
+                    let args = (jsonDict["parameters"] ?? jsonDict["arguments"]) as? [String: Any] ?? [:]
+                    let argsData = (try? JSONSerialization.data(withJSONObject: args)) ?? Data()
+                    let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
                     return [ToolCallRequest(id: "call_json_\(UUID().uuidString.prefix(6))", functionName: funcName, argumentsJSON: argsString)]
                 }
             }

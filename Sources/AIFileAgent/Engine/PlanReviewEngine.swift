@@ -36,25 +36,27 @@ public struct PlanReviewEngine: Sendable {
         }.joined(separator: "\n")
         
         let reviewSystemPrompt = """
-        你是一个严苛的 AI 自动化执行计划审核员 (Plan Reviewer / Critic)。
-        你的职责是审查初版执行计划，确保其能够 100% 完整、精准地实现用户的全部需求。
+        你是一个严谨的 AI 自动化执行计划审核员 (Plan Reviewer / Critic)。
+        你的职责是客观审查初版执行计划，确保其能够完整、精准地实现用户的全部需求。
         
         【审核核心准则】:
-        1. 完整性检查 (Completeness)：
-           - 用户指令若包含复合目标（例如既要数据获取又要后续加工/提取待办），初版计划是否遗漏了后续环节？
-           - 若初版遗漏了步骤（例如仅有 lark_fetch_messages 而缺少 extract_todos_from_text），必须在最终计划中将其补全为完整的两步/多步流水线！
-        2. 准确性检查 (Accuracy)：
-           - 选用的工具与意图是否真正匹配？拉取/读取操作绝不能误判为发送文件。
-        3. 动作参数检查 (Parameters)：
-           - 提取的参数（如 chatName, targetUser 等）是否准确完整。
+        1. 完整性条件校验 (Completeness Check)：
+           - 检查初版计划是否已经完整覆盖用户的所有子目标（例如：数据获取、加工处理、分发推送）。
+           - 若初版计划已经包含了全部所需步骤，请勿无病呻吟或虚构遗漏，直接确认通过！
+           - 仅当且确有关键步骤确实未包含在初版计划中时，才输出补充后的完整步骤列表。
+        2. 批处理与数据流校验 (Dataflow & Cardinality)：
+           - 多文件聚合操作（如压缩打包为 ZIP、多文件合并）应作为一个整体步骤调用 1 次，不可拆分为孤立单文件操作；
+           - 保证前后步骤的数据流连贯（后置步骤正确接收前置步骤的输出）。
+        3. 动作与参数匹配性 (Accuracy & Parameters)：
+           - 选用的工具与意图是否真正匹配？提取的参数（如 targetUser, chatName 等）是否准确完整。
         
         【可用技能池】:
         \(skillsDescription)
         
         【输出格式要求】:
-        - 若初版计划完全正确且无任何遗漏，直接输出：
+        - 若初版计划已完整正确覆盖用户需求，直接输出：
           {"status": "approved"}
-        - 若初版计划存在遗漏或需要修正，请直接输出包含全部修正步骤的 JSON 数组（可包含 <think>...</think> 审校思考内容）：
+        - 仅当初版计划确有明确缺失或错误时，才输出包含全部完整修正步骤的 JSON 数组（可包含 <think>...</think> 审校思考内容）：
           [
             {"tool": "step1_skill_id", "arguments": { ... }},
             {"tool": "step2_skill_id", "arguments": { ... }}

@@ -15,6 +15,23 @@ public final class AgentDispatcher: Sendable {
         self.registry = registry
     }
     
+    /// 模式二：全权委托 CLI 自主端到端执行（若配置了本地 CLI 引擎）
+    public func executeAutonomously(
+        userPrompt: String,
+        fileItems: [FileItem]
+    ) async throws -> ExecutionPlan {
+        if let cliClient = provider as? CLIModelClient {
+            return try await AutonomousCLIExecutor.execute(
+                tool: cliClient.tool,
+                modelName: cliClient.modelName,
+                userPrompt: userPrompt,
+                fileItems: fileItems
+            )
+        } else {
+            return try await generatePlan(userPrompt: userPrompt, fileItems: fileItems)
+        }
+    }
+    
     /// 根据用户自然语言与选中的文件生成执行计划
     public func generatePlan(
         userPrompt: String,
@@ -39,12 +56,27 @@ public final class AgentDispatcher: Sendable {
             logs.append(contentsOf: response.executionTraceLogs)
         }
         
+        var initialThinking = response.rawThinking
+        
+        // 2. 检查大模型是否输出了意图澄清/反问请求 (Clarification Protocol)
+        if let clarification = extractClarification(from: response) {
+            logs.append("❓ 识别到指令存在关键歧义或未明确选项，已生成结构化交互反问卡片：\(clarification.question)")
+            return ExecutionPlan(
+                summary: "需要您确认：\(clarification.question)",
+                actions: [],
+                thoughtProcess: initialThinking ?? "检测到指令存在关键歧义，暂停物理操作并向用户发起交互确认。",
+                selectedSkillName: "意图交互澄清",
+                parameters: [:],
+                modelProviderInfo: provider.providerName,
+                executionLogs: logs,
+                clarification: clarification
+            )
+        }
+        
         var effectiveToolCalls = response.toolCalls
         if effectiveToolCalls.isEmpty, let text = response.textContent {
             effectiveToolCalls = extractToolCallsFromText(text)
         }
-        
-        var initialThinking = response.rawThinking
         
         // 3. Plan 智能自审与反思校验机制 (Plan Reviewer / Critic)
         if !effectiveToolCalls.isEmpty {
@@ -74,7 +106,14 @@ public final class AgentDispatcher: Sendable {
             summaryNotes.append(text)
         }
         
+        // 维护当前流水线中的活动文件集合 (Dataflow State)
+        var currentPipelineFiles: [FileItem] = fileItems
+        
         for call in effectiveToolCalls {
+            for (k, v) in call.argumentsDict {
+                extractedParams[k] = String(describing: v)
+            }
+            
             if call.functionName == "create_skill" {
                 let id = call.argumentsDict["id"] as? String ?? "skill_\(abs(userPrompt.hashValue) % 100000)"
                 let name = call.argumentsDict["name"] as? String ?? "动态生成技能"
@@ -101,72 +140,163 @@ public final class AgentDispatcher: Sendable {
                 )
                 
                 matchedSkillNames.append("\(newMeta.name) (已自动归入「\(newMeta.categoryDisplayName)」并安装)")
-                for (k, v) in call.argumentsDict {
-                    extractedParams[k] = String(describing: v)
-                }
-                
                 logs.append("✨ CLI 自主编写并自动安装新技能【\(newMeta.name)】(分类: \(newMeta.categoryDisplayName)) 至本地技能库")
                 
-                // 2. 为当前选中的文件生成执行项
-                for item in fileItems {
-                    let action = FileActionItem(
-                        operationType: .custom,
-                        sourceURL: item.url,
-                        targetURL: nil,
-                        detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
-                        customScript: script
-                    )
-                    combinedActions.append(action)
+                // 2. 检查后续是否有显式调用该新技能的 ToolCall。若有，则此处不生成重复 Action
+                let hasSubsequentCall = effectiveToolCalls.contains(where: { $0.functionName == id || $0.functionName == name })
+                if !hasSubsequentCall {
+                    if currentPipelineFiles.isEmpty {
+                        let action = FileActionItem(
+                            operationType: .custom,
+                            sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            targetURL: nil,
+                            detailDescription: "【\(newMeta.name)】执行处理",
+                            customScript: script
+                        )
+                        combinedActions.append(action)
+                    } else if newMeta.batchMode == .aggregate {
+                        let action = FileActionItem(
+                            operationType: .custom,
+                            sourceURL: currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            inputURLs: currentPipelineFiles.map { $0.url },
+                            targetURL: nil,
+                            detailDescription: "【\(newMeta.name)】批量聚合处理 \(currentPipelineFiles.count) 个文件",
+                            customScript: script
+                        )
+                        combinedActions.append(action)
+                    } else {
+                        for item in currentPipelineFiles {
+                            let action = FileActionItem(
+                                operationType: .custom,
+                                sourceURL: item.url,
+                                targetURL: nil,
+                                detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
+                                customScript: script
+                            )
+                            combinedActions.append(action)
+                        }
+                    }
+                    
+                    let countStr = currentPipelineFiles.isEmpty ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
+                    summaryNotes.append("CLI 已自动编写并安装技能【\(newMeta.name)】，正在为 \(countStr) 执行处理")
+                    logs.append("📂 成功为 \(countStr) 生成【\(newMeta.name)】执行任务清单")
                 }
-                
-                let countStr = fileItems.isEmpty ? "目标文件" : "\(fileItems.count) 个文件"
-                summaryNotes.append("CLI 已自动编写并安装技能【\(newMeta.name)】，正在为 \(countStr) 执行处理")
-                logs.append("📂 成功为 \(fileItems.count) 个文件生成【\(newMeta.name)】执行任务清单")
             } else if let skill = registry.skill(for: call.functionName) {
                 matchedSkillNames.append("\(skill.name) (\(skill.skillDescription))")
-                for (k, v) in call.argumentsDict {
-                    extractedParams[k] = String(describing: v)
-                }
                 
-                let plan = try skill.generatePlan(from: fileItems, parameters: call.argumentsDict)
+                let plan = try skill.generatePlan(from: currentPipelineFiles, parameters: call.argumentsDict)
                 combinedActions.append(contentsOf: plan.actions)
                 summaryNotes.append(plan.summary)
                 logs.append("🧩 成功调用 Skill: \(skill.name)，生成 \(plan.actions.count) 个待执行文件操作项")
+                
+                // 如果产生了新的目标文件，更新下游流水线输入
+                let outputURLs = plan.actions.compactMap { $0.targetURL }
+                if !outputURLs.isEmpty {
+                    currentPipelineFiles = outputURLs.map { FileItem(url: $0, isDirectory: false) }
+                }
             } else if let installed = SkillManager.shared.allSkills.first(where: { $0.id == call.functionName || $0.name.lowercased() == call.functionName.lowercased() }) {
                 matchedSkillNames.append("\(installed.name) (\(installed.summary))")
-                for (k, v) in call.argumentsDict {
-                    extractedParams[k] = String(describing: v)
-                }
-                logs.append("🧩 匹配到已安装扩展技能: \(installed.name)")
+                logs.append("🧩 匹配到技能: \(installed.name) (批处理模式: \(installed.batchMode.rawValue))")
                 
-                // 完全依靠 AI 拆解与 Skill 元数据驱动各步骤，彻底杜绝代码中硬编码的业务分支与文案拼接
                 let paramsSummary = call.argumentsDict.isEmpty ? "" : " (\(call.argumentsDict.map { "\($0.key): \($0.value)" }.joined(separator: ", ")))"
                 
-                if fileItems.isEmpty {
+                // 根据三种模式生成优雅的 Action 结构
+                switch installed.batchMode {
+                case .zeroInput:
+                    // 模式 A: 无输入文件直接生成/查询 (如拉取消息)
+                    let targetFileName = (call.argumentsDict["outputFileName"] ?? call.argumentsDict["targetFile"] ?? call.argumentsDict["output_file"]) as? String
+                    let targetURL = targetFileName != nil ? URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(targetFileName!) : nil
+                    
                     let action = FileActionItem(
                         operationType: .custom,
                         sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                        targetURL: nil,
+                        inputURLs: [],
+                        targetURL: targetURL,
                         detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
                         customScript: installed.executableScript
                     )
                     combinedActions.append(action)
-                } else {
-                    for item in fileItems {
+                    if let newTarget = targetURL {
+                        currentPipelineFiles = [FileItem(url: newTarget, isDirectory: false)]
+                    }
+                    summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
+                    logs.append("📂 成功为【\(installed.name)】生成独立执行任务")
+                    
+                case .aggregate:
+                    // 模式 B: 多文件聚合处理 (如压缩打包为 ZIP、多 PDF 合并、批量发送)
+                    if currentPipelineFiles.isEmpty {
                         let action = FileActionItem(
                             operationType: .custom,
-                            sourceURL: item.url,
+                            sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            inputURLs: [],
                             targetURL: nil,
-                            detailDescription: "【\(installed.name)】处理 \(item.name)\(paramsSummary)",
+                            detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
                             customScript: installed.executableScript
                         )
                         combinedActions.append(action)
+                    } else {
+                        // 推断或解析目标聚合产物路径
+                        var targetZipURL: URL? = nil
+                        if installed.id.contains("zip") || installed.name.contains("ZIP") {
+                            let specifiedName = (call.argumentsDict["zipFileName"] ?? call.argumentsDict["outputZip"] ?? call.argumentsDict["outputFileName"] ?? call.argumentsDict["zipName"] ?? call.argumentsDict["output_file"] ?? call.argumentsDict["targetZip"]) as? String
+                            let zipName = specifiedName ?? "archive.zip"
+                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                            targetZipURL = baseDir.appendingPathComponent(zipName)
+                        } else if installed.id.contains("merge") || installed.name.contains("合并") {
+                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                            targetZipURL = baseDir.appendingPathComponent("合并文档.pdf")
+                        }
+                        
+                        let firstURL = currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                        let allURLs = currentPipelineFiles.map { $0.url }
+                        
+                        let action = FileActionItem(
+                            operationType: .custom,
+                            sourceURL: firstURL,
+                            inputURLs: allURLs,
+                            targetURL: targetZipURL,
+                            detailDescription: "【\(installed.name)】批量聚合处理 \(allURLs.count) 个文件\(paramsSummary)",
+                            customScript: installed.executableScript
+                        )
+                        combinedActions.append(action)
+                        
+                        if let outputURL = targetZipURL {
+                            currentPipelineFiles = [FileItem(url: outputURL, isDirectory: false)]
+                        }
                     }
+                    summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
+                    logs.append("📂 成功为 \(currentPipelineFiles.count) 个文件生成【\(installed.name)】批量聚合任务 (1 项操作)")
+                    
+                case .perFile:
+                    // 模式 C: 单文件逐项变换 (如逐个修改分辨率、逐个格式转换、逐个重命名)
+                    if currentPipelineFiles.isEmpty {
+                        let action = FileActionItem(
+                            operationType: .custom,
+                            sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            targetURL: nil,
+                            detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
+                            customScript: installed.executableScript
+                        )
+                        combinedActions.append(action)
+                    } else {
+                        var transformedOutputs: [FileItem] = []
+                        for item in currentPipelineFiles {
+                            let action = FileActionItem(
+                                operationType: .custom,
+                                sourceURL: item.url,
+                                targetURL: nil,
+                                detailDescription: "【\(installed.name)】处理 \(item.name)\(paramsSummary)",
+                                customScript: installed.executableScript
+                            )
+                            combinedActions.append(action)
+                            transformedOutputs.append(item)
+                        }
+                        currentPipelineFiles = transformedOutputs
+                    }
+                    let countStr = currentPipelineFiles.isEmpty ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
+                    summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
+                    logs.append("📂 成功为 \(countStr) 生成【\(installed.name)】逐项变换任务清单 (\(combinedActions.count) 项)")
                 }
-                
-                let countStr = fileItems.isEmpty ? "全局环境" : "\(fileItems.count) 个文件"
-                summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
-                logs.append("📂 成功为 \(countStr) 生成【\(installed.name)】待执行任务清单")
             } else {
                 logs.append("⚠️ 模型请求了未在系统中注册的 Skill: \(call.functionName)")
             }
@@ -211,13 +341,14 @@ public final class AgentDispatcher: Sendable {
             }
             
             if action.operationType == .custom {
-                // 如果携带了可执行脚本内容，通过 PythonSkillRunner 统一安全执行
+                // 1. 如果携带了可执行脚本内容，通过 PythonSkillRunner 统一安全执行 (传入全部有效输入文件列表)
                 if let script = action.customScript, !script.isEmpty {
                     let engine: ScriptEngineType = (script.contains("import ") || script.contains("def ") || script.contains("sys.argv")) ? .python3 : .bash
+                    let inputFilesToRun = action.effectiveInputURLs
                     let result = try await PythonSkillRunner.shared.runScript(
                         script: script,
                         engine: engine,
-                        inputFiles: [action.sourceURL],
+                        inputFiles: inputFilesToRun,
                         outputDirectory: action.targetURL?.deletingLastPathComponent(),
                         parameters: plan.parameters
                     )
@@ -235,22 +366,26 @@ public final class AgentDispatcher: Sendable {
                     return action.targetURL ?? action.sourceURL
                 }
                 
-                // 如果有目标 ZIP 归档路径，先执行本地 zip 压缩
+                // 2. 如果指定了目标 ZIP 归档路径且无内联脚本，先执行系统原生 zip 压缩
                 if let targetZipURL = action.targetURL, targetZipURL.pathExtension.lowercased() == "zip", targetZipURL != action.sourceURL {
                     let zipProcess = Process()
                     zipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
                     zipProcess.currentDirectoryURL = action.sourceURL.deletingLastPathComponent()
-                    zipProcess.arguments = ["-q", "-r", targetZipURL.path, action.sourceURL.lastPathComponent]
+                    var zipArgs = ["-q", "-r", targetZipURL.path]
+                    let inputPaths = action.effectiveInputURLs.map { $0.lastPathComponent }
+                    zipArgs.append(contentsOf: inputPaths)
+                    zipProcess.arguments = zipArgs
                     try? zipProcess.run()
                     zipProcess.waitUntilExit()
                 }
                 
+                // 3. 如果包含飞书协同操作，执行 LarkCLIService 调度
                 if plan.selectedSkillName?.contains("飞书") == true || action.detailDescription.contains("飞书") {
                     let actualSendURL = action.targetURL ?? action.sourceURL
                     let res = try await LarkCLIService.shared.executeAction(
                         fileURL: actualSendURL,
                         actionType: plan.parameters["action"] ?? "send_message",
-                        targetUserOrChat: plan.parameters["targetUser"] ?? plan.parameters["targetChatId"],
+                        targetUserOrChat: plan.parameters["targetUser"] ?? plan.parameters["targetChatId"] ?? plan.parameters["recipient"],
                         extraParams: plan.parameters
                     )
                     if res.success {
@@ -317,5 +452,85 @@ public final class AgentDispatcher: Sendable {
             }
         }
         return []
+    }
+    
+    // MARK: - Clarification Parser Helpers
+    
+    private func extractClarification(from response: LLMResponse) -> ClarificationQuestion? {
+        // 1. 优先从 toolCalls 中检查 ask_clarification
+        for call in response.toolCalls {
+            if call.functionName == "ask_clarification" {
+                if let question = parseClarificationDict(call.argumentsDict) {
+                    return question
+                }
+            }
+        }
+        
+        // 2. 从 textContent / rawOutput 中检查 JSON
+        if let text = response.textContent ?? response.rawOutput {
+            if let question = parseClarificationFromText(text) {
+                return question
+            }
+        }
+        
+        return nil
+    }
+    
+    private func parseClarificationFromText(_ text: String) -> ClarificationQuestion? {
+        var clean = text
+        if let start = clean.range(of: "```json") {
+            clean = String(clean[start.upperBound...])
+            if let end = clean.range(of: "```") {
+                clean = String(clean[..<end.lowerBound])
+            }
+        } else if let start = clean.range(of: "```") {
+            clean = String(clean[start.upperBound...])
+            if let end = clean.range(of: "```") {
+                clean = String(clean[..<end.lowerBound])
+            }
+        }
+        clean = clean.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        if let startBrace = clean.firstIndex(of: "{"),
+           let endBrace = clean.lastIndex(of: "}"),
+           startBrace < endBrace {
+            let jsonSubstring = String(clean[startBrace...endBrace])
+            if let data = jsonSubstring.data(using: .utf8),
+               let jsonDict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let typeStr = (jsonDict["type"] ?? jsonDict["action"]) as? String
+                if typeStr == "ask_clarification" || jsonDict["question"] != nil {
+                    return parseClarificationDict(jsonDict)
+                }
+            }
+        }
+        return nil
+    }
+    
+    private func parseClarificationDict(_ dict: [String: Any]) -> ClarificationQuestion? {
+        guard let questionText = (dict["question"] ?? dict["prompt"] ?? dict["title"]) as? String, !questionText.isEmpty else {
+            return nil
+        }
+        var options: [ClarificationOption] = []
+        if let rawOptions = dict["options"] as? [[String: Any]] {
+            for opt in rawOptions {
+                let id = (opt["id"] ?? opt["value"] ?? opt["label"]) as? String ?? UUID().uuidString
+                let label = (opt["label"] ?? opt["title"] ?? opt["name"] ?? id) as? String ?? id
+                let rec = (opt["recommended"] as? Bool) ?? false
+                let payload = opt["payload"] as? String ?? id
+                options.append(ClarificationOption(id: id, label: label, recommended: rec, payloadValue: payload))
+            }
+        } else if let stringOptions = dict["options"] as? [String] {
+            for (idx, optStr) in stringOptions.enumerated() {
+                options.append(ClarificationOption(id: "opt_\(idx + 1)", label: optStr, recommended: idx == 0))
+            }
+        }
+        guard !options.isEmpty else { return nil }
+        let defaultId = dict["default"] as? String
+        return ClarificationQuestion(question: questionText, options: options, defaultOptionId: defaultId)
+    }
+    
+    /// 将用户选择的澄清选项融合进原指令，生成明确意图的新指令
+    public static func resolveClarifiedPrompt(originalPrompt: String, option: ClarificationOption) -> String {
+        return "\(originalPrompt) (指定协同渠道与处理选项: \(option.label))"
     }
 }

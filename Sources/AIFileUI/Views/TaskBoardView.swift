@@ -658,6 +658,7 @@ public struct TaskBoardView: View {
     private func iconForStatus(_ status: TaskStatus) -> String {
         switch status {
         case .inProgress: return "hourglass"
+        case .waitingForClarification: return "questionmark.circle.fill"
         case .completed: return "checkmark.circle.fill"
         case .failed: return "xmark.circle.fill"
         case .reverted: return "arrow.uturn.backward.circle.fill"
@@ -668,6 +669,7 @@ public struct TaskBoardView: View {
     private func badgeColor(_ status: TaskStatus) -> Color {
         switch status {
         case .inProgress: return .blue
+        case .waitingForClarification: return .orange
         case .completed: return .green
         case .failed: return .red
         case .reverted: return .purple

@@ -290,7 +290,8 @@ public struct MainFloatingPanel: View {
                 onRerunTask: { task in viewModel.rerunTask(task) },
                 onShowDetail: { task in viewModel.selectedDetailTask = task },
                 onUndoTask: { task in viewModel.undoLastOperation() },
-                onSelectSuggestion: { prompt in viewModel.applySuggestion(prompt) }
+                onSelectSuggestion: { prompt in viewModel.applySuggestion(prompt) },
+                onAnswerClarification: { task, option in viewModel.answerClarification(task: task, option: option) }
             )
         }
     }

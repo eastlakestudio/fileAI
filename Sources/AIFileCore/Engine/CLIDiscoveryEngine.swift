@@ -58,6 +58,18 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
                 "gpt-oss-120b",
                 "default"
             ]
+        case .codebuddy:
+            models = [
+                "deepseek-v4-flash",
+                "deepseek-v4-pro",
+                "deepseek-v3-2-volc",
+                "glm-5.2",
+                "glm-5.1",
+                "minimax-m3",
+                "kimi-k3-1",
+                "hy3",
+                "default"
+            ]
         case .ollama:
             models = await fetchOllamaModels(executablePath: path)
             if models.isEmpty {

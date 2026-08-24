@@ -3,6 +3,7 @@ import Foundation
 /// 任务状态枚举
 public enum TaskStatus: String, Sendable, Codable {
     case inProgress = "进行中"
+    case waitingForClarification = "待用户确认"
     case completed = "已完成"
     case failed = "执行失败"
     case reverted = "已撤销"

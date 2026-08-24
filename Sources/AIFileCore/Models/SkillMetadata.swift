@@ -49,6 +49,18 @@ public enum SkillCategory: String, CaseIterable, Identifiable, Sendable, Codable
     }
 }
 
+/// 技能批处理与数据流模式 (Batch Processing / Cardinality Mode)
+public enum BatchProcessingMode: String, CaseIterable, Sendable, Codable {
+    /// 多文件聚合处理 (Reduce): 接收多个文件输入，作为一个整体一次性处理并产出单一产物 (如打包 zip、合并 PDF、批量打包上传)
+    case aggregate = "aggregate"
+    
+    /// 单文件逐项变换 (Map): 对输入的每一个文件分别独立执行处理 (如图片转码、调整分辨率、逐个重命名)
+    case perFile = "perFile"
+    
+    /// 无输入文件直接生成/查询 (Generator / Zero-input): 与已有本地文件无关，直接拉取、查询或生成新数据/文件 (如查看今日飞书消息、查询系统信息)
+    case zeroInput = "zeroInput"
+}
+
 /// 单个 Skill 的元数据与展示配置（支持基于 Markdown 独立文件持久化与动态自定义分类）
 public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
     public let id: String
@@ -63,6 +75,7 @@ public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
     public var markdownContent: String?
     public var executableScript: String?
     public var scriptEngine: ScriptEngineType
+    public var batchMode: BatchProcessingMode
     public var isEnabled: Bool
     public var isInstalled: Bool
     public var version: String
@@ -112,6 +125,7 @@ public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
         markdownContent: String? = nil,
         executableScript: String? = nil,
         scriptEngine: ScriptEngineType = .bash,
+        batchMode: BatchProcessingMode? = nil,
         isEnabled: Bool = true,
         isInstalled: Bool = true,
         version: String = "1.0.0",
@@ -129,6 +143,18 @@ public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
         self.markdownContent = markdownContent
         self.executableScript = executableScript
         self.scriptEngine = scriptEngine
+        if let mode = batchMode {
+            self.batchMode = mode
+        } else {
+            let lower = (id + " " + name + " " + summary).lowercased()
+            if lower.contains("zip") || lower.contains("merge") || lower.contains("合并") || lower.contains("打包") || lower.contains("归档") {
+                self.batchMode = .aggregate
+            } else if lower.contains("fetch") || lower.contains("拉取") || lower.contains("查看") || lower.contains("query") {
+                self.batchMode = .zeroInput
+            } else {
+                self.batchMode = .perFile
+            }
+        }
         self.isEnabled = isEnabled
         self.isInstalled = isInstalled
         self.version = version

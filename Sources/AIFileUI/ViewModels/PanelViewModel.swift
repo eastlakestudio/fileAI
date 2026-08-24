@@ -259,7 +259,19 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 await TaskManager.shared.updateTaskPlan(id: taskRecord.id, plan: plan, targetFilePaths: targetPaths)
                 await self.loadTaskHistory()
                 
-                if !plan.actions.isEmpty {
+                let isAutonomous = self.executionMode.contains("自主") || self.executionMode.contains("Agent")
+                
+                if plan.isAwaitingClarification {
+                    self.statusMessage = "❓ \(plan.clarification?.question ?? "需要您确认操作选项")"
+                    self.updateSessionTask(id: taskRecord.id) { task in
+                        task.status = .waitingForClarification
+                        task.plan = plan
+                    }
+                } else if isAutonomous && !plan.actions.isEmpty {
+                    // 自主/Agent 模式：规划完成后自动执行物理操作，免除人工点击确认，端到端极速闭环
+                    self.statusMessage = "⚡ 正在自动执行操作方案..."
+                    self.confirmExecution()
+                } else if !plan.actions.isEmpty {
                     self.isShowingDiffPreview = true
                 } else if !plan.summary.isEmpty && plan.summary != "计划执行 0 项操作" {
                     self.statusMessage = "\(plan.summary) (⏱️ \(String(format: "%.2fs", elapsed)))"
@@ -540,5 +552,11 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         consentContinuation?.resume(returning: decision)
         consentContinuation = nil
         consentRequest = nil
+    }
+    
+    /// 用户在 UI 卡片中点击澄清选项后，将选项补充入原指令并继续执行
+    public func answerClarification(task: TaskExecutionRecord, option: ClarificationOption) {
+        let clarifiedPrompt = AgentDispatcher.resolveClarifiedPrompt(originalPrompt: task.prompt, option: option)
+        submitInstruction(clarifiedPrompt)
     }
 }

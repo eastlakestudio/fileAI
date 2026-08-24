@@ -60,8 +60,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         
         【输出格式要求】:
         根据上述可用技能池与任务规划法则，直接输出规范的纯 JSON 计划（可包含 <think>...</think> 思考分析过程）：
-        - 如果调用工具：输出形如 {"tool": "skill_id", "arguments": { ... }} 或创建新技能 {"tool": "create_skill", "arguments": { ... }}；
-        - 如果是纯问答/信息查询：在思考后直接输出回答文本；
+        - 单步操作：输出单个 JSON 对象 {"tool": "skill_id", "arguments": { ... }}；
+        - 多步复合流水线（如包含压缩+发送、转换+归档等）：必须直接输出完整有序的 JSON 数组 [{"tool": "step1_id", "arguments": { ... }}, {"tool": "step2_id", "arguments": { ... }}]；
+        - 关键决策歧义/缺失参数：输出澄清反问对象 {"type": "ask_clarification", "question": "...", "options": [...] }；
+        - 纯问答/信息查询：在思考后直接输出回答文本；
         严禁输出任何与任务执行无关的多余说明。
         """
         
@@ -73,6 +75,13 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
                 args.append(contentsOf: ["--model", modelName, "--effort", "low"])
             }
+            arguments = args
+        case .codebuddy:
+            var args = ["-p", "-y"]
+            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
+                args.append(contentsOf: ["--model", modelName])
+            }
+            args.append(promptPayload)
             arguments = args
         case .ollama:
             arguments = ["run", modelName, promptPayload]
@@ -260,7 +269,38 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         
         cleanJSON = cleanJSON.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // 提取最外层或内嵌的 { ... } JSON 字典
+        // 1. 优先尝试提取外层 [ ... ] JSON 数组 (多步流水线计划)
+        if let startBracket = cleanJSON.firstIndex(of: "["),
+           let endBracket = cleanJSON.lastIndex(of: "]"),
+           startBracket < endBracket {
+            let arraySubstring = String(cleanJSON[startBracket...endBracket])
+            if let data = arraySubstring.data(using: .utf8),
+               let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+                var toolCalls: [ToolCallRequest] = []
+                for (idx, dict) in list.enumerated() {
+                    if let toolName = (dict["tool"] ?? dict["function"] ?? dict["skill"] ?? dict["name"]) as? String {
+                        let args = (dict["arguments"] ?? dict["parameters"]) as? [String: Any] ?? [:]
+                        let argsData = (try? JSONSerialization.data(withJSONObject: args)) ?? Data()
+                        let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
+                        toolCalls.append(ToolCallRequest(
+                            id: "call_cli_\(idx + 1)_\(UUID().uuidString.prefix(4))",
+                            functionName: toolName,
+                            argumentsJSON: argsString
+                        ))
+                    }
+                }
+                if !toolCalls.isEmpty {
+                    return LLMResponse(
+                        textContent: "已通过 \(tool.name) 智能解析 \(toolCalls.count) 步流水线",
+                        toolCalls: toolCalls,
+                        rawThinking: extractedThinking,
+                        rawOutput: rawOutput
+                    )
+                }
+            }
+        }
+        
+        // 2. 提取单层 { ... } JSON 字典 (单步调用或澄清反问)
         if let startBrace = cleanJSON.firstIndex(of: "{"),
            let endBrace = cleanJSON.lastIndex(of: "}"),
            startBrace < endBrace {
@@ -272,10 +312,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 let finalThinking = extractedThinking ?? jsonThinking
                 
                 // 格式 A: {"tool": "...", "arguments": {...}}
-                if let toolName = (jsonDict["tool"] ?? jsonDict["function"] ?? jsonDict["skill"]) as? String,
-                   let args = (jsonDict["arguments"] ?? jsonDict["parameters"]) as? [String: Any],
-                   let argsData = try? JSONSerialization.data(withJSONObject: args),
-                   let argsString = String(data: argsData, encoding: .utf8) {
+                if let toolName = (jsonDict["tool"] ?? jsonDict["function"] ?? jsonDict["skill"]) as? String {
+                    let args = (jsonDict["arguments"] ?? jsonDict["parameters"]) as? [String: Any] ?? [:]
+                    let argsData = (try? JSONSerialization.data(withJSONObject: args)) ?? Data()
+                    let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
                     
                     let call = ToolCallRequest(
                         id: "call_cli_\(UUID().uuidString.prefix(6))",
@@ -291,10 +331,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 }
                 
                 // 格式 B: {"name": "...", "parameters": {...}}
-                if let funcName = jsonDict["name"] as? String,
-                   let args = (jsonDict["parameters"] ?? jsonDict["arguments"]) as? [String: Any],
-                   let argsData = try? JSONSerialization.data(withJSONObject: args),
-                   let argsString = String(data: argsData, encoding: .utf8) {
+                if let funcName = jsonDict["name"] as? String {
+                    let args = (jsonDict["parameters"] ?? jsonDict["arguments"]) as? [String: Any] ?? [:]
+                    let argsData = (try? JSONSerialization.data(withJSONObject: args)) ?? Data()
+                    let argsString = String(data: argsData, encoding: .utf8) ?? "{}"
                     
                     let call = ToolCallRequest(
                         id: "call_cli_\(UUID().uuidString.prefix(6))",

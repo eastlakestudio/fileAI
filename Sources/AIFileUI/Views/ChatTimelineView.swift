@@ -13,6 +13,7 @@ public struct ChatTimelineView: View {
     public let onShowDetail: ((TaskExecutionRecord) -> Void)?
     public let onUndoTask: ((TaskExecutionRecord) -> Void)?
     public let onSelectSuggestion: ((String) -> Void)?
+    public let onAnswerClarification: ((TaskExecutionRecord, ClarificationOption) -> Void)?
     
     public init(
         tasks: [TaskExecutionRecord],
@@ -24,7 +25,8 @@ public struct ChatTimelineView: View {
         onRerunTask: ((TaskExecutionRecord) -> Void)? = nil,
         onShowDetail: ((TaskExecutionRecord) -> Void)? = nil,
         onUndoTask: ((TaskExecutionRecord) -> Void)? = nil,
-        onSelectSuggestion: ((String) -> Void)? = nil
+        onSelectSuggestion: ((String) -> Void)? = nil,
+        onAnswerClarification: ((TaskExecutionRecord, ClarificationOption) -> Void)? = nil
     ) {
         self.tasks = tasks
         self.activeTaskId = activeTaskId
@@ -36,6 +38,7 @@ public struct ChatTimelineView: View {
         self.onShowDetail = onShowDetail
         self.onUndoTask = onUndoTask
         self.onSelectSuggestion = onSelectSuggestion
+        self.onAnswerClarification = onAnswerClarification
     }
     
     public var body: some View {
@@ -55,7 +58,8 @@ public struct ChatTimelineView: View {
                                 onCancelExecution: onCancelExecution,
                                 onRerunTask: onRerunTask,
                                 onShowDetail: onShowDetail,
-                                onUndoTask: onUndoTask
+                                onUndoTask: onUndoTask,
+                                onAnswerClarification: onAnswerClarification
                             )
                             .id(task.id)
                         }

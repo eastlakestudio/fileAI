@@ -3,6 +3,7 @@ import Foundation
 /// 支持的外部第三方 AI CLI 工具类型
 public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
     case antigravity = "antigravity"
+    case codebuddy = "codebuddy"
     case claude = "claude"
     case ollama = "ollama"
     case llm = "llm"
@@ -15,6 +16,7 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
     public var displayName: String {
         switch self {
         case .antigravity: return "Google Antigravity CLI (agy)"
+        case .codebuddy: return "Tencent CodeBuddy CLI (codebuddy)"
         case .claude: return "Claude Code CLI (Anthropic)"
         case .ollama: return "Ollama 本地大模型 CLI"
         case .llm: return "SimonW LLM CLI (Gemini/OpenAI)"
@@ -27,6 +29,7 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
     public var executableNames: [String] {
         switch self {
         case .antigravity: return ["agy", "antigravity"]
+        case .codebuddy: return ["codebuddy", "cbc"]
         case .claude: return ["claude"]
         case .ollama: return ["ollama"]
         case .llm: return ["llm"]
@@ -39,6 +42,7 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
     public var installGuideURL: String {
         switch self {
         case .antigravity: return "https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/"
+        case .codebuddy: return "https://copilot.tencent.com/"
         case .claude: return "https://docs.anthropic.com/en/docs/claude-code"
         case .ollama: return "https://ollama.com/download"
         case .llm: return "https://llm.datasette.io/en/stable/setup.html"
@@ -51,6 +55,7 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
     public var toolDescription: String {
         switch self {
         case .antigravity: return "Google 官方新一代 Agentic AI 终端工具 (agy)，原生支持 Tool Use 与多模态架构"
+        case .codebuddy: return "腾讯官方 CodeBuddy AI 终端研发助手，支持 DeepSeek-V4、GLM-5 等顶尖大模型免配置即用"
         case .claude: return "Anthropic 官方终端工具，免配置 Key，直接复用网页登录凭据"
         case .ollama: return "本地离线模型，自动发现已下载模型 (ollama list)"
         case .llm: return "极客多模型通用 CLI，支持 Gemini/Claude/OpenAI 插件与本地认证"

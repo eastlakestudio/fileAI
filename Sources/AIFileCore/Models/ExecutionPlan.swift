@@ -28,6 +28,7 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
     public let id: UUID
     public let operationType: FileOperationType
     public let sourceURL: URL
+    public var inputURLs: [URL]?
     public let targetURL: URL?
     public let detailDescription: String
     public var customScript: String?
@@ -38,6 +39,7 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
         id: UUID = UUID(),
         operationType: FileOperationType,
         sourceURL: URL,
+        inputURLs: [URL]? = nil,
         targetURL: URL? = nil,
         detailDescription: String,
         customScript: String? = nil,
@@ -47,11 +49,55 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
         self.id = id
         self.operationType = operationType
         self.sourceURL = sourceURL
+        self.inputURLs = inputURLs
         self.targetURL = targetURL
         self.detailDescription = detailDescription
         self.customScript = customScript
         self.isSelected = isSelected
         self.isDestructive = isDestructive || operationType.isHighRisk
+    }
+    
+    /// 获取执行时的全部输入文件列表（若未显式指定 inputURLs 则回退到 [sourceURL]）
+    public var effectiveInputURLs: [URL] {
+        if let inputs = inputURLs, !inputs.isEmpty {
+            return inputs
+        }
+        return [sourceURL]
+    }
+}
+
+/// 交互式澄清选项
+public struct ClarificationOption: Identifiable, Hashable, Sendable, Codable {
+    public let id: String
+    public let label: String
+    public let recommended: Bool
+    public let payloadValue: String?
+    
+    public init(id: String, label: String, recommended: Bool = false, payloadValue: String? = nil) {
+        self.id = id
+        self.label = label
+        self.recommended = recommended
+        self.payloadValue = payloadValue ?? id
+    }
+}
+
+/// 意图澄清与反问问题
+public struct ClarificationQuestion: Identifiable, Hashable, Sendable, Codable {
+    public let id: String
+    public let question: String
+    public let options: [ClarificationOption]
+    public let defaultOptionId: String?
+    
+    public init(
+        id: String = UUID().uuidString,
+        question: String,
+        options: [ClarificationOption],
+        defaultOptionId: String? = nil
+    ) {
+        self.id = id
+        self.question = question
+        self.options = options
+        self.defaultOptionId = defaultOptionId ?? options.first(where: { $0.recommended })?.id ?? options.first?.id
     }
 }
 
@@ -66,6 +112,7 @@ public struct ExecutionPlan: Identifiable, Sendable, Codable {
     public var parameters: [String: String]
     public var modelProviderInfo: String?
     public var executionLogs: [String]
+    public var clarification: ClarificationQuestion?
     
     public init(
         id: UUID = UUID(),
@@ -76,7 +123,8 @@ public struct ExecutionPlan: Identifiable, Sendable, Codable {
         selectedSkillName: String? = nil,
         parameters: [String: String] = [:],
         modelProviderInfo: String? = nil,
-        executionLogs: [String] = []
+        executionLogs: [String] = [],
+        clarification: ClarificationQuestion? = nil
     ) {
         self.id = id
         self.summary = summary
@@ -87,6 +135,12 @@ public struct ExecutionPlan: Identifiable, Sendable, Codable {
         self.parameters = parameters
         self.modelProviderInfo = modelProviderInfo
         self.executionLogs = executionLogs
+        self.clarification = clarification
+    }
+    
+    /// 是否处于等待用户回答澄清问题的状态
+    public var isAwaitingClarification: Bool {
+        return clarification != nil
     }
     
     /// 是否存在高危变动项

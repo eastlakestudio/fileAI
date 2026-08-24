@@ -578,6 +578,7 @@ public struct TaskDetailSheetView: View {
     private func badgeColor(_ status: TaskStatus) -> Color {
         switch status {
         case .inProgress: return .blue
+        case .waitingForClarification: return .orange
         case .completed: return .green
         case .failed: return .red
         case .reverted: return .purple

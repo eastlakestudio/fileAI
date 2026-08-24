@@ -65,6 +65,7 @@ final class SkillMarkdownTests: XCTestCase {
         XCTAssertEqual(parsed.name, original.name)
         XCTAssertEqual(parsed.category, original.category)
         XCTAssertEqual(parsed.supportedExtensions, original.supportedExtensions)
+        XCTAssertEqual(parsed.batchMode, original.batchMode)
     }
     
     func testInstallSkillAndUninstallCreatesAndRemovesMarkdownFile() {

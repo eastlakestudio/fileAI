@@ -28,6 +28,7 @@ public final class SkillMarkdownParser {
         var currentSection: String? = nil
         var multiLineScriptBuffer: [String] = []
         var isReadingMultiLineScript = false
+        var batchMode: BatchProcessingMode? = nil
         
         let lines = frontmatter.components(separatedBy: "\n")
         for line in lines {
@@ -65,6 +66,16 @@ public final class SkillMarkdownParser {
                 currentSection = nil
             } else if trimmedLine.hasPrefix("summary:") {
                 summary = trimmedLine.replacingOccurrences(of: "summary:", with: "").trimmingCharacters(in: .whitespaces)
+                currentSection = nil
+            } else if trimmedLine.hasPrefix("batch_mode:") || trimmedLine.hasPrefix("mode:") {
+                let modeStr = trimmedLine.replacingOccurrences(of: "batch_mode:", with: "").replacingOccurrences(of: "mode:", with: "").trimmingCharacters(in: .whitespaces).lowercased()
+                if modeStr.contains("aggregate") || modeStr.contains("reduce") {
+                    batchMode = .aggregate
+                } else if modeStr.contains("zero") || modeStr.contains("direct") {
+                    batchMode = .zeroInput
+                } else {
+                    batchMode = .perFile
+                }
                 currentSection = nil
             } else if trimmedLine.hasPrefix("script_engine:") || trimmedLine.hasPrefix("engine:") {
                 let engStr = trimmedLine.replacingOccurrences(of: "script_engine:", with: "").replacingOccurrences(of: "engine:", with: "").trimmingCharacters(in: .whitespaces).lowercased()
@@ -137,6 +148,7 @@ public final class SkillMarkdownParser {
             markdownContent: body.isEmpty ? nil : body,
             executableScript: script,
             scriptEngine: scriptEngine,
+            batchMode: batchMode,
             isEnabled: true
         )
     }
@@ -150,6 +162,7 @@ public final class SkillMarkdownParser {
         let catValue = metadata.customCategory ?? metadata.category.codeName
         output += "category: \(catValue)\n"
         output += "summary: \(metadata.summary)\n"
+        output += "batch_mode: \(metadata.batchMode.rawValue)\n"
         output += "extensions: [\(metadata.supportedExtensions.joined(separator: ", "))]\n"
         output += "script_engine: \(metadata.scriptEngine.rawValue)\n"
         

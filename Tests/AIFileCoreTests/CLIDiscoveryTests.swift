@@ -30,4 +30,18 @@ final class CLIDiscoveryTests: XCTestCase {
             XCTAssertFalse(tool.name.isEmpty)
         }
     }
+    
+    func testCodeBuddyToolTypeMetadataAndDiscovery() async {
+        let type = CLIToolType.codebuddy
+        XCTAssertEqual(type.rawValue, "codebuddy")
+        XCTAssertTrue(type.executableNames.contains("codebuddy"))
+        XCTAssertTrue(type.executableNames.contains("cbc"))
+        XCTAssertTrue(type.displayName.contains("CodeBuddy"))
+        
+        let engine = CLIDiscoveryEngine.shared
+        let tool = await engine.discoverTool(type: .codebuddy)
+        XCTAssertEqual(tool.type, .codebuddy)
+        XCTAssertFalse(tool.availableModels.isEmpty)
+        XCTAssertTrue(tool.availableModels.contains("deepseek-v4-flash"))
+    }
 }

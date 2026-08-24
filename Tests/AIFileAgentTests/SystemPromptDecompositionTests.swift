@@ -11,11 +11,15 @@ final class SystemPromptDecompositionTests: XCTestCase {
         
         let prompt = SystemPromptBuilder.build(with: items)
         
-        // 验证提示词包含泛化的三步拆解与缺口补全机制核心准则
-        XCTAssertTrue(prompt.contains("三步拆解与缺口补全机制"))
-        XCTAssertTrue(prompt.contains("目标原子拆解"))
-        XCTAssertTrue(prompt.contains("逐步骤匹配与缺口补全"))
-        XCTAssertTrue(prompt.contains("流水线串联输出"))
+        // 验证提示词包含泛化的三步流式管道调度与决策机制核心准则
+        XCTAssertTrue(prompt.contains("三步流式管道调度与决策机制"))
+        XCTAssertTrue(prompt.contains("文件关联性判定"))
+        XCTAssertTrue(prompt.contains("原子步骤拆解"))
+        XCTAssertTrue(prompt.contains("批处理模式判定"))
+        XCTAssertTrue(prompt.contains("多文件聚合模式"))
+        XCTAssertTrue(prompt.contains("单文件逐项变换模式"))
+        XCTAssertTrue(prompt.contains("无输入纯生成模式"))
+        XCTAssertTrue(prompt.contains("流水线数据流继承"))
         XCTAssertTrue(prompt.contains("零内容隐私安全"))
         
         // 验证不再包含旧的硬编码业务过拟合举例

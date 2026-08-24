@@ -11,6 +11,7 @@ public struct ChatTaskCardView: View {
     public let onRerunTask: ((TaskExecutionRecord) -> Void)?
     public let onShowDetail: ((TaskExecutionRecord) -> Void)?
     public let onUndoTask: ((TaskExecutionRecord) -> Void)?
+    public let onAnswerClarification: ((TaskExecutionRecord, ClarificationOption) -> Void)?
     
     @State private var isThinkingExpanded: Bool = false
     
@@ -24,6 +25,30 @@ public struct ChatTaskCardView: View {
         onShowDetail: ((TaskExecutionRecord) -> Void)? = nil,
         onUndoTask: ((TaskExecutionRecord) -> Void)? = nil
     ) {
+        self.init(
+            task: task,
+            isCurrentActive: isCurrentActive,
+            liveThinkingSeconds: liveThinkingSeconds,
+            onConfirmExecution: onConfirmExecution,
+            onCancelExecution: onCancelExecution,
+            onRerunTask: onRerunTask,
+            onShowDetail: onShowDetail,
+            onUndoTask: onUndoTask,
+            onAnswerClarification: nil
+        )
+    }
+    
+    public init(
+        task: TaskExecutionRecord,
+        isCurrentActive: Bool = false,
+        liveThinkingSeconds: Double = 0.0,
+        onConfirmExecution: (() -> Void)? = nil,
+        onCancelExecution: (() -> Void)? = nil,
+        onRerunTask: ((TaskExecutionRecord) -> Void)? = nil,
+        onShowDetail: ((TaskExecutionRecord) -> Void)? = nil,
+        onUndoTask: ((TaskExecutionRecord) -> Void)? = nil,
+        onAnswerClarification: ((TaskExecutionRecord, ClarificationOption) -> Void)? = nil
+    ) {
         self.task = task
         self.isCurrentActive = isCurrentActive
         self.liveThinkingSeconds = liveThinkingSeconds
@@ -32,6 +57,7 @@ public struct ChatTaskCardView: View {
         self.onRerunTask = onRerunTask
         self.onShowDetail = onShowDetail
         self.onUndoTask = onUndoTask
+        self.onAnswerClarification = onAnswerClarification
     }
     
     public var body: some View {
@@ -240,7 +266,9 @@ public struct ChatTaskCardView: View {
     
     @ViewBuilder
     private var cardContentArea: some View {
-        if task.status == .inProgress && task.plan.actions.isEmpty {
+        if let _ = task.plan.clarification {
+            clarificationQuestionBlock
+        } else if task.status == .inProgress && task.plan.actions.isEmpty {
             HStack(spacing: 6) {
                 ProgressView().scaleEffect(0.6)
                 Text("AI 正在分析意图并规划操作方案...")
@@ -329,6 +357,64 @@ public struct ChatTaskCardView: View {
             .padding(6)
             .background(Color.red.opacity(0.08))
             .cornerRadius(4)
+        }
+    }
+    
+    // MARK: - 交互式澄清反问卡片
+    
+    @ViewBuilder
+    private var clarificationQuestionBlock: some View {
+        if let clarification = task.plan.clarification {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "questionmark.bubble.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.orange)
+                    Text(clarification.question)
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundColor(.primary)
+                }
+                
+                // 选项按钮组
+                HStack(spacing: 8) {
+                    ForEach(clarification.options) { option in
+                        Button {
+                            onAnswerClarification?(task, option)
+                        } label: {
+                            HStack(spacing: 5) {
+                                if option.recommended {
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 10))
+                                }
+                                Text(option.label)
+                                    .font(.system(size: 11, weight: option.recommended ? .bold : .medium))
+                                if option.recommended {
+                                    Text("推荐")
+                                        .font(.system(size: 8, weight: .bold))
+                                        .padding(.horizontal, 4)
+                                        .padding(.vertical, 1)
+                                        .background(Color.accentColor.opacity(0.2))
+                                        .cornerRadius(3)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5.5)
+                            .background(option.recommended ? Color.accentColor : Color.primary.opacity(0.08))
+                            .foregroundColor(option.recommended ? .white : .primary)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 2)
+            }
+            .padding(10)
+            .background(Color.orange.opacity(0.08))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+            )
+            .cornerRadius(8)
         }
     }
     
@@ -519,6 +605,7 @@ public struct ChatTaskCardView: View {
     private var statusColor: Color {
         switch task.status {
         case .inProgress: return .blue
+        case .waitingForClarification: return .orange
         case .completed: return .green
         case .failed: return .red
         case .reverted: return .purple

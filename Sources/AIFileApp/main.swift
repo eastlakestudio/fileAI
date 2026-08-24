@@ -77,10 +77,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showWindow()
         }
         
-        // 3. 构建悬浮 Panel
+        // 3. 配置全局标准主菜单（让输入框原生支持 Cmd+C/Cmd+V/Cmd+A/Cmd+X/Cmd+Z）
+        setupMainMenu()
+        
+        // 4. 构建悬浮 Panel
         setupFloatingPanel()
         
-        // 4. 监听 Mini 模式切换并平滑缩放物理窗口尺寸 (Spotlight 极简质感)
+        // 5. 监听 Mini 模式切换并平滑缩放物理窗口尺寸 (Spotlight 极简质感)
         viewModel.$isMiniMode
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -97,6 +100,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+        
+        // 1. App Menu
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenuItem.submenu = appMenu
+        appMenu.addItem(withTitle: "关于 文件魔法棒", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "隐藏 文件魔法棒", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = NSMenuItem(title: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(hideOthers)
+        appMenu.addItem(withTitle: "显示全部", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "退出 文件魔法棒", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        
+        // 2. Edit Menu (这是让 Cmd+C, Cmd+V, Cmd+A, Cmd+X, Cmd+Z 生效的关键系统路由)
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+        let editMenu = NSMenu(title: "编辑")
+        editMenuItem.submenu = editMenu
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(NSMenuItem.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        
+        // 3. Window Menu
+        let windowMenuItem = NSMenuItem()
+        mainMenu.addItem(windowMenuItem)
+        let windowMenu = NSMenu(title: "窗口")
+        windowMenuItem.submenu = windowMenu
+        windowMenu.addItem(withTitle: "关闭", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        
+        NSApplication.shared.mainMenu = mainMenu
+    }
+    
     private func setupFloatingPanel() {
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 768, height: 530),
@@ -108,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.level = .normal
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        panel.becomesKeyOnlyIfNeeded = false
         panel.titlebarSeparatorStyle = .none
         panel.isMovableByWindowBackground = true
         panel.hidesOnDeactivate = false

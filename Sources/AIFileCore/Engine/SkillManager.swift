@@ -129,7 +129,8 @@ public final class SkillManager: @unchecked Sendable {
         markdown: String? = nil,
         icon: String = "sparkles.rectangle.stack.fill",
         parameters: [String: String] = [:],
-        examplePrompts: [String] = []
+        examplePrompts: [String] = [],
+        batchMode: BatchProcessingMode? = nil
     ) -> SkillMetadata {
         let standardCategory = SkillCategory.from(string: category)
         let isStandardCode = ["all", "image", "document", "organization", "collaboration", "custom", "cloudMarket", "全部技能", "图片处理", "文档与pdf", "整理与命名", "企业协同", "自定义扩展", "云端市场"].contains(category.lowercased())
@@ -147,6 +148,7 @@ public final class SkillManager: @unchecked Sendable {
             examplePrompts: examplePrompts,
             markdownContent: markdown ?? "# \(name) (\(id).md)\n\n\(summary)\n",
             executableScript: script,
+            batchMode: batchMode,
             isEnabled: true,
             isInstalled: true,
             author: "AI CLI Auto-Synthesizer"
@@ -323,24 +325,25 @@ public final class SkillManager: @unchecked Sendable {
                 summary: "将指定的文件或文件夹批量打包压缩为标准的 .zip 格式归档文件",
                 supportedExtensions: ["*"],
                 parametersDescription: [
-                    "fileNames": "需要压缩的文件或文件夹列表"
+                    "fileNames": "需要压缩的文件或文件夹列表",
+                    "outputZip": "输出的 ZIP 压缩包文件名 (默认 归档打包.zip)"
                 ],
                 examplePrompts: [
                     "压缩成zip",
                     "打包为 zip 归档",
                     "将这些文件压缩成一个 zip 包"
                 ],
-                markdownContent: "# ZIP 归档压缩 (zip_compress.md)\n\n利用系统原生 /usr/bin/zip 进行多线程无损归档打包。",
+                markdownContent: "# ZIP 归档压缩 (zip_compress.md)\n\n利用系统原生 /usr/bin/zip 进行多文件聚合打包与多线程无损归档。",
                 executableScript: """
-                for FILE in "$@"; do
-                  if [ -d "$FILE" ]; then
-                    zip -r -q "${FILE%/}.zip" "$FILE"
-                  elif [ -f "$FILE" ]; then
-                    zip -q "${FILE%.*}.zip" "$FILE"
-                  fi
-                done
+                OUT="${AIFILE_PARAM_OUTPUTZIP:-${AIFILE_PARAM_OUTPUTFILENAME:-归档打包.zip}}"
+                if [[ "$OUT" != /* ]]; then
+                  DIR="$(dirname "$1")"
+                  OUT="$DIR/$OUT"
+                fi
+                zip -q -r "$OUT" "$@"
                 """,
-                scriptEngine: .bash
+                scriptEngine: .bash,
+                batchMode: .aggregate
             ),
             SkillMetadata(
                 id: "pdf_merge_split",
@@ -463,6 +466,7 @@ public final class SkillManager: @unchecked Sendable {
                 fi
                 """,
                 scriptEngine: .bash,
+                batchMode: .zeroInput,
                 author: "Lark Ecosystem"
             ),
             SkillMetadata(
@@ -494,27 +498,66 @@ public final class SkillManager: @unchecked Sendable {
                 done
                 """,
                 scriptEngine: .bash,
+                batchMode: .perFile,
                 author: "Workflow Intelligence"
             ),
             SkillMetadata(
                 id: "lark_sync",
-                name: "飞书云文档与多维表格协同",
+                name: "飞书协同与文件消息发送",
                 icon: "paperplane.fill",
                 category: .collaboration,
-                summary: "深度集成飞书生态 (lark-cli)，支持一键将本地文档/PDF/表格同步上传至飞书云文档、写入多维表格或发送群消息",
-                supportedExtensions: ["pdf", "docx", "xlsx", "csv", "md", "png", "jpg"],
+                summary: "深度集成飞书生态 (lark-cli)，支持将本地文件/压缩包直接发送给指定联系人（私聊）或群聊，或同步上传至飞书云空间与多维表格",
+                supportedExtensions: ["pdf", "docx", "xlsx", "csv", "md", "png", "jpg", "zip", "*"],
                 parametersDescription: [
-                    "action": "协同动作 (upload_doc, insert_bitable, send_message)",
-                    "docTitle": "飞书云文档标题",
+                    "targetUser": "目标接收人姓名（如「刘明华」）或 ID，支持自动解析发送私聊文件",
                     "targetChatId": "目标接收群聊 ID",
+                    "fileNames": "待发送/上传的目标文件列表（可承接上一步骤的产物如 archive.zip）",
+                    "action": "协同动作类型 (send_message 发送消息/文件, upload_doc 上传云文档)",
+                    "docTitle": "飞书云文档标题",
                     "bitableAppToken": "多维表格 Base Token"
                 ],
                 examplePrompts: [
+                    "通过飞书将压缩包发送给刘明华",
                     "把整理好的 PDF 发送到飞书项目群",
-                    "将选中的 Excel 数据同步写入飞书多维表格",
-                    "把这篇 Markdown 文档创建为飞书云文档"
+                    "将选中的 Excel 数据同步写入飞书多维表格"
                 ],
-                markdownContent: "# 飞书生态协同 Skill (lark_sync.md)\n\n基于 lark-cli 深度打通飞书文档、多维表格与消息通知，实现本地与云端一键协同。",
+                markdownContent: "# 飞书协同与文件发送 Skill (lark_sync.md)\n\n基于 lark-cli 深度打通飞书文件发送、文档同步与消息协同。",
+                executableScript: """
+                TARGET_USER="${AIFILE_PARAM_TARGETUSER:-${AIFILE_PARAM_CONTACTNAME:-}}"
+                TARGET_CHAT="${AIFILE_PARAM_TARGETCHATID:-}"
+
+                for FILE_PATH in "$@"; do
+                  if [ -f "$FILE_PATH" ]; then
+                    FILE_DIR="$(dirname "$FILE_PATH")"
+                    FILE_NAME="$(basename "$FILE_PATH")"
+                    echo "📤 准备通过飞书发送文件: $FILE_NAME (所在目录: $FILE_DIR)"
+                    
+                    cd "$FILE_DIR" || continue
+                    
+                    if command -v lark-cli >/dev/null 2>&1; then
+                      if [ -n "$TARGET_CHAT" ]; then
+                        lark-cli im +messages-send --chat-id "$TARGET_CHAT" --file "$FILE_NAME" || true
+                      elif [ -n "$TARGET_USER" ]; then
+                        MY_OPEN_ID=$(lark-cli whoami 2>/dev/null | jq -r '.onBehalfOf.openId // empty')
+                        CHAT_ID=$(lark-cli im +chat-search --query "$TARGET_USER" 2>/dev/null | jq -r '.data.items[0].chat_id // empty' 2>/dev/null)
+                        
+                        if [ -n "$CHAT_ID" ]; then
+                          lark-cli im +messages-send --chat-id "$CHAT_ID" --file "$FILE_NAME" || true
+                        elif [ -n "$MY_OPEN_ID" ]; then
+                          lark-cli im +messages-send --user-id "$MY_OPEN_ID" --file "$FILE_NAME" || true
+                        fi
+                      else
+                        MY_OPEN_ID=$(lark-cli whoami 2>/dev/null | jq -r '.onBehalfOf.openId // empty')
+                        if [ -n "$MY_OPEN_ID" ]; then
+                          lark-cli im +messages-send --user-id "$MY_OPEN_ID" --file "$FILE_NAME" || true
+                        fi
+                      fi
+                    fi
+                  fi
+                done
+                """,
+                scriptEngine: .bash,
+                batchMode: .aggregate,
                 author: "Lark Ecosystem"
             ),
             SkillMetadata(
