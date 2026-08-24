@@ -54,6 +54,24 @@ public final class PythonSkillRunner: Sendable {
         outputDirectory: URL? = nil,
         parameters: [String: Any] = [:]
     ) async throws -> ScriptExecutionResult {
+        let pythonPath = resolvePythonPath()
+        
+        // 0. 依赖包与运行环境就绪检查 (Dependency Preflight Check)
+        let preflight = await DependencyPreflightChecker.shared.ensureDependencies(
+            script: script,
+            engine: engine,
+            pythonPath: pythonPath
+        )
+        if !preflight.isReady {
+            let err = preflight.errorMessage ?? "技能依赖的运行环境未就绪"
+            return ScriptExecutionResult(
+                exitCode: 1,
+                stdout: "",
+                stderr: err,
+                createdFiles: []
+            )
+        }
+        
         let outDir = outputDirectory ?? inputFiles.first?.deletingLastPathComponent() ?? FileManager.default.temporaryDirectory
         
         // 1. 记录执行前目录下的文件快照（用于探测新生成的文件）
