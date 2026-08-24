@@ -17,17 +17,15 @@ settings:
 
 targets:
   AIFileCore:
-    type: framework
+    type: library.static
     platform: macOS
     sources:
       - path: Sources/AIFileCore
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.eastlakestudio.AIFileCore
-      MARKETING_VERSION: "1.0.0"
-      CURRENT_PROJECT_VERSION: "1"
 
   AIFileSkills:
-    type: framework
+    type: library.static
     platform: macOS
     sources:
       - path: Sources/AIFileSkills
@@ -35,11 +33,9 @@ targets:
       - target: AIFileCore
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.eastlakestudio.AIFileSkills
-      MARKETING_VERSION: "1.0.0"
-      CURRENT_PROJECT_VERSION: "1"
 
   AIFileAgent:
-    type: framework
+    type: library.static
     platform: macOS
     sources:
       - path: Sources/AIFileAgent
@@ -48,11 +44,9 @@ targets:
       - target: AIFileSkills
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.eastlakestudio.AIFileAgent
-      MARKETING_VERSION: "1.0.0"
-      CURRENT_PROJECT_VERSION: "1"
 
   AIFileFinderIntegration:
-    type: framework
+    type: library.static
     platform: macOS
     sources:
       - path: Sources/AIFileFinderIntegration
@@ -60,11 +54,9 @@ targets:
       - target: AIFileCore
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.eastlakestudio.AIFileFinderIntegration
-      MARKETING_VERSION: "1.0.0"
-      CURRENT_PROJECT_VERSION: "1"
 
   AIFileUI:
-    type: framework
+    type: library.static
     platform: macOS
     sources:
       - path: Sources/AIFileUI
@@ -75,8 +67,6 @@ targets:
       - target: AIFileFinderIntegration
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.eastlakestudio.AIFileUI
-      MARKETING_VERSION: "1.0.0"
-      CURRENT_PROJECT_VERSION: "1"
 
   AIFileApp:
     type: application

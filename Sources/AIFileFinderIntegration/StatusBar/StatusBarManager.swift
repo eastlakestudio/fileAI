@@ -103,4 +103,5 @@ public final class StatusBarManager: NSObject, ObservableObject {
         NSApplication.shared.terminate(nil)
     }
 }
-extension StatusBarManager: @preconcurrency NSMenuDelegate {}
+
+extension StatusBarManager: NSMenuDelegate {}

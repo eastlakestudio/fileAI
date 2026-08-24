@@ -18,7 +18,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
     public init(
         tool: DiscoveredCLITool,
         modelName: String? = nil,
-        timeoutSeconds: TimeInterval = 60
+        timeoutSeconds: TimeInterval = 120
     ) {
         self.tool = tool
         self.modelName = modelName ?? tool.availableModels.first ?? "default"
@@ -152,11 +152,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: executablePath)
                 process.arguments = arguments
+                process.currentDirectoryURL = URL(fileURLWithPath: CLIEnvironmentHelper.realUserHome)
                 
-                // 继承当前系统环境（包括 HOME, PATH, 终端登录凭证）
-                var env = ProcessInfo.processInfo.environment
-                env["TERM"] = "xterm-256color"
-                process.environment = env
+                // 注入宿主真实环境（包括物理 HOME, 完整 PATH, 终端登录凭证）
+                process.environment = CLIEnvironmentHelper.makeHostEnvironment()
                 
                 let outPipe = Pipe()
                 let errPipe = Pipe()

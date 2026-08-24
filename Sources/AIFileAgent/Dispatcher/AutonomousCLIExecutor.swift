@@ -212,9 +212,7 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
                 process.arguments = arguments
                 process.currentDirectoryURL = workingDirectory
                 
-                var env = ProcessInfo.processInfo.environment
-                env["TERM"] = "xterm-256color"
-                process.environment = env
+                process.environment = CLIEnvironmentHelper.makeHostEnvironment()
                 
                 let outPipe = Pipe()
                 let errPipe = Pipe()

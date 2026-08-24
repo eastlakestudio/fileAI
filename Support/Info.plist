@@ -28,8 +28,10 @@
     <string>14.0</string>
     <key>LSUIElement</key>
     <false/>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>用于与系统 Finder、办公软件自动化脚本协同</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.utilities</string>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSPrincipalClass</key>
