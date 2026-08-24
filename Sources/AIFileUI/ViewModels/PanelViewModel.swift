@@ -325,13 +325,24 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 
                 var fileSummaryLines: [String] = []
                 var producedURLs: [URL] = []
-                for action in plan.actions {
-                    if let dest = action.targetURL {
-                        producedURLs.append(dest)
-                        fileSummaryLines.append("📄 \(dest.lastPathComponent) (源: \(action.sourceURL.lastPathComponent))")
-                    } else {
-                        producedURLs.append(action.sourceURL)
-                        fileSummaryLines.append("📄 \(action.sourceURL.lastPathComponent)")
+                
+                let createdReverses = record.reverseActions.filter { $0.kind == .deleteCreated || $0.kind == .renameBack }
+                if !createdReverses.isEmpty {
+                    for rev in createdReverses {
+                        if !producedURLs.contains(rev.currentURL) {
+                            producedURLs.append(rev.currentURL)
+                            fileSummaryLines.append("📄 \(rev.currentURL.lastPathComponent) (源: \(rev.originalURL.lastPathComponent))")
+                        }
+                    }
+                } else {
+                    for action in plan.actions {
+                        if let dest = action.targetURL {
+                            producedURLs.append(dest)
+                            fileSummaryLines.append("📄 \(dest.lastPathComponent) (源: \(action.sourceURL.lastPathComponent))")
+                        } else {
+                            producedURLs.append(action.sourceURL)
+                            fileSummaryLines.append("📄 \(action.sourceURL.lastPathComponent)")
+                        }
                     }
                 }
                 self.latestOutputURLs = producedURLs
