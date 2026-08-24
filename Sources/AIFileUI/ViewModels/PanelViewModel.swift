@@ -336,28 +336,22 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                     }
                 } else {
                     for action in plan.actions {
-                        if let dest = action.targetURL {
-                            producedURLs.append(dest)
-                            fileSummaryLines.append("📄 \(dest.lastPathComponent) (源: \(action.sourceURL.lastPathComponent))")
-                        } else {
-                            producedURLs.append(action.sourceURL)
-                            fileSummaryLines.append("📄 \(action.sourceURL.lastPathComponent)")
+                        if let dest = action.targetURL, FileManager.default.fileExists(atPath: dest.path) {
+                            if !producedURLs.contains(dest) {
+                                producedURLs.append(dest)
+                                fileSummaryLines.append("📄 \(dest.lastPathComponent) (源: \(action.sourceURL.lastPathComponent))")
+                            }
                         }
+                    }
+                    if producedURLs.isEmpty {
+                        fileSummaryLines.append("ℹ️ 纯内容/网络查询或协同任务，未产生本地物理文件变动")
                     }
                 }
                 self.latestOutputURLs = producedURLs
                 
-                let count = record.reverseActions.count
-                guard count > 0 else {
-                    throw NSError(
-                        domain: "SafeFileExecutor",
-                        code: 500,
-                        userInfo: [NSLocalizedDescriptionKey: "操作未能成功生成目标文件，请检查文件格式或系统依赖权限"]
-                    )
-                }
-                
-                let filesBlock = fileSummaryLines.isEmpty ? "（无新文件生成）" : fileSummaryLines.joined(separator: "\n")
-                let walkthrough = "✅ 成功完成 \(count) 项物理操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
+                let count = record.reverseActions.count > 0 ? record.reverseActions.count : plan.actions.count
+                let filesBlock = fileSummaryLines.joined(separator: "\n")
+                let walkthrough = "✅ 成功完成 \(count) 项操作\n变更概览: \(plan.summary)\n\n📂 生成结果文件列表:\n\(filesBlock)"
                 
                 if let task = self.activeTask {
                     var execLogs = task.executionLogs.isEmpty ? task.plan.executionLogs : task.executionLogs

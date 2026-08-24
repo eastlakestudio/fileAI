@@ -165,9 +165,15 @@ public final class PythonSkillRunner: Sendable {
         let stdoutStr = String(data: stdoutData, encoding: .utf8) ?? ""
         let stderrStr = String(data: stderrData, encoding: .utf8) ?? ""
         
-        // 6. 探测新产出的文件
+        // 6. 探测新产出的文件 (排除临时执行脚本与系统隐藏文件)
+        let tempName = tempScriptURL?.lastPathComponent
         let afterFiles = Set((try? FileManager.default.contentsOfDirectory(atPath: outDir.path)) ?? [])
-        let createdFileNames = afterFiles.subtracting(beforeFiles)
+        let createdFileNames = afterFiles.subtracting(beforeFiles).filter { name in
+            if let t = tempName, name == t { return false }
+            if name.hasPrefix(".") || name.hasPrefix("aifile_skill_") { return false }
+            let path = outDir.appendingPathComponent(name).path
+            return FileManager.default.fileExists(atPath: path)
+        }
         let createdURLs = createdFileNames.map { outDir.appendingPathComponent($0) }
         
         return ScriptExecutionResult(

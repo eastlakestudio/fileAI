@@ -185,20 +185,27 @@ public final class AgentDispatcher: Sendable {
                         dynamicTargetURL = baseDir.appendingPathComponent(nameStr)
                     }
                     
-                    if currentPipelineFiles.isEmpty {
+                    switch newMeta.batchMode {
+                    case .zeroInput:
+                        // 模式 A: 纯生成 / 资讯抓取 / 系统查询，完全不挂载用户选中的无关文件
                         let action = FileActionItem(
                             operationType: .custom,
                             sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            inputURLs: [],
                             targetURL: dynamicTargetURL,
-                            detailDescription: "【\(newMeta.name)】执行处理",
+                            detailDescription: "【\(newMeta.name)】\(newMeta.summary)",
                             customScript: script,
                             scriptEngine: engine
                         )
                         combinedActions.append(action)
                         if let newTarget = dynamicTargetURL {
                             currentPipelineFiles = [FileItem(url: newTarget, isDirectory: false)]
+                        } else {
+                            currentPipelineFiles = []
                         }
-                    } else if newMeta.batchMode == .aggregate {
+                        
+                    case .aggregate:
+                        // 模式 B: 多文件聚合处理 (如打包/汇总)
                         let firstURL = currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                         let allURLs = currentPipelineFiles.map { $0.url }
                         
@@ -216,28 +223,45 @@ public final class AgentDispatcher: Sendable {
                         if let outputURL = dynamicTargetURL {
                             currentPipelineFiles = [FileItem(url: outputURL, isDirectory: false)]
                         }
-                    } else {
-                        var transformedOutputs: [FileItem] = []
-                        for item in currentPipelineFiles {
+                        
+                    case .perFile:
+                        // 模式 C: 逐文件变换处理
+                        if currentPipelineFiles.isEmpty {
                             let action = FileActionItem(
                                 operationType: .custom,
-                                sourceURL: item.url,
+                                sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                                 targetURL: dynamicTargetURL,
-                                detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
+                                detailDescription: "【\(newMeta.name)】执行处理",
                                 customScript: script,
                                 scriptEngine: engine
                             )
                             combinedActions.append(action)
-                            if let outURL = dynamicTargetURL {
-                                transformedOutputs.append(FileItem(url: outURL, isDirectory: false))
-                            } else {
-                                transformedOutputs.append(item)
+                            if let newTarget = dynamicTargetURL {
+                                currentPipelineFiles = [FileItem(url: newTarget, isDirectory: false)]
                             }
+                        } else {
+                            var transformedOutputs: [FileItem] = []
+                            for item in currentPipelineFiles {
+                                let action = FileActionItem(
+                                    operationType: .custom,
+                                    sourceURL: item.url,
+                                    targetURL: dynamicTargetURL,
+                                    detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
+                                    customScript: script,
+                                    scriptEngine: engine
+                                )
+                                combinedActions.append(action)
+                                if let outURL = dynamicTargetURL {
+                                    transformedOutputs.append(FileItem(url: outURL, isDirectory: false))
+                                } else {
+                                    transformedOutputs.append(item)
+                                }
+                            }
+                            currentPipelineFiles = transformedOutputs
                         }
-                        currentPipelineFiles = transformedOutputs
                     }
                     
-                    let countStr = currentPipelineFiles.isEmpty ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
+                    let countStr = newMeta.batchMode == .zeroInput ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
                     summaryNotes.append("CLI 已自动编写并持久化技能【\(newMeta.name)】，正在为 \(countStr) 执行处理")
                     logs.append("📂 成功为 \(countStr) 生成【\(newMeta.name)】执行任务清单")
                 }
@@ -428,7 +452,10 @@ public final class AgentDispatcher: Sendable {
                     if let firstCreated = result.createdFiles.first {
                         return firstCreated
                     }
-                    return action.targetURL ?? action.sourceURL
+                    if let target = action.targetURL, FileManager.default.fileExists(atPath: target.path) {
+                        return target
+                    }
+                    return nil
                 }
                 
                 // 2. 如果指定了目标 ZIP 归档路径且无内联脚本，先执行系统原生 zip 压缩

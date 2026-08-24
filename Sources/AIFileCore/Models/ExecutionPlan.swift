@@ -62,7 +62,7 @@ public struct FileActionItem: Identifiable, Hashable, Sendable, Codable {
     
     /// 获取执行时的全部输入文件列表（若未显式指定 inputURLs 则回退到 [sourceURL]）
     public var effectiveInputURLs: [URL] {
-        if let inputs = inputURLs, !inputs.isEmpty {
+        if let inputs = inputURLs {
             return inputs
         }
         return [sourceURL]

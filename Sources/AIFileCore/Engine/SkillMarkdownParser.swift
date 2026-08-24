@@ -135,6 +135,8 @@ public final class SkillMarkdownParser {
         let isStandardCode = ["all", "image", "document", "organization", "collaboration", "custom", "cloudMarket", "全部技能", "图片处理", "文档与pdf", "整理与命名", "企业协同", "自定义扩展", "云端市场"].contains(categoryRaw.lowercased())
         let customCat: String? = isStandardCode ? nil : categoryRaw
         
+        let finalExtensions = extensions.isEmpty ? ["*"] : extensions
+        
         return SkillMetadata(
             id: id,
             name: name,
@@ -142,7 +144,7 @@ public final class SkillMarkdownParser {
             category: cat,
             customCategory: customCat,
             summary: summary,
-            supportedExtensions: extensions,
+            supportedExtensions: finalExtensions,
             parametersDescription: parameters,
             examplePrompts: examples,
             markdownContent: body.isEmpty ? nil : body,
