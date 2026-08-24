@@ -177,39 +177,64 @@ public final class AgentDispatcher: Sendable {
                 // 2. 检查后续是否有显式调用该新技能的 ToolCall。若有，则此处不生成重复 Action
                 let hasSubsequentCall = effectiveToolCalls.contains(where: { $0.functionName == id || $0.functionName == name })
                 if !hasSubsequentCall {
+                    // 推断或解析动态技能目标产物路径
+                    var dynamicTargetURL: URL? = nil
+                    let specifiedName = (call.argumentsDict["outputFileName"] ?? call.argumentsDict["outputImage"] ?? call.argumentsDict["outputZip"] ?? call.argumentsDict["output_file"] ?? call.argumentsDict["targetFile"] ?? call.argumentsDict["targetZip"]) as? String
+                    if let nameStr = specifiedName {
+                        let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                        dynamicTargetURL = baseDir.appendingPathComponent(nameStr)
+                    }
+                    
                     if currentPipelineFiles.isEmpty {
                         let action = FileActionItem(
                             operationType: .custom,
                             sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                            targetURL: nil,
+                            targetURL: dynamicTargetURL,
                             detailDescription: "【\(newMeta.name)】执行处理",
                             customScript: script,
                             scriptEngine: engine
                         )
                         combinedActions.append(action)
+                        if let newTarget = dynamicTargetURL {
+                            currentPipelineFiles = [FileItem(url: newTarget, isDirectory: false)]
+                        }
                     } else if newMeta.batchMode == .aggregate {
+                        let firstURL = currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                        let allURLs = currentPipelineFiles.map { $0.url }
+                        
                         let action = FileActionItem(
                             operationType: .custom,
-                            sourceURL: currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                            inputURLs: currentPipelineFiles.map { $0.url },
-                            targetURL: nil,
-                            detailDescription: "【\(newMeta.name)】批量聚合处理 \(currentPipelineFiles.count) 个文件",
+                            sourceURL: firstURL,
+                            inputURLs: allURLs,
+                            targetURL: dynamicTargetURL,
+                            detailDescription: "【\(newMeta.name)】批量聚合处理 \(allURLs.count) 个文件",
                             customScript: script,
                             scriptEngine: engine
                         )
                         combinedActions.append(action)
+                        
+                        if let outputURL = dynamicTargetURL {
+                            currentPipelineFiles = [FileItem(url: outputURL, isDirectory: false)]
+                        }
                     } else {
+                        var transformedOutputs: [FileItem] = []
                         for item in currentPipelineFiles {
                             let action = FileActionItem(
                                 operationType: .custom,
                                 sourceURL: item.url,
-                                targetURL: nil,
+                                targetURL: dynamicTargetURL,
                                 detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
                                 customScript: script,
                                 scriptEngine: engine
                             )
                             combinedActions.append(action)
+                            if let outURL = dynamicTargetURL {
+                                transformedOutputs.append(FileItem(url: outURL, isDirectory: false))
+                            } else {
+                                transformedOutputs.append(item)
+                            }
                         }
+                        currentPipelineFiles = transformedOutputs
                     }
                     
                     let countStr = currentPipelineFiles.isEmpty ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
