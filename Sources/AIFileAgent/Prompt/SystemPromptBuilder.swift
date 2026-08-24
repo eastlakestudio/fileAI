@@ -89,12 +89,13 @@ public struct SystemPromptBuilder: Sendable {
              ```
              选项内容必须严格基于系统当前已启用的合法技能或参数枚举生成。
         
-        5. 【已有外置技能组合优先准则 (Reuse & Combine Over Creation)】：
-           - 系统外置技能库中已包含丰富的基础操作与协同工具。当用户提出复合需求（例如：“压缩后发给某某”、“转PDF后同步上传”）时，必须直接组合调用技能池中已有的工具链（如先压缩再发送）。
-           - 严禁在已有技能能够通过参数配置或多步组合完成的情况下，调用 `create_skill` 去动态创建功能重叠的临时技能！
+        5. 【已有外置技能组合优先与严禁创建多合一复合技能 (Atomic Composition Over Monolithic Skills)】：
+           - 系统外置技能库中已包含丰富的基础操作与协同工具。当用户提出复合需求（例如：“压缩后发飞书”、“压缩并发微信”、“转PDF后发邮件”）时，必须拆解为多个原子工具链（如 `Step 1: zip_compress ➔ Step 2: lark_sync / wechat_sync`）！
+           - 【铁律】：**严禁将多步骤动作合并写在同一个复合技能里面**（例如绝对严禁创建 `zip_to_wechat`、`zip_and_lark`、`pdf_and_email` 等复合巨型技能）！
+           - 每个 Skill 必须保持严格的单一职责（Single Responsibility Principle），多步骤任务必须通过输出有序 Tool 数组流水线组合完成。
         
         6. 【流水线参数显式流转与多步 JSON 数组输出规范 (Explicit Multi-Step Array Output)】：
-           - 当用户需求包含多个按序执行的步骤时（例如：“压缩后发飞书”、“转PDF后发邮件”），你必须在最终输出中一次性输出包含全部步骤的完整 JSON 数组，严禁只输出第一步：
+           - 当用户需求包含多个按序执行的步骤时（例如：“压缩后发微信/飞书”、“转PDF后发邮件”），你必须在最终输出中一次性输出包含全部步骤的完整 JSON 数组，严禁只输出第一步：
              ```json
              [
                {"tool": "zip_compress", "arguments": {"fileNames": ["report.xlsx"], "outputZip": "report.zip"}},
