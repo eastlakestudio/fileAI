@@ -49,14 +49,12 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
         switch type {
         case .antigravity:
             models = [
-                "gemini-3.7-flash",
-                "gemini-3.6-flash",
+                "default",
                 "gemini-3.5-flash",
                 "gemini-3.1-pro",
                 "claude-sonnet-4.6",
                 "claude-opus-4.6",
-                "gpt-oss-120b",
-                "default"
+                "gpt-oss-120b"
             ]
         case .codebuddy:
             models = [
