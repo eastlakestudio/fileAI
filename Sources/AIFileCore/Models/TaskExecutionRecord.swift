@@ -91,24 +91,24 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         
         // 1. 未来时间或极短时间（< 60秒）
         if interval < 60 && interval >= -5 {
-            return "刚刚"
+            return L10n.t("刚刚")
         }
         
         // 2. 1小时内（< 3600秒）：X分钟前
         if interval < 3600 && interval >= 60 {
             let minutes = max(1, Int(interval / 60))
-            return "\(minutes)分钟前"
+            return L10n.t("%@分钟前", "\(minutes)")
         }
         
         // 3. 今天（同一自然天，>= 1小时）：今天 HH:mm
         if calendar.isDate(date, inSameDayAs: now) {
-            return "今天 \(timeStr)"
+            return L10n.t("今天 %@", timeStr)
         }
         
         // 4. 昨天：昨天 HH:mm
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
            calendar.isDate(date, inSameDayAs: yesterday) {
-            return "昨天 \(timeStr)"
+            return L10n.t("昨天 %@", timeStr)
         }
         
         // 5. 本周内（同自然周）：周X HH:mm
@@ -119,8 +119,8 @@ public struct TaskExecutionRecord: Identifiable, Sendable, Codable {
         
         if currentYear == targetYear && currentWeek == targetWeek {
             let weekday = calendar.component(.weekday, from: date)
-            let weekdayNames = ["", "周日", "周一", "周二", "周三", "周四", "周五", "周六"]
-            let name = (weekday >= 1 && weekday <= 7) ? weekdayNames[weekday] : "本周"
+            let weekdayNames = ["", L10n.t("周日"), L10n.t("周一"), L10n.t("周二"), L10n.t("周三"), L10n.t("周四"), L10n.t("周五"), L10n.t("周六")]
+            let name = (weekday >= 1 && weekday <= 7) ? weekdayNames[weekday] : L10n.t("本周")
             return "\(name) \(timeStr)"
         }
         

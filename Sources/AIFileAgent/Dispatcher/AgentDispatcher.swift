@@ -38,10 +38,10 @@ public final class AgentDispatcher: Sendable {
         fileItems: [FileItem]
     ) async throws -> ExecutionPlan {
         var logs: [String] = []
-        logs.append("📥 接收指令: 「\(userPrompt)」(目标文件: \(fileItems.count) 项)")
+        logs.append(L10n.t("📥 接收指令: 「%@」(目标文件: %@ 项)", userPrompt, "\(fileItems.count)"))
         
         // 100% 交由大模型 / CLI (Antigravity CLI / Claude / Ollama) 进行意图深度规划与结构化参数提取
-        logs.append("🤖 正在调用模型引擎「\(provider.providerName)」进行意图与参数规划...")
+        logs.append(L10n.t("🤖 正在调用模型引擎「%@」进行意图与参数规划...", provider.providerName))
         
         // 2. 复杂意图或未命中规则时，无缝交由大模型/CLI 智能规划
         let tools = registry.toolsDefinition
@@ -60,12 +60,12 @@ public final class AgentDispatcher: Sendable {
         
         // 2. 检查大模型是否输出了意图澄清/反问请求 (Clarification Protocol)
         if let clarification = extractClarification(from: response) {
-            logs.append("❓ 识别到指令存在关键歧义或未明确选项，已生成结构化交互反问卡片：\(clarification.question)")
+            logs.append(L10n.t("❓ 识别到指令存在关键歧义或未明确选项，已生成结构化交互反问卡片：%@", clarification.question))
             return ExecutionPlan(
-                summary: "需要您确认：\(clarification.question)",
+                summary: L10n.t("需要您确认：%@", clarification.question),
                 actions: [],
-                thoughtProcess: initialThinking ?? "检测到指令存在关键歧义，暂停物理操作并向用户发起交互确认。",
-                selectedSkillName: "意图交互澄清",
+                thoughtProcess: initialThinking ?? L10n.t("检测到指令存在关键歧义，暂停物理操作并向用户发起交互确认。"),
+                selectedSkillName: L10n.t("意图交互澄清"),
                 parameters: [:],
                 modelProviderInfo: provider.providerName,
                 executionLogs: logs,
@@ -90,7 +90,7 @@ public final class AgentDispatcher: Sendable {
             logs.append(contentsOf: reviewResult.reviewLogs)
             if let reviewThought = reviewResult.reviewThinking, !reviewThought.isEmpty {
                 if let current = initialThinking, !current.isEmpty {
-                    initialThinking = current + "\n\n【Plan 自审校验】\n" + reviewThought
+                    initialThinking = current + "\n\n" + L10n.t("【Plan 自审校验】") + "\n" + reviewThought
                 } else {
                     initialThinking = reviewThought
                 }
@@ -118,7 +118,7 @@ public final class AgentDispatcher: Sendable {
                 let id = call.argumentsDict["id"] as? String ?? "skill_\(abs(userPrompt.hashValue) % 100000)"
                 let name = call.argumentsDict["name"] as? String ?? "动态生成技能"
                 let categoryStr = call.argumentsDict["category"] as? String ?? "自定义扩展"
-                let summary = call.argumentsDict["summary"] as? String ?? "CLI 自主编写的专用技能"
+                let summary = call.argumentsDict["summary"] as? String ?? L10n.t("CLI 自主编写的专用技能")
                 let icon = call.argumentsDict["icon"] as? String ?? "sparkles.rectangle.stack.fill"
                 let exts = (call.argumentsDict["supportedExtensions"] as? [String]) ?? ["*"]
                 let script = call.argumentsDict["executableScript"] as? String
@@ -171,8 +171,8 @@ public final class AgentDispatcher: Sendable {
                     batchMode: mode
                 )
                 
-                matchedSkillNames.append("\(newMeta.name) (已自动归入「\(newMeta.categoryDisplayName)」并持久化存储)")
-                logs.append("✨ CLI 自主编写并持久化安装新技能【\(newMeta.name)】(分类: \(newMeta.categoryDisplayName)) 至本地技能库")
+                matchedSkillNames.append(L10n.t("%@ (已自动归入「%@」并持久化存储)", newMeta.name, newMeta.categoryDisplayName))
+                logs.append(L10n.t("✨ CLI 自主编写并持久化安装新技能【%@】(分类: %@) 至本地技能库", newMeta.name, newMeta.categoryDisplayName))
                 
                 // 2. 检查后续是否有显式调用该新技能的 ToolCall。若有，则此处不生成重复 Action
                 let hasSubsequentCall = effectiveToolCalls.contains(where: { $0.functionName == id || $0.functionName == name })
@@ -193,7 +193,7 @@ public final class AgentDispatcher: Sendable {
                             sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                             inputURLs: [],
                             targetURL: dynamicTargetURL,
-                            detailDescription: "【\(newMeta.name)】\(newMeta.summary)",
+                            detailDescription: L10n.t("【%@】%@", newMeta.name, newMeta.summary),
                             customScript: script,
                             scriptEngine: engine
                         )
@@ -214,7 +214,7 @@ public final class AgentDispatcher: Sendable {
                             sourceURL: firstURL,
                             inputURLs: allURLs,
                             targetURL: dynamicTargetURL,
-                            detailDescription: "【\(newMeta.name)】批量聚合处理 \(allURLs.count) 个文件",
+                            detailDescription: L10n.t("【%@】批量聚合处理 %@ 个文件", newMeta.name, "\(allURLs.count)"),
                             customScript: script,
                             scriptEngine: engine
                         )
@@ -231,7 +231,7 @@ public final class AgentDispatcher: Sendable {
                                 operationType: .custom,
                                 sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
                                 targetURL: dynamicTargetURL,
-                                detailDescription: "【\(newMeta.name)】执行处理",
+                                detailDescription: L10n.t("【%@】执行处理", newMeta.name),
                                 customScript: script,
                                 scriptEngine: engine
                             )
@@ -246,7 +246,7 @@ public final class AgentDispatcher: Sendable {
                                     operationType: .custom,
                                     sourceURL: item.url,
                                     targetURL: dynamicTargetURL,
-                                    detailDescription: "【\(newMeta.name)】执行处理 \(item.name)",
+                                    detailDescription: L10n.t("【%@】执行处理 %@", newMeta.name, item.name),
                                     customScript: script,
                                     scriptEngine: engine
                                 )
@@ -261,9 +261,9 @@ public final class AgentDispatcher: Sendable {
                         }
                     }
                     
-                    let countStr = newMeta.batchMode == .zeroInput ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
-                    summaryNotes.append("CLI 已自动编写并持久化技能【\(newMeta.name)】，正在为 \(countStr) 执行处理")
-                    logs.append("📂 成功为 \(countStr) 生成【\(newMeta.name)】执行任务清单")
+                    let countStr = newMeta.batchMode == .zeroInput ? L10n.t("全局环境") : L10n.t("%@ 个文件", "\(currentPipelineFiles.count)")
+                    summaryNotes.append(L10n.t("CLI 已自动编写并持久化技能【%@】，正在为 %@ 执行处理", newMeta.name, countStr))
+                    logs.append(L10n.t("📂 成功为 %@ 生成【%@】执行任务清单", countStr, newMeta.name))
                 }
             } else if let skill = registry.skill(for: call.functionName) {
                 matchedSkillNames.append("\(skill.name) (\(skill.skillDescription))")
@@ -271,7 +271,7 @@ public final class AgentDispatcher: Sendable {
                 let plan = try skill.generatePlan(from: currentPipelineFiles, parameters: call.argumentsDict)
                 combinedActions.append(contentsOf: plan.actions)
                 summaryNotes.append(plan.summary)
-                logs.append("🧩 成功调用 Skill: \(skill.name)，生成 \(plan.actions.count) 个待执行文件操作项")
+                logs.append(L10n.t("🧩 成功调用 Skill: %@，生成 %@ 个待执行文件操作项", skill.name, "\(plan.actions.count)"))
                 
                 // 如果产生了新的目标文件，更新下游流水线输入
                 let outputURLs = plan.actions.compactMap { $0.targetURL }
@@ -280,7 +280,7 @@ public final class AgentDispatcher: Sendable {
                 }
             } else if let installed = SkillManager.shared.allSkills.first(where: { $0.id == call.functionName || $0.name.lowercased() == call.functionName.lowercased() }) {
                 matchedSkillNames.append("\(installed.name) (\(installed.summary))")
-                logs.append("🧩 匹配到技能: \(installed.name) (批处理模式: \(installed.batchMode.rawValue))")
+                logs.append(L10n.t("🧩 匹配到技能: %@ (批处理模式: %@)", installed.name, installed.batchMode.rawValue))
                 
                 let paramsSummary = call.argumentsDict.isEmpty ? "" : " (\(call.argumentsDict.map { "\($0.key): \($0.value)" }.joined(separator: ", ")))"
                 
@@ -304,8 +304,8 @@ public final class AgentDispatcher: Sendable {
                     if let newTarget = targetURL {
                         currentPipelineFiles = [FileItem(url: newTarget, isDirectory: false)]
                     }
-                    summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
-                    logs.append("📂 成功为【\(installed.name)】生成独立执行任务")
+                    summaryNotes.append(L10n.t("计划调用【%@】执行：%@", installed.name, installed.summary))
+                    logs.append(L10n.t("📂 成功为【%@】生成独立执行任务", installed.name))
                     
                 case .aggregate:
                     // 模式 B: 多文件聚合处理 (如压缩打包为 ZIP、多 PDF 合并、批量发送)
@@ -341,7 +341,7 @@ public final class AgentDispatcher: Sendable {
                             sourceURL: firstURL,
                             inputURLs: allURLs,
                             targetURL: targetZipURL,
-                            detailDescription: "【\(installed.name)】批量聚合处理 \(allURLs.count) 个文件\(paramsSummary)",
+                            detailDescription: L10n.t("【%@】批量聚合处理 %@ 个文件%@", installed.name, "\(allURLs.count)", paramsSummary),
                             customScript: installed.executableScript,
                             scriptEngine: installed.scriptEngine
                         )
@@ -351,8 +351,8 @@ public final class AgentDispatcher: Sendable {
                             currentPipelineFiles = [FileItem(url: outputURL, isDirectory: false)]
                         }
                     }
-                    summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
-                    logs.append("📂 成功为 \(currentPipelineFiles.count) 个文件生成【\(installed.name)】批量聚合任务 (1 项操作)")
+                    summaryNotes.append(L10n.t("计划调用【%@】执行：%@", installed.name, installed.summary))
+                    logs.append(L10n.t("📂 成功为 %@ 个文件生成【%@】批量聚合任务 (1 项操作)", "\(currentPipelineFiles.count)", installed.name))
                     
                 case .perFile:
                     // 模式 C: 单文件逐项变换 (如逐个修改分辨率、逐个格式转换、逐个重命名)
@@ -373,7 +373,7 @@ public final class AgentDispatcher: Sendable {
                                 operationType: .custom,
                                 sourceURL: item.url,
                                 targetURL: nil,
-                                detailDescription: "【\(installed.name)】处理 \(item.name)\(paramsSummary)",
+                                detailDescription: L10n.t("【%@】处理 %@%@", installed.name, item.name, paramsSummary),
                                 customScript: installed.executableScript,
                                 scriptEngine: installed.scriptEngine
                             )
@@ -382,30 +382,30 @@ public final class AgentDispatcher: Sendable {
                         }
                         currentPipelineFiles = transformedOutputs
                     }
-                    let countStr = currentPipelineFiles.isEmpty ? "全局环境" : "\(currentPipelineFiles.count) 个文件"
-                    summaryNotes.append("计划调用【\(installed.name)】执行：\(installed.summary)")
-                    logs.append("📂 成功为 \(countStr) 生成【\(installed.name)】逐项变换任务清单 (\(combinedActions.count) 项)")
+                    let countStr = currentPipelineFiles.isEmpty ? L10n.t("全局环境") : L10n.t("%@ 个文件", "\(currentPipelineFiles.count)")
+                    summaryNotes.append(L10n.t("计划调用【%@】执行：%@", installed.name, installed.summary))
+                    logs.append(L10n.t("📂 成功为 %@ 生成【%@】逐项变换任务清单 (%@ 项)", countStr, installed.name, "\(combinedActions.count)"))
                 }
             } else {
-                logs.append("⚠️ 模型请求了未在系统中注册的 Skill: \(call.functionName)")
+                logs.append(L10n.t("⚠️ 模型请求了未在系统中注册的 Skill: %@", call.functionName))
             }
         }
         
         let summary = summaryNotes.joined(separator: "；")
-        let finalSummary = summary.isEmpty ? "计划执行 \(combinedActions.count) 项操作" : summary
+        let finalSummary = summary.isEmpty ? L10n.t("计划执行 %@ 项操作", "\(combinedActions.count)") : summary
         
-        let selectedSkill = matchedSkillNames.isEmpty ? "未匹配物理 Skill (意图咨询或未安装对应外部插件)" : matchedSkillNames.joined(separator: ", ")
+        let selectedSkill = matchedSkillNames.isEmpty ? L10n.t("未匹配物理 Skill (意图咨询或未安装对应外部插件)") : matchedSkillNames.joined(separator: ", ")
         
         var thought = initialThinking
         if thought == nil || thought?.isEmpty == true {
             if !matchedSkillNames.isEmpty {
-                thought = "经过语义分析，识别用户意图需调用「\(selectedSkill)」，已自动提取参数并完成文件路径映射。"
+                thought = L10n.t("经过语义分析，识别用户意图需调用「%@」，已自动提取参数并完成文件路径映射。", selectedSkill)
             } else {
-                thought = response.textContent ?? "分析指令「\(userPrompt)」，当前已安装的本地文件技能池中未包含可执行此操作的专用插件，因此未生成物理变动。"
+                thought = response.textContent ?? L10n.t("分析指令「%@」，当前已安装的本地文件技能池中未包含可执行此操作的专用插件，因此未生成物理变动。", userPrompt)
             }
         }
         
-        logs.append("✅ 规划分析完成 (生成 \(combinedActions.count) 项操作)")
+        logs.append(L10n.t("✅ 规划分析完成 (生成 %@ 项操作)", "\(combinedActions.count)"))
         
         return ExecutionPlan(
             summary: finalSummary,
@@ -446,7 +446,7 @@ public final class AgentDispatcher: Sendable {
                         throw NSError(
                             domain: "PythonSkillRunner",
                             code: Int(result.exitCode),
-                            userInfo: [NSLocalizedDescriptionKey: "技能脚本执行失败 (退出码 \(result.exitCode)): \(errMsg.isEmpty ? "请检查系统工具是否安装" : errMsg)"]
+                            userInfo: [NSLocalizedDescriptionKey: L10n.t("技能脚本执行失败 (退出码 %@): %@", "\(result.exitCode)", errMsg.isEmpty ? L10n.t("请检查系统工具是否安装") : errMsg)]
                         )
                     }
                     if let firstCreated = result.createdFiles.first {
@@ -496,7 +496,7 @@ public final class AgentDispatcher: Sendable {
             throw NSError(
                 domain: "AgentDispatcher",
                 code: 404,
-                userInfo: [NSLocalizedDescriptionKey: "未找到能够执行操作「\(action.operationType.rawValue)」的可用 Skill"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("未找到能够执行操作「%@」的可用 Skill", action.operationType.rawValue)]
             )
         }
     }

@@ -4,8 +4,8 @@ import AIFileCore
 
 public final class PDFMergeSplitSkill: FileSkill, Sendable {
     public let identifier = "pdf_merge_split"
-    public let name = "PDF合并与拆分"
-    public let skillDescription = "将多个 PDF 文件合并为一个新 PDF，或将多页 PDF 拆分为单页文件"
+    public let name = L10n.t("PDF合并与拆分")
+    public let skillDescription = L10n.t("将多个 PDF 文件合并为一个新 PDF，或将多页 PDF 拆分为单页文件")
     public var supportedOperations: [FileOperationType] { [.mergePDF, .splitPDF] }
     
     public var parametersSchema: [String: Any] {
@@ -15,16 +15,16 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
                 "actionType": [
                     "type": "string",
                     "enum": ["merge", "split"],
-                    "description": "操作类型：merge（合并）或 split（拆分）"
+                    "description": L10n.t("操作类型：merge（合并）或 split（拆分）")
                 ],
                 "outputFileName": [
                     "type": "string",
-                    "description": "合并时的输出文件名（例如 merged.pdf）"
+                    "description": L10n.t("合并时的输出文件名（例如 merged.pdf）")
                 ],
                 "fileNames": [
                     "type": "array",
                     "items": ["type": "string"],
-                    "description": "参与处理的 PDF 文件名列表"
+                    "description": L10n.t("参与处理的 PDF 文件名列表")
                 ]
             ],
             "required": ["actionType"]
@@ -35,7 +35,7 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
     
     public func generatePlan(from items: [FileItem], parameters: [String: Any]) throws -> ExecutionPlan {
         guard let actionType = parameters["actionType"] as? String else {
-            throw NSError(domain: "PDFMergeSplitSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "缺少 actionType 参数"])
+            throw NSError(domain: "PDFMergeSplitSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: L10n.t("缺少 actionType 参数")])
         }
         let targetNames = Set((parameters["fileNames"] as? [String]) ?? [])
         let pdfItems = items.filter { item in
@@ -45,11 +45,11 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
         }
         
         guard !pdfItems.isEmpty else {
-            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? L10n.t("无后缀") : ".\($0.fileExtension)" }).joined(separator: ", ")
             throw NSError(
                 domain: "PDFMergeSplitSkill",
                 code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 中未包含 PDF 文件。PDF 合并与拆分仅支持 .pdf 格式。"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("当前选中的文件 (%@) 中未包含 PDF 文件。PDF 合并与拆分仅支持 .pdf 格式。", presentExts)]
             )
         }
         
@@ -65,7 +65,7 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
                 sourceURL: pdfItems.first!.url,
                 inputURLs: pdfItems.map { $0.url },
                 targetURL: targetURL,
-                detailDescription: "合并 \(pdfItems.count) 个 PDF 为 \(outputName)"
+                detailDescription: L10n.t("合并 %@ 个 PDF 为 %@", "\(pdfItems.count)", outputName)
             ))
         } else {
             for item in pdfItems {
@@ -73,13 +73,13 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
                     operationType: .splitPDF,
                     sourceURL: item.url,
                     targetURL: nil,
-                    detailDescription: "拆分 \(item.name) 为单页 PDF"
+                    detailDescription: L10n.t("拆分 %@ 为单页 PDF", item.name)
                 ))
             }
         }
         
         return ExecutionPlan(
-            summary: actionType == "merge" ? "合并 \(pdfItems.count) 个 PDF 文件" : "拆分 \(pdfItems.count) 个 PDF 文件",
+            summary: actionType == "merge" ? L10n.t("合并 %@ 个 PDF 文件", "\(pdfItems.count)") : L10n.t("拆分 %@ 个 PDF 文件", "\(pdfItems.count)"),
             actions: actions
         )
     }
@@ -105,12 +105,12 @@ public final class PDFMergeSplitSkill: FileSkill, Sendable {
                 }
             }
             guard mergedDoc.write(to: targetURL) else {
-                throw NSError(domain: "PDFMergeSplitSkill", code: 3, userInfo: [NSLocalizedDescriptionKey: "PDF 合并写入失败"])
+                throw NSError(domain: "PDFMergeSplitSkill", code: 3, userInfo: [NSLocalizedDescriptionKey: L10n.t("PDF 合并写入失败")])
             }
             return targetURL
         } else if action.operationType == .splitPDF {
             guard let doc = PDFDocument(url: action.sourceURL) else {
-                throw NSError(domain: "PDFMergeSplitSkill", code: 4, userInfo: [NSLocalizedDescriptionKey: "无法打开源 PDF"])
+                throw NSError(domain: "PDFMergeSplitSkill", code: 4, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法打开源 PDF")])
             }
             let parentDir = action.sourceURL.deletingLastPathComponent()
             let baseName = action.sourceURL.deletingPathExtension().lastPathComponent

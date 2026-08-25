@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     macOS: "14.0"
   xcodeVersion: "15.0"
+  developmentLanguage: zh-Hans
 
 settings:
   MACOSX_DEPLOYMENT_TARGET: "14.0"
@@ -69,6 +70,7 @@ targets:
       - path: Sources/AIFileApp
       - path: Support/zh-Hans.lproj/InfoPlist.strings
       - path: Support/en.lproj/InfoPlist.strings
+      - path: Support/Localizable.xcstrings
     dependencies:
       - target: AIFileCore
       - target: AIFileSkills
@@ -80,7 +82,8 @@ targets:
       properties:
         CFBundleName: "文件魔法棒"
         CFBundleDisplayName: "文件魔法棒"
-        CFBundleDevelopmentRegion: "zh_CN"
+        CFBundleDevelopmentRegion: "zh-Hans"
+        CFBundleLocalizations: [zh-Hans, en]
         LSApplicationCategoryType: "public.app-category.utilities"
         ITSAppUsesNonExemptEncryption: false
         LSUIElement: false

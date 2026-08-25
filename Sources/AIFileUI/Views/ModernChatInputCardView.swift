@@ -130,39 +130,24 @@ public struct ModernChatInputCardView: View {
         .menuIndicator(.hidden)
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("选取文件或快速调用已安装 Skill 技能")
+        .help(L10n.t("选取文件或快速调用已安装 Skill 技能"))
     }
     
     @ViewBuilder
     private var dynamicSkillsSections: some View {
-        let skills = SkillManager.shared.allSkills.filter { $0.isEnabled }
-        let categoryNames = Array(Set(skills.map { $0.categoryDisplayName })).sorted()
+        let skills = SkillManager.shared.allSkills
+            .filter { $0.isEnabled }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         
-        ForEach(categoryNames, id: \.self) { catName in
-            let categorySkills = skills.filter { $0.categoryDisplayName == catName }
-            if !categorySkills.isEmpty {
-                Section(categorySectionTitle(for: catName)) {
-                    ForEach(categorySkills) { (s: SkillMetadata) in
-                        Button(action: {
-                            let text = s.examplePrompts.first ?? s.summary
-                            viewModel.applySuggestion(text)
-                        }) {
-                            Label(s.name, systemImage: s.icon)
-                        }
-                    }
+        Section(L10n.t("✨ 已启用技能")) {
+            ForEach(skills) { (s: SkillMetadata) in
+                Button(action: {
+                    let text = s.examplePrompts.first ?? s.summary
+                    viewModel.applySuggestion(text)
+                }) {
+                    Label(s.name, systemImage: s.icon)
                 }
             }
-        }
-    }
-    
-    private func categorySectionTitle(for categoryName: String) -> String {
-        switch categoryName {
-        case "图片处理": return "🖼️ 图片处理 Skill"
-        case "文档与PDF": return "📄 文档与 PDF Skill"
-        case "整理与命名": return "🏷️ 整理与重命名 Skill"
-        case "企业协同": return "🏢 企业生态协同"
-        case "自定义扩展": return "🧩 自定义扩展技能"
-        default: return "✨ \(categoryName)"
         }
     }
     
@@ -212,7 +197,7 @@ public struct ModernChatInputCardView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .help("当前使用的模型/CLI引擎，点击可快速切换或配置")
+        .help(L10n.t("当前使用的模型/CLI引擎，点击可快速切换或配置"))
     }
     
     private var sendOrLoadingButton: some View {

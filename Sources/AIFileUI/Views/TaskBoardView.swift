@@ -155,7 +155,7 @@ public struct TaskBoardView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(tasks.isEmpty)
-            .help("清空所有历史任务记录")
+            .help(L10n.t("清空所有历史任务记录"))
             
             Button(action: {
                 Task { await reloadTasks() }
@@ -165,7 +165,7 @@ public struct TaskBoardView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("刷新任务列表")
+            .help(L10n.t("刷新任务列表"))
         }
         .padding(.leading, 78) // 避让系统红黄绿交通灯
         .padding(.trailing, 14)
@@ -185,12 +185,16 @@ public struct TaskBoardView: View {
                     }
                 }) {
                     HStack(spacing: 3.5) {
-                        Text(tab.rawValue)
+                        Text(L10n.t(tab.rawValue))
                             .font(.system(size: 10.5, weight: isSelected ? .bold : .medium))
+                            .lineLimit(1)
+                            .fixedSize()
                         
                         Text("\(count(for: tab))")
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 4)
+                            .lineLimit(1)
+                            .frame(minWidth: 20, alignment: .center) // 预留两位数宽度，避免换行/跳动
+                            .padding(.horizontal, 3)
                             .padding(.vertical, 1)
                             .background(
                                 isSelected
@@ -294,7 +298,7 @@ public struct TaskBoardView: View {
                                     .font(.system(size: 10))
                                     .foregroundColor(.blue)
                             } else {
-                                Text("(\(task.plan.actions.count) 项变动)")
+                                Text(L10n.t("(%@ 项变动)", "\(task.plan.actions.count)"))
                                     .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                             }
@@ -376,7 +380,7 @@ public struct TaskBoardView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .frame(height: 24)
-                .help("重新运行此任务")
+                .help(L10n.t("重新运行此任务"))
                 
                 Button(action: {
                     deleteSingleTask(task)
@@ -388,7 +392,7 @@ public struct TaskBoardView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .frame(height: 24)
-                .help("删除此任务记录")
+                .help(L10n.t("删除此任务记录"))
             }
         }
     }
@@ -399,24 +403,24 @@ public struct TaskBoardView: View {
         HStack(spacing: 14) {
             HStack(spacing: 4) {
                 Circle().fill(Color.blue).frame(width: 6, height: 6)
-                Text("进行中: \(inProgressTasks.count)")
+                Text(L10n.t("进行中: %@", "\(inProgressTasks.count)"))
             }
             HStack(spacing: 4) {
                 Circle().fill(Color.green).frame(width: 6, height: 6)
-                Text("已完成: \(completedTasks.count)")
+                Text(L10n.t("已完成: %@", "\(completedTasks.count)"))
             }
             HStack(spacing: 4) {
                 Circle().fill(Color.red).frame(width: 6, height: 6)
-                Text("失败: \(failedTasks.count)")
+                Text(L10n.t("失败: %@", "\(failedTasks.count)"))
             }
             HStack(spacing: 4) {
                 Circle().fill(Color.gray).frame(width: 6, height: 6)
-                Text("已取消: \(cancelledTasks.count)")
+                Text(L10n.t("已取消: %@", "\(cancelledTasks.count)"))
             }
             
             Spacer()
             
-            Text("总记录: \(tasks.count) 项")
+            Text(L10n.t("总记录: %@ 项", "\(tasks.count)"))
                 .foregroundColor(.secondary)
         }
         .font(.system(size: 10.5))
@@ -467,7 +471,7 @@ public struct TaskBoardView: View {
                     HStack(spacing: 4) {
                         Image(systemName: copiedSectionKey == "all" ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 10))
-                        Text(copiedSectionKey == "all" ? "已拷贝全部" : "拷贝全部")
+                        Text(copiedSectionKey == "all" ? L10n.t("已拷贝全部") : L10n.t("拷贝全部"))
                             .font(.system(size: 11, weight: .medium))
                     }
                 }
@@ -526,16 +530,16 @@ public struct TaskBoardView: View {
                     // 物理变动清单
                     if !task.plan.actions.isEmpty {
                         HStack {
-                            Text("【物理变动清单 (\(task.plan.actions.count) 项)】")
+                            Text(L10n.t("【物理变动清单 (%@ 项)】", "\(task.plan.actions.count)"))
                                 .font(.subheadline.bold())
                             Spacer()
-                            let actionSummary = task.plan.actions.map { "[\($0.operationType.rawValue)] \($0.sourceURL.path) -> \($0.targetURL?.path ?? "同源")" }.joined(separator: "\n")
+                            let actionSummary = task.plan.actions.map { L10n.t("[%@] %@ -> %@", $0.operationType.rawValue, $0.sourceURL.path, $0.targetURL?.path ?? L10n.t("同源")) }.joined(separator: "\n")
                             copyButton(text: actionSummary, key: "actions")
                         }
                         
                         ForEach(task.plan.actions) { action in
                             HStack {
-                                Text(action.operationType.rawValue)
+                                Text(L10n.t(action.operationType.rawValue))
                                     .font(.caption.bold())
                                     .padding(.horizontal, 4)
                                     .background(Color.blue.opacity(0.1))
@@ -590,7 +594,7 @@ public struct TaskBoardView: View {
             HStack(spacing: 3) {
                 Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 9))
-                Text(isCopied ? "已复制" : "复制")
+                Text(isCopied ? L10n.t("已复制") : L10n.t("复制"))
                     .font(.system(size: 10))
             }
         }
@@ -616,23 +620,23 @@ public struct TaskBoardView: View {
     
     private func buildFullTaskText(_ task: TaskExecutionRecord) -> String {
         var lines: [String] = []
-        lines.append("任务目标: \(task.prompt)")
-        lines.append("任务状态: \(task.status.rawValue)")
-        lines.append("耗时: \(task.formattedDuration)")
+        lines.append(L10n.t("任务目标: %@", task.prompt))
+        lines.append(L10n.t("任务状态: %@", task.status.rawValue))
+        lines.append(L10n.t("耗时: %@", task.formattedDuration))
         if let report = task.walkthroughReport, !report.isEmpty {
-            lines.append("\n【执行总结报告】\n\(report)")
+            lines.append(L10n.t("\n【执行总结报告】\n%@", report))
         }
         if let err = task.errorMessage, !err.isEmpty {
-            lines.append("\n【错误信息】\n\(err)")
+            lines.append(L10n.t("\n【错误信息】\n%@", err))
         }
         if !task.plan.actions.isEmpty {
-            lines.append("\n【文件操作】")
+            lines.append(L10n.t("\n【文件操作】"))
             for action in task.plan.actions {
-                lines.append("- [\(action.operationType.rawValue)] \(action.sourceURL.path) -> \(action.targetURL?.path ?? "同源")")
+                lines.append(L10n.t("- [%@] %@ -> %@", action.operationType.rawValue, action.sourceURL.path, action.targetURL?.path ?? L10n.t("同源")))
             }
         }
         if !task.executionLogs.isEmpty {
-            lines.append("\n【执行日志】")
+            lines.append(L10n.t("\n【执行日志】"))
             lines.append(contentsOf: task.executionLogs)
         }
         return lines.joined(separator: "\n")

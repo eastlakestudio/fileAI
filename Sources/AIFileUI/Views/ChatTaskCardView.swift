@@ -90,11 +90,11 @@ public struct ChatTaskCardView: View {
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(nsColor: .controlBackgroundColor))
                 LinearGradient(
                     colors: [
-                        Color(nsColor: .controlBackgroundColor).opacity(0.85),
-                        statusColor.opacity(0.08)
+                        Color.white.opacity(0.09),
+                        statusColor.opacity(0.12)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -106,18 +106,18 @@ public struct ChatTaskCardView: View {
                 .stroke(
                     LinearGradient(
                         colors: [
-                            statusColor.opacity(0.45),
-                            Color.white.opacity(0.20),
-                            statusColor.opacity(0.15)
+                            statusColor.opacity(0.65),
+                            Color.white.opacity(0.25),
+                            statusColor.opacity(0.30)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
-                    lineWidth: 1
+                    lineWidth: 1.2
                 )
         )
         .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
+        .shadow(color: Color.black.opacity(0.16), radius: 9, x: 0, y: 3)
     }
     
     private var cardTopHeader: some View {
@@ -135,7 +135,7 @@ public struct ChatTaskCardView: View {
                     .textSelection(.enabled)
                 
                 if !task.targetFilePaths.isEmpty {
-                    Text("\(task.targetFilePaths.count) 个文件")
+                    Text(L10n.t("%@ 个文件", "\(task.targetFilePaths.count)"))
                         .font(.system(size: 9, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, 4.5)
                         .padding(.vertical, 1.5)
@@ -251,7 +251,7 @@ public struct ChatTaskCardView: View {
                     Image(systemName: "brain.head.profile")
                         .font(.system(size: 10))
                         .foregroundColor(.purple)
-                    Text(task.plan.selectedSkillName ?? "AI 思考与意图解析")
+                    Text(task.plan.selectedSkillName ?? L10n.t("AI 思考与意图解析"))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.purple)
                         .lineLimit(1)
@@ -294,7 +294,7 @@ public struct ChatTaskCardView: View {
                 VStack(spacing: 3) {
                     ForEach(task.plan.actions.prefix(4)) { action in
                         HStack(spacing: 5) {
-                            Text(action.operationType.rawValue)
+                            Text(L10n.t(action.operationType.rawValue))
                                 .font(.system(size: 8, weight: .bold))
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
@@ -325,7 +325,7 @@ public struct ChatTaskCardView: View {
                     }
                     
                     if task.plan.actions.count > 4 {
-                        Text("... 还有 \(task.plan.actions.count - 4) 个文件操作")
+                        Text(L10n.t("... 还有 %@ 个文件操作", "\(task.plan.actions.count - 4)"))
                             .font(.system(size: 9))
                             .foregroundColor(.secondary)
                             .padding(.leading, 4)
@@ -426,7 +426,7 @@ public struct ChatTaskCardView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 11))
                     .foregroundColor(.green)
-                Text("产出结果文件 (\(task.plan.actions.count) 项)")
+                Text(L10n.t("产出结果文件 (%@ 项)", "\(task.plan.actions.count)"))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.primary)
                 Spacer()
@@ -447,7 +447,7 @@ public struct ChatTaskCardView: View {
                                 .lineLimit(1)
                             
                             if let dest = action.targetURL, dest != action.sourceURL {
-                                Text("源: \(action.sourceURL.lastPathComponent)")
+                                Text(L10n.t("源: %@", action.sourceURL.lastPathComponent))
                                     .font(.system(size: 9))
                                     .foregroundColor(.secondary)
                             }
@@ -469,7 +469,7 @@ public struct ChatTaskCardView: View {
                             }
                             .buttonStyle(.borderedProminent)
                             .controlSize(.mini)
-                            .help("在访达中高亮定位")
+                            .help(L10n.t("在访达中高亮定位"))
                             
                             Button(action: {
                                 NSWorkspace.shared.open(targetURL)
@@ -483,7 +483,7 @@ public struct ChatTaskCardView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.mini)
-                            .help("使用系统默认程序打开文件")
+                            .help(L10n.t("使用系统默认程序打开文件"))
                         }
                     }
                     .padding(.horizontal, 8)
@@ -524,7 +524,7 @@ public struct ChatTaskCardView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 9, weight: .bold))
-                        Text("确认执行 (\(task.plan.actions.count) 项)")
+                        Text(L10n.t("确认执行 (%@ 项)", "\(task.plan.actions.count)"))
                             .font(.system(size: 10, weight: .bold))
                     }
                 }
@@ -554,7 +554,7 @@ public struct ChatTaskCardView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
-                    .help("在访达中高亮定位生成的文件")
+                    .help(L10n.t("在访达中高亮定位生成的文件"))
                 }
             }
             
@@ -572,7 +572,7 @@ public struct ChatTaskCardView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
-                .help("撤销此任务产生的物理操作")
+                .help(L10n.t("撤销此任务产生的物理操作"))
             }
             
             // 再次执行按钮
@@ -586,7 +586,7 @@ public struct ChatTaskCardView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
-            .help("以此指令对原目标文件重新发起执行")
+            .help(L10n.t("以此指令对原目标文件重新发起执行"))
         }
     }
     

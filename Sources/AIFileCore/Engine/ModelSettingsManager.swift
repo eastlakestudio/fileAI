@@ -41,7 +41,7 @@ public final class ModelSettingsManager: @unchecked Sendable {
     /// 测试模型连接可用性
     public func testConnection(settings: ModelSettings) async throws -> String {
         if settings.providerId == "local_mlx" {
-            return "✅ 本地 MLX-Swift 引擎就绪（Apple Silicon Metal 加速）"
+            return L10n.t("✅ 本地 MLX-Swift 引擎就绪（Apple Silicon Metal 加速）")
         }
         
         // 1. 本地 AI CLI 引擎探测
@@ -58,13 +58,13 @@ public final class ModelSettingsManager: @unchecked Sendable {
                 if let path = execPath {
                     _ = SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
                     let version = await fetchCLIVersion(path: path)
-                    let verStr = version.map { " (版本: \($0))" } ?? ""
-                    return "✅ 本地 CLI 运行就绪：\(type.displayName)\(verStr) [\(path)]"
+                    let verStr = version.map { L10n.t(" (版本: %@)", $0) } ?? ""
+                    return L10n.t("✅ 本地 CLI 运行就绪：%@%@ [%@]", type.displayName, verStr, path)
                 } else {
                     throw NSError(
                         domain: "ModelSettings",
                         code: 404,
-                        userInfo: [NSLocalizedDescriptionKey: "未在已授权目录中找到 \(type.displayName)，请在上方点击授权所在目录"]
+                        userInfo: [NSLocalizedDescriptionKey: L10n.t("未在已授权目录中找到 %@，请在上方点击授权所在目录", type.displayName)]
                     )
                 }
             }
@@ -72,7 +72,7 @@ public final class ModelSettingsManager: @unchecked Sendable {
         
         // 2. 云端 HTTP OpenAI 兼容接口
         guard let url = URL(string: settings.baseURL)?.appendingPathComponent("models") else {
-            throw NSError(domain: "ModelSettings", code: 1, userInfo: [NSLocalizedDescriptionKey: "无效的 Base URL"])
+            throw NSError(domain: "ModelSettings", code: 1, userInfo: [NSLocalizedDescriptionKey: L10n.t("无效的 Base URL")])
         }
         
         var request = URLRequest(url: url)
@@ -83,14 +83,14 @@ public final class ModelSettingsManager: @unchecked Sendable {
         
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw NSError(domain: "ModelSettings", code: 2, userInfo: [NSLocalizedDescriptionKey: "无效的网络响应"])
+            throw NSError(domain: "ModelSettings", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.t("无效的网络响应")])
         }
         
         if (200...299).contains(httpResponse.statusCode) {
-            return "✅ 连接成功！服务器响应正常 (\(httpResponse.statusCode))"
+            return L10n.t("✅ 连接成功！服务器响应正常 (%@)", "\(httpResponse.statusCode)")
         } else {
             let body = String(data: data, encoding: .utf8) ?? ""
-            throw NSError(domain: "ModelSettings", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器返回错误 \(httpResponse.statusCode): \(body)"])
+            throw NSError(domain: "ModelSettings", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: L10n.t("服务器返回错误 %@: %@", "\(httpResponse.statusCode)", body)])
         }
     }
     

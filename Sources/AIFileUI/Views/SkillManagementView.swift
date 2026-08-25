@@ -136,7 +136,7 @@ public struct SkillManagementView: View {
                 .padding(.horizontal, 12)
             
             // 云端市场入口
-            categoryNavRow(category: .cloudMarket, badge: "云端 \(cloudSkills.count)")
+            categoryNavRow(category: .cloudMarket, badge: L10n.t("云端 %@", "\(cloudSkills.count)"))
             
             Spacer()
             
@@ -145,11 +145,11 @@ public struct SkillManagementView: View {
                 Button(action: {
                     Task {
                         isScanningApps = true
-                        harvestNotice = "正在扫描本机 /Applications 与命令行生产力工具..."
+                        harvestNotice = L10n.t("正在扫描本机 /Applications 与命令行生产力工具...")
                         let generated = await SkillHarvesterEngine.shared.harvestAllLocalSkills()
                         reloadSkills()
                         isScanningApps = false
-                        harvestNotice = "🎉 成功扫描并生成装载 \(generated.count) 款本机软件指令集！"
+                        harvestNotice = L10n.t("🎉 成功扫描并生成装载 %@ 款本机软件指令集！", "\(generated.count)")
                     }
                 }) {
                     HStack(spacing: 4) {
@@ -159,7 +159,7 @@ public struct SkillManagementView: View {
                         } else {
                             Image(systemName: "sparkles.rectangle.stack.fill")
                         }
-                        Text(isScanningApps ? "正在扫描构建..." : "扫描本机建立指令库")
+                        Text(isScanningApps ? L10n.t("正在扫描构建...") : L10n.t("扫描本机建立指令库"))
                     }
                     .font(.system(size: 11, weight: .semibold))
                     .frame(maxWidth: .infinity)
@@ -213,7 +213,7 @@ public struct SkillManagementView: View {
                     .foregroundColor(isSelected ? .accentColor : .secondary)
                     .frame(width: 16)
                 
-                Text(category.rawValue)
+                Text(L10n.t(category.rawValue))
                     .font(.system(size: 12, weight: isSelected ? .bold : .regular))
                     .foregroundColor(isSelected ? .primary : .secondary)
                 
@@ -314,7 +314,7 @@ public struct SkillManagementView: View {
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.secondary.opacity(0.8))
                         
-                        Text(skill.category.rawValue)
+                        Text(L10n.t(skill.category.rawValue))
                             .font(.system(size: 9, weight: .semibold))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -337,7 +337,7 @@ public struct SkillManagementView: View {
                     }
                 }) {
                     HStack(spacing: 2) {
-                        Text(isExpanded ? "收起" : "参数与示例")
+                        Text(isExpanded ? L10n.t("收起") : L10n.t("参数与示例"))
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     }
                     .font(.system(size: 10))
@@ -537,7 +537,7 @@ public struct SkillManagementView: View {
     
     private var bottomActionBar: some View {
         HStack(spacing: 12) {
-            Text("已启用 \(enabledCount) / \(localSkills.count) 个本地 Markdown 技能")
+            Text(L10n.t("已启用 %@ / %@ 个本地 Markdown 技能", "\(enabledCount)", "\(localSkills.count)"))
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.secondary)
             
@@ -605,7 +605,7 @@ public struct SkillManagementView: View {
                         reloadSkills()
                         isShowingImportModal = false
                     } else {
-                        importErrorMessage = result.error ?? "安装失败"
+                        importErrorMessage = result.error ?? L10n.t("安装失败")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -642,7 +642,7 @@ public struct SkillManagementView: View {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [.plainText]
-        panel.message = "选择自定义 Skill Markdown (.md) 文件"
+        panel.message = L10n.t("选择自定义 Skill Markdown (.md) 文件")
         
         if panel.runModal() == .OK, let url = panel.url {
             if let content = try? String(contentsOf: url, encoding: .utf8) {

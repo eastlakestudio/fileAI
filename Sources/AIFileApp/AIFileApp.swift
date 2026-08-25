@@ -44,6 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 0. 恢复用户自定义界面语言覆盖（上次手动选择的语言立即生效）
+        L10n.setLanguageOverride(L10n.InterfaceLanguage.current)
+        
         // 0. 恢复与激活已持久化的安全目录授权书签
         SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
         
@@ -80,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         // 2. 注册快捷键
-        GlobalHotKeyManager.shared.registerDefaultHotKey()
+        GlobalHotKeyManager.shared.registerSavedHotKey()
         GlobalHotKeyManager.shared.onHotKeyTriggered = { [weak self] in
             self?.showWindow()
             self?.viewModel.fetchFromFinderAsync()
@@ -117,36 +120,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
-        appMenu.addItem(withTitle: "关于 文件魔法棒", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.t("关于 文件魔法棒"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "隐藏 文件魔法棒", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        let hideOthers = NSMenuItem(title: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: L10n.t("隐藏 文件魔法棒"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        let hideOthers = NSMenuItem(title: L10n.t("隐藏其他"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthers)
-        appMenu.addItem(withTitle: "显示全部", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: L10n.t("显示全部"), action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "退出 文件魔法棒", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: L10n.t("退出 文件魔法棒"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         
         // 2. Edit Menu (这是让 Cmd+C, Cmd+V, Cmd+A, Cmd+X, Cmd+Z 生效的关键系统路由)
         let editMenuItem = NSMenuItem()
         mainMenu.addItem(editMenuItem)
-        let editMenu = NSMenu(title: "编辑")
+        let editMenu = NSMenu(title: L10n.t("编辑"))
         editMenuItem.submenu = editMenu
-        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
-        editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(withTitle: L10n.t("撤销"), action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: L10n.t("重做"), action: Selector(("redo:")), keyEquivalent: "Z")
         editMenu.addItem(NSMenuItem.separator())
-        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        editMenu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: L10n.t("剪切"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: L10n.t("拷贝"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: L10n.t("粘贴"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: L10n.t("全选"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         
         // 3. Window Menu
         let windowMenuItem = NSMenuItem()
         mainMenu.addItem(windowMenuItem)
-        let windowMenu = NSMenu(title: "窗口")
+        let windowMenu = NSMenu(title: L10n.t("窗口"))
         windowMenuItem.submenu = windowMenu
-        windowMenu.addItem(withTitle: "关闭", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        windowMenu.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: L10n.t("关闭"), action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: L10n.t("最小化"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         
         NSApplication.shared.mainMenu = mainMenu
     }

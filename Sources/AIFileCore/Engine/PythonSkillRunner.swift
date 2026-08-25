@@ -63,7 +63,7 @@ public final class PythonSkillRunner: Sendable {
             pythonPath: pythonPath
         )
         if !preflight.isReady {
-            let err = preflight.errorMessage ?? "技能依赖的运行环境未就绪"
+            let err = preflight.errorMessage ?? L10n.t("技能依赖的运行环境未就绪")
             return ScriptExecutionResult(
                 exitCode: 1,
                 stdout: "",

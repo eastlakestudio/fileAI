@@ -15,7 +15,7 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
             throw NSError(
                 domain: "AutonomousCLIExecutor",
                 code: 404,
-                userInfo: [NSLocalizedDescriptionKey: "未找到 \(tool.name) 可执行文件"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("未找到 %@ 可执行文件", tool.name)]
             )
         }
         
@@ -94,9 +94,9 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
         
         let startTime = Date()
         var traceLogs: [String] = []
-        traceLogs.append("🚀 启动 \(tool.name) 全权自主执行 Agent...")
-        traceLogs.append("🧠 意图分类: \(classification.reasoningNote)")
-        traceLogs.append("📂 设定工作目录: \(baseDir.path)")
+        traceLogs.append(L10n.t("🚀 启动 %@ 全权自主执行 Agent...", tool.name))
+        traceLogs.append(L10n.t("🧠 意图分类: %@", classification.reasoningNote))
+        traceLogs.append(L10n.t("📂 设定工作目录: %@", baseDir.path))
         
         let (output, exitCode, errOutput) = try await runProcess(
             executablePath: execPath,
@@ -105,14 +105,14 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
             timeoutSeconds: timeoutSeconds
         )
         let elapsed = Date().timeIntervalSince(startTime)
-        traceLogs.append("⏱️ CLI 自主执行结束 (耗时 \(String(format: "%.1fs", elapsed)), 退出码: \(exitCode))")
+        traceLogs.append(L10n.t("⏱️ CLI 自主执行结束 (耗时 %@, 退出码: %@)", String(format: "%.1fs", elapsed), "\(exitCode)"))
         
         // 扫描执行后的新生成文件
         let finalFiles = Set(snapshotDirectoryFiles(at: baseDir))
         let newFiles = Array(finalFiles.subtracting(initialFiles)).sorted { $0.lastPathComponent < $1.lastPathComponent }
         
         if !newFiles.isEmpty {
-            traceLogs.append("📦 自动探测到新增产物: \(newFiles.map { $0.lastPathComponent }.joined(separator: ", "))")
+            traceLogs.append(L10n.t("📦 自动探测到新增产物: %@", newFiles.map { $0.lastPathComponent }.joined(separator: ", ")))
         }
         
         // 如果 CLI 执行失败，触发系统接管 (System Handover - 三层识别第三层)
@@ -122,17 +122,17 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
             let isAmbiguous = errorMsg.contains("unknown command") || errorMsg.contains("not found") || errorMsg.contains("recipient") || errorMsg.contains("permission") || !classification.matchedSkills.isEmpty
             
             if isAmbiguous {
-                let firstMatchedName = classification.matchedSkills.first?.name ?? "系统预设技能"
-                let question = "CLI 自主执行遇到阻碍 (\(errorMsg.prefix(80)))，是否切换为系统专属【\(firstMatchedName)】安全流水线？"
+                let firstMatchedName = classification.matchedSkills.first?.name ?? L10n.t("系统预设技能")
+                let question = L10n.t("CLI 自主执行遇到阻碍 (%@)，是否切换为系统专属【%@】安全流水线？", "\(errorMsg.prefix(80))", firstMatchedName)
                 let clarification = ClarificationQuestion(
                     question: question,
                     options: [
-                        ClarificationOption(id: "retry_safe_pipeline", label: "使用系统专属【\(firstMatchedName)】安全流水线执行", recommended: true),
-                        ClarificationOption(id: "cancel", label: "取消本次任务")
+                        ClarificationOption(id: "retry_safe_pipeline", label: L10n.t("使用系统专属【%@】安全流水线执行", firstMatchedName), recommended: true),
+                        ClarificationOption(id: "cancel", label: L10n.t("取消本次任务"))
                     ]
                 )
                 return ExecutionPlan(
-                    summary: "CLI 自主执行受阻，系统已自动接管",
+                    summary: L10n.t("CLI 自主执行受阻，系统已自动接管"),
                     actions: [],
                     executionLogs: traceLogs,
                     clarification: clarification
@@ -141,7 +141,7 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
                 throw NSError(
                     domain: "AutonomousCLIExecutor",
                     code: Int(exitCode),
-                    userInfo: [NSLocalizedDescriptionKey: "CLI 执行失败 (\(exitCode)): \(errorMsg)"]
+                    userInfo: [NSLocalizedDescriptionKey: L10n.t("CLI 执行失败 (%@): %@", "\(exitCode)", errorMsg)]
                 )
             }
         }
@@ -155,7 +155,7 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
                     sourceURL: fileItems.first?.url ?? newFile,
                     inputURLs: targetURLs,
                     targetURL: newFile,
-                    detailDescription: "【\(tool.name) 自主产出】\(newFile.lastPathComponent)",
+                    detailDescription: L10n.t("【%@ 自主产出】%@", tool.name, newFile.lastPathComponent),
                     customScript: nil
                 )
                 actions.append(action)
@@ -167,13 +167,13 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
                 sourceURL: fileItems.first?.url ?? baseDir,
                 inputURLs: targetURLs,
                 targetURL: nil,
-                detailDescription: "【\(tool.name) 自主操作完成】",
+                detailDescription: L10n.t("【%@ 自主操作完成】", tool.name),
                 customScript: nil
             )
             actions.append(action)
         }
         
-        let summary = "✅ \(tool.name) 已自主完成操作" + (newFiles.isEmpty ? "" : "，生成了 \(newFiles.count) 个新产物")
+        let summary = newFiles.isEmpty ? L10n.t("✅ %@ 已自主完成操作", tool.name) : L10n.t("✅ %@ 已自主完成操作，生成了 %@ 个新产物", tool.name, "\(newFiles.count)")
         return ExecutionPlan(
             summary: summary,
             actions: actions,
@@ -248,7 +248,7 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
                         continuation.resume(throwing: NSError(
                             domain: "AutonomousCLIExecutor",
                             code: 408,
-                            userInfo: [NSLocalizedDescriptionKey: "CLI 自主执行超时（超过 \(Int(timeoutSeconds)) 秒）"]
+                            userInfo: [NSLocalizedDescriptionKey: L10n.t("CLI 自主执行超时（超过 %@ 秒）", "\(Int(timeoutSeconds))")]
                         ))
                     }
                 }

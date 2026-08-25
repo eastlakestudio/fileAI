@@ -40,8 +40,8 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
     @MainActor
     public func requestDirectoryAuthorization(
         initialPath: String? = nil,
-        prompt: String = "授权此目录",
-        message: String = "为了在沙箱中识别并使用本地 CLI 工具（如 Homebrew、Ollama、Antigravity 等），请授权访问该目录。"
+        prompt: String = L10n.t("授权此目录"),
+        message: String = L10n.t("为了在沙箱中识别并使用本地 CLI 工具（如 Homebrew、Ollama、Antigravity 等），请授权访问该目录。")
     ) async -> URL? {
         return await withCheckedContinuation { continuation in
             let panel = NSOpenPanel()

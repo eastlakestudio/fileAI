@@ -1,4 +1,5 @@
 import Foundation
+import AIFileCore
 
 /// 模拟 LLM 客户端：用于本地单元测试和离线演示
 public final class MockLLMClient: LLMProviderProtocol, Sendable {
@@ -35,14 +36,14 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
                     return LLMResponse(
                         textContent: "📊 当前选中的上下文共有 \(totalCount) 个文件/目录，格式包含：\(extSummary.isEmpty ? "无扩展名" : extSummary)。",
                         toolCalls: [],
-                        executionTraceLogs: ["📊 Mock 本地模型统计分析了 \(totalCount) 个文件"]
+                        executionTraceLogs: [L10n.t("📊 Mock 本地模型统计分析了 %@ 个文件", "\(totalCount)")]
                     )
                 }
             }
             return LLMResponse(
                 textContent: "📊 当前未检测到已选文件，请在 Finder 中选中文件或点击顶部文件夹图标选取。",
                 toolCalls: [],
-                executionTraceLogs: ["📊 Mock 本地模型处理了上下文查询"]
+                executionTraceLogs: [L10n.t("📊 Mock 本地模型处理了上下文查询")]
             )
         }
         
@@ -64,21 +65,21 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
             return LLMResponse(
                 textContent: "为您规划了调整图片尺寸为 \(width)x\(height) 的操作",
                 toolCalls: [call],
-                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 image_resize Tool Call (width=\(width), height=\(height))"]
+                executionTraceLogs: [L10n.t("🧩 Mock 模拟引擎解析出 image_resize Tool Call (width=%@, height=%@)", "\(width)", "\(height)")]
             )
         } else if userMessage.contains("pdf") || userMessage.contains("PDF") {
             let call = ToolCallRequest(id: "call_pdf_1", functionName: "doc_to_pdf", argumentsJSON: "{}")
             return LLMResponse(
                 textContent: "为您规划了转为 PDF 的操作",
                 toolCalls: [call],
-                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 doc_to_pdf Tool Call"]
+                executionTraceLogs: [L10n.t("🧩 Mock 模拟引擎解析出 doc_to_pdf Tool Call")]
             )
         } else if userMessage.contains("重命名") || userMessage.contains("前缀") || userMessage.contains("整理") {
             let call = ToolCallRequest(id: "call_rename_1", functionName: "batch_rename", argumentsJSON: "{\"prefix\": \"已整理_\"}")
             return LLMResponse(
                 textContent: "为您规划了批量重命名操作",
                 toolCalls: [call],
-                executionTraceLogs: ["🧩 Mock 模拟引擎解析出 batch_rename Tool Call"]
+                executionTraceLogs: [L10n.t("🧩 Mock 模拟引擎解析出 batch_rename Tool Call")]
             )
         } else if userMessage.contains("音频") || userMessage.contains("视频") || userMessage.contains("水印") || userMessage.contains("写") || userMessage.contains("创建") || userMessage.contains("新技能") {
             var cat = "音视频处理"
@@ -109,14 +110,14 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
             return LLMResponse(
                 textContent: "检测到现有技能库未包含该能力，已为您自主编写新技能「\(name)」并自动归入「\(cat)」分类。",
                 toolCalls: [call],
-                executionTraceLogs: ["✨ Mock 模拟大模型调用 create_skill 自主编写并安装新技能"]
+                executionTraceLogs: [L10n.t("✨ Mock 模拟大模型调用 create_skill 自主编写并安装新技能")]
             )
         }
         
         return LLMResponse(
             textContent: "已为您分析指令「\(userMessage)」，当前上下文未包含适用该操作的文件类型，请参考上方推荐的 Skill 胶囊。",
             toolCalls: [],
-            executionTraceLogs: ["ℹ️ Mock 引擎未生成 Tool Call"]
+            executionTraceLogs: [L10n.t("ℹ️ Mock 引擎未生成 Tool Call")]
         )
     }
 }

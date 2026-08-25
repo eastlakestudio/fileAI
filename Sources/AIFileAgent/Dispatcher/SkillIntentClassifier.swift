@@ -91,21 +91,21 @@ public final class SkillIntentClassifier: Sendable {
                 type: .hybridPipeline(nativeAction: "基础文件操作", requiredSkills: matchedDomainSkills),
                 matchedSkills: matchedDomainSkills,
                 confidenceScore: 0.95,
-                reasoningNote: "检测到复合需求：包含基础文件操作与【\(matchedDomainSkills.map { $0.name }.joined(separator: " / "))】专属协同技能"
+                reasoningNote: L10n.t("检测到复合需求：包含基础文件操作与【%@】专属协同技能", matchedDomainSkills.map { $0.name }.joined(separator: " / "))
             )
         } else if !matchedDomainSkills.isEmpty {
             return IntentClassificationResult(
                 type: .skillRequired(skills: matchedDomainSkills),
                 matchedSkills: matchedDomainSkills,
                 confidenceScore: 0.98,
-                reasoningNote: "检测到领域专属需求：必须调度【\(matchedDomainSkills.map { $0.name }.joined(separator: " / "))】技能"
+                reasoningNote: L10n.t("检测到领域专属需求：必须调度【%@】技能", matchedDomainSkills.map { $0.name }.joined(separator: " / "))
             )
         } else {
             return IntentClassificationResult(
                 type: .nativeGeneric,
                 matchedSkills: [],
                 confidenceScore: 0.90,
-                reasoningNote: "纯基础文件操作：CLI 可直接使用原生 POSIX 命令与系统工具自主完成"
+                reasoningNote: L10n.t("纯基础文件操作：CLI 可直接使用原生 POSIX 命令与系统工具自主完成")
             )
         }
     }

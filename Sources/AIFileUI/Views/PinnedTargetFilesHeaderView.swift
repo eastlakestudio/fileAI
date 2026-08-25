@@ -101,11 +101,11 @@ public struct PinnedTargetFilesHeaderView: View {
                 }
                 
                 if totalDirs > 0 {
-                    Text("选中 \(totalFiles) 个文件 • \(totalDirs) 目录")
+                    Text(L10n.t("选中 %@ 个文件 • %@ 目录", "\(totalFiles)", "\(totalDirs)"))
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.primary)
                 } else {
-                    Text("选中 \(totalFiles) 个文件")
+                    Text(L10n.t("选中 %@ 个文件", "\(totalFiles)"))
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.primary)
                 }
@@ -126,7 +126,7 @@ public struct PinnedTargetFilesHeaderView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.mini)
-            .help("手动选取更多文件或目录")
+            .help(L10n.t("手动选取更多文件或目录"))
             
             Button(action: { viewModel.fetchFromFinder() }) {
                 Image(systemName: "arrow.clockwise")
@@ -134,7 +134,7 @@ public struct PinnedTargetFilesHeaderView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.mini)
-            .help("重新从当前前台访达抓取选中的文件与目录")
+            .help(L10n.t("重新从当前前台访达抓取选中的文件与目录"))
         }
         .fixedSize(horizontal: true, vertical: false)
     }
@@ -150,7 +150,7 @@ public struct PinnedTargetFilesHeaderView: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.mini)
-        .help("还原为标准完整大窗")
+        .help(L10n.t("还原为标准完整大窗"))
         .fixedSize(horizontal: true, vertical: false)
     }
     
@@ -218,9 +218,9 @@ public struct PinnedTargetFilesHeaderView: View {
                     }
                     
                     HStack(spacing: 3) {
-                        Text("含 \(item.childFileCount ?? 0) 文件")
+                        Text(L10n.t("含 %@ 文件", "\(item.childFileCount ?? 0)"))
                         if let dirs = item.childDirectoryCount, dirs > 0 {
-                            Text("• \(dirs) 子目录")
+                            Text(L10n.t("• %@ 子目录", "\(dirs)"))
                         }
                         Text("• \(item.formattedSize)")
                     }
@@ -238,7 +238,7 @@ public struct PinnedTargetFilesHeaderView: View {
                     .stroke(Color.orange.opacity(0.35), lineWidth: 0.9)
             )
             .cornerRadius(6)
-            .help("完整路径: \(item.path)")
+            .help(L10n.t("完整路径: %@", item.path))
             
         } else {
             // 文件项
@@ -258,7 +258,7 @@ public struct PinnedTargetFilesHeaderView: View {
                     HStack(spacing: 3) {
                         Text(item.formattedSize)
                         if let p = item.pdfPageCount {
-                            Text("• \(p) 页")
+                            Text(L10n.t("• %@ 页", "\(p)"))
                         } else if let w = item.imageWidth, let h = item.imageHeight {
                             Text("• \(w)x\(h)")
                         }
@@ -277,7 +277,7 @@ public struct PinnedTargetFilesHeaderView: View {
                     .stroke(Color.accentColor.opacity(0.35), lineWidth: 0.9)
             )
             .cornerRadius(6)
-            .help("完整路径: \(item.path)")
+            .help(L10n.t("完整路径: %@", item.path))
         }
     }
     

@@ -1,4 +1,5 @@
 import Foundation
+import AIFileCore
 
 public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
     public let providerName: String
@@ -66,7 +67,7 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
         let elapsed = Date().timeIntervalSince(startTime)
         
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw NSError(domain: "OpenAIClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "无效的网络响应"])
+            throw NSError(domain: "OpenAIClient", code: -1, userInfo: [NSLocalizedDescriptionKey: L10n.t("无效的网络响应")])
         }
         
         let rawText = String(data: data, encoding: .utf8) ?? ""
@@ -81,14 +82,14 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
         """)
         
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw NSError(domain: "OpenAIClient", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "API 错误 (\(httpResponse.statusCode)): \(rawText)"])
+            throw NSError(domain: "OpenAIClient", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: L10n.t("API 错误 (%@): %@", "\(httpResponse.statusCode)", rawText)])
         }
         
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let firstChoice = choices.first,
               let message = firstChoice["message"] as? [String: Any] else {
-            throw NSError(domain: "OpenAIClient", code: -2, userInfo: [NSLocalizedDescriptionKey: "返回 JSON 解析失败"])
+            throw NSError(domain: "OpenAIClient", code: -2, userInfo: [NSLocalizedDescriptionKey: L10n.t("返回 JSON 解析失败")])
         }
         
         let content = message["content"] as? String
@@ -112,10 +113,10 @@ public final class OpenAICompatibleClient: LLMProviderProtocol, Sendable {
         }
         
         var traceLogs: [String] = []
-        traceLogs.append("🌐 调用云端模型 API: \(providerName) (\(modelName))")
-        traceLogs.append("📥 API 响应成功 (状态码 \(httpResponse.statusCode), 耗时 \(String(format: "%.2fs", elapsed)))")
+        traceLogs.append(L10n.t("🌐 调用云端模型 API: %@ (%@)", providerName, modelName))
+        traceLogs.append(L10n.t("📥 API 响应成功 (状态码 %@, 耗时 %@)", "\(httpResponse.statusCode)", String(format: "%.2fs", elapsed)))
         if !toolCalls.isEmpty {
-            traceLogs.append("🧩 解析出 \(toolCalls.count) 个 Tool Call: \(toolCalls.map { $0.functionName }.joined(separator: ", "))")
+            traceLogs.append(L10n.t("🧩 解析出 %@ 个 Tool Call: %@", "\(toolCalls.count)", toolCalls.map { $0.functionName }.joined(separator: ", ")))
         }
         
         return LLMResponse(

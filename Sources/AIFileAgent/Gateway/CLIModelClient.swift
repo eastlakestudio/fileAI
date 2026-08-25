@@ -12,7 +12,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
     }
     
     public var isLocalOffline: Bool {
-        return tool.type == .ollama || tool.type == .llamaCli
+        return tool.type == .ollama
     }
     
     public init(
@@ -38,7 +38,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             throw NSError(
                 domain: "CLIModelClient",
                 code: 404,
-                userInfo: [NSLocalizedDescriptionKey: "未找到 \(tool.name) 可执行文件，请在设置中心授权其所在目录（例如 \(CLIEnvironmentHelper.realUserHome)/.local/bin）"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("未找到 %@ 可执行文件，请在设置中心授权其所在目录（例如 %@）", tool.name, "\(CLIEnvironmentHelper.realUserHome)/.local/bin")]
             )
         }
         let execPath = finalExecPath
@@ -99,8 +99,6 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             arguments = ["-m", modelName, promptPayload]
         case .ghCopilot:
             arguments = ["copilot", "suggest", "-t", "shell", userMsg]
-        case .llamaCli:
-            arguments = ["-p", promptPayload, "--temp", "0.2"]
         }
         
         // 控制台与日志全量打印 CLI 请求输入
@@ -132,11 +130,11 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         """)
         
         var traceLogs: [String] = []
-        traceLogs.append("🚀 调用 CLI 引擎: \(tool.name) (\(execPath))")
-        traceLogs.append("📋 注入可用 Tools 清单 (共 \(tools?.count ?? 0) 个 Skill)")
-        traceLogs.append("📥 CLI 进程正常退出 (耗时 \(String(format: "%.2fs", elapsed)))")
+        traceLogs.append(L10n.t("🚀 调用 CLI 引擎: %@ (%@)", tool.name, execPath))
+        traceLogs.append(L10n.t("📋 注入可用 Tools 清单 (共 %@ 个 Skill)", "\(tools?.count ?? 0)"))
+        traceLogs.append(L10n.t("📥 CLI 进程正常退出 (耗时 %@)", String(format: "%.2fs", elapsed)))
         let preview = result.replacingOccurrences(of: "\n", with: " ")
-        traceLogs.append("📄 收到 CLI 原始响应: \(preview.prefix(120))...")
+        traceLogs.append(L10n.t("📄 收到 CLI 原始响应: %@...", "\(preview.prefix(120))"))
         
         var response = parseCLIOutput(result)
         response = LLMResponse(
@@ -186,8 +184,6 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             toolArgs = "-m \(modelName) \"$CLI_PROMPT\""
         case .ghCopilot:
             toolArgs = "copilot suggest -t shell \"$CLI_PROMPT\""
-        case .llamaCli:
-            toolArgs = "-p \"$CLI_PROMPT\" --temp 0.2"
         }
         
         let home = CLIEnvironmentHelper.realUserHome
@@ -223,7 +219,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 continuation.resume(throwing: NSError(
                     domain: "CLIModelClient",
                     code: 408,
-                    userInfo: [NSLocalizedDescriptionKey: "\(self.tool.name) 执行超时（超过 \(Int(self.timeoutSeconds)) 秒）"]
+                    userInfo: [NSLocalizedDescriptionKey: L10n.t("%@ 执行超时（超过 %@ 秒）", self.tool.name, "\(Int(self.timeoutSeconds))")]
                 ))
             }
             timeoutTimer.resume()
@@ -248,7 +244,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                     continuation.resume(throwing: NSError(
                         domain: "CLIModelClient",
                         code: Int(proc.terminationStatus),
-                        userInfo: [NSLocalizedDescriptionKey: "CLI 执行退出码 (\(proc.terminationStatus)): \(errStr.isEmpty ? output : errStr)"]
+                        userInfo: [NSLocalizedDescriptionKey: L10n.t("CLI 执行退出码 (%@): %@", "\(proc.terminationStatus)", errStr.isEmpty ? output : errStr)]
                     ))
                 }
             }
@@ -293,8 +289,6 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             toolArgs = "-m \(modelName) \"$CLI_PROMPT\""
         case .ghCopilot:
             toolArgs = "copilot suggest -t shell \"$CLI_PROMPT\""
-        case .llamaCli:
-            toolArgs = "-p \"$CLI_PROMPT\" --temp 0.2"
         }
         
         let home = CLIEnvironmentHelper.realUserHome
@@ -326,13 +320,13 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             DispatchQueue.global(qos: .userInitiated).async {
                 var errorDict: NSDictionary?
                 guard let script = NSAppleScript(source: appleScriptSource) else {
-                    continuation.resume(throwing: NSError(domain: "CLIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法构建 AppleScript 执行引擎"]))
+                    continuation.resume(throwing: NSError(domain: "CLIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法构建 AppleScript 执行引擎")]))
                     return
                 }
                 
                 let result = script.executeAndReturnError(&errorDict)
                 if let error = errorDict {
-                    let errMsg = error[NSAppleScript.errorMessage] as? String ?? "AppleScript 执行失败"
+                    let errMsg = error[NSAppleScript.errorMessage] as? String ?? L10n.t("AppleScript 执行失败")
                     continuation.resume(throwing: NSError(domain: "CLIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: errMsg]))
                 } else if let output = result.stringValue {
                     continuation.resume(returning: output)
@@ -395,7 +389,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 }
                 if !toolCalls.isEmpty {
                     return LLMResponse(
-                        textContent: "已通过 \(tool.name) 智能解析 \(toolCalls.count) 步流水线",
+                        textContent: L10n.t("已通过 %@ 智能解析 %@ 步流水线", tool.name, "\(toolCalls.count)"),
                         toolCalls: toolCalls,
                         rawThinking: extractedThinking,
                         rawOutput: rawOutput
@@ -427,7 +421,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                         argumentsJSON: argsString
                     )
                     return LLMResponse(
-                        textContent: "已通过 \(tool.name) 智能解析意图",
+                        textContent: L10n.t("已通过 %@ 智能解析意图", tool.name),
                         toolCalls: [call],
                         rawThinking: finalThinking,
                         rawOutput: rawOutput
@@ -446,7 +440,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                         argumentsJSON: argsString
                     )
                     return LLMResponse(
-                        textContent: "已通过 \(tool.name) 智能解析意图",
+                        textContent: L10n.t("已通过 %@ 智能解析意图", tool.name),
                         toolCalls: [call],
                         rawThinking: finalThinking,
                         rawOutput: rawOutput

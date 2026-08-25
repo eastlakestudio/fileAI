@@ -76,22 +76,22 @@ public struct PlanReviewEngine: Sendable {
             // 检查是否 approved
             let rawContent = (response.textContent ?? response.rawOutput ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if rawContent.contains("\"status\"") && rawContent.contains("\"approved\"") {
-                reviewLogs.append("✅ Plan 审核通过：初版计划完整准确")
+                reviewLogs.append(L10n.t("✅ Plan 审核通过：初版计划完整准确"))
                 return (draftToolCalls, rawThinking, reviewLogs)
             }
             
             // 尝试从审校结果中提取修正后的 Tool Calls
             let parsedRefinedCalls = parseToolCallsFromReviewOutput(rawContent)
             if !parsedRefinedCalls.isEmpty {
-                reviewLogs.append("✨ Plan 审核修正：已自动补全/修正为 \(parsedRefinedCalls.count) 个流水线步骤")
+                reviewLogs.append(L10n.t("✨ Plan 审核修正：已自动补全/修正为 %@ 个流水线步骤", "\(parsedRefinedCalls.count)"))
                 return (parsedRefinedCalls, rawThinking, reviewLogs)
             }
             
             // 若未解析出结构化修正，则安全降级保留初版
-            reviewLogs.append("ℹ️ Plan 审核保留初版计划")
+            reviewLogs.append(L10n.t("ℹ️ Plan 审核保留初版计划"))
             return (draftToolCalls, rawThinking, reviewLogs)
         } catch {
-            reviewLogs.append("⚠️ Plan 审核跳过 (调用失败: \(error.localizedDescription))，继续使用初版计划")
+            reviewLogs.append(L10n.t("⚠️ Plan 审核跳过 (调用失败: %@)，继续使用初版计划", error.localizedDescription))
             return (draftToolCalls, nil, reviewLogs)
         }
     }

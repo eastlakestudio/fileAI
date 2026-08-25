@@ -104,7 +104,7 @@ public actor TaskManager {
         guard let index = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[index].status = .cancelled
         tasks[index].completedAt = Date()
-        tasks[index].errorMessage = "用户取消了执行确认"
+        tasks[index].errorMessage = L10n.t("用户取消了执行确认")
         persistTask(tasks[index])
     }
     
@@ -159,7 +159,7 @@ private func loadPersistedTasks(from directory: URL) -> [TaskExecutionRecord] {
             // 如果冷启动发现之前是 inProgress（由于退出/崩溃未完成），自动收敛为已中断
             if task.status == .inProgress {
                 task.status = .failed
-                task.errorMessage = "任务未确认或意外中断"
+                task.errorMessage = L10n.t("任务未确认或意外中断")
             }
             loaded.append(task)
         }

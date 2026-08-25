@@ -15,7 +15,7 @@ public final class SkillMarkdownParser {
         let body = components.dropFirst(2).joined(separator: "---").trimmingCharacters(in: .whitespacesAndNewlines)
         
         var id = fallbackId
-        var name = "未命名技能"
+        var name = L10n.t("未命名技能")
         var icon = "puzzlepiece.extension"
         var categoryRaw = "organization"
         var summary = ""

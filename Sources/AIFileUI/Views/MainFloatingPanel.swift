@@ -5,6 +5,8 @@ import AIFileFinderIntegration
 @MainActor
 public struct MainFloatingPanel: View {
     @StateObject public var viewModel: PanelViewModel
+    /// 界面语言切换刷新令牌：切换后强制重建视图树，让全部字面量文案按新语言重新解析
+    @State private var languageRefreshToken: UUID = UUID()
     
     public init(viewModel: PanelViewModel) {
         self._viewModel = StateObject(wrappedValue: viewModel)
@@ -116,6 +118,10 @@ public struct MainFloatingPanel: View {
             viewModel.fetchFromFinder()
             viewModel.loadTaskHistory()
         }
+        .id(languageRefreshToken)
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("aifiles.languageDidChange"))) { _ in
+            languageRefreshToken = UUID()
+        }
     }
     
     private var mainPanelBody: some View {
@@ -207,7 +213,7 @@ public struct MainFloatingPanel: View {
                     .font(.system(size: 13, weight: .bold))
                 
                 if !viewModel.fileItems.isEmpty {
-                    Text("• \(viewModel.fileItems.count) 项待处理")
+                    Text(L10n.t("• %@ 项待处理", "\(viewModel.fileItems.count)"))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.secondary)
                 }
@@ -240,7 +246,7 @@ public struct MainFloatingPanel: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("查看已执行/正在执行的任务记录")
+                .help(L10n.t("查看已执行/正在执行的任务记录"))
                 
                 // 配置管理入口
                 Button(action: {
@@ -253,7 +259,7 @@ public struct MainFloatingPanel: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("配置管理（本地 CLI 引擎与本地技能库）")
+                .help(L10n.t("配置管理（本地 CLI 引擎与本地技能库）"))
                 
                 // 迷你模式切换按钮
                 Button(action: {
@@ -266,7 +272,7 @@ public struct MainFloatingPanel: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help(viewModel.isMiniMode ? "展开为标准完整面板" : "收起为迷你悬浮卡片")
+                .help(viewModel.isMiniMode ? L10n.t("展开为标准完整面板") : L10n.t("收起为迷你悬浮卡片"))
             }
         }
         .padding(.leading, 78) // 预留左侧 78px 红黄绿系统按钮位置

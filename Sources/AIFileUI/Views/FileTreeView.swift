@@ -31,7 +31,7 @@ public struct FileTreeView: View {
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                             Spacer()
-                            Text("\(groupedItems[dirPath]?.count ?? 0) 项")
+                            Text(L10n.t("%@ 项", "\(groupedItems[dirPath]?.count ?? 0)"))
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }

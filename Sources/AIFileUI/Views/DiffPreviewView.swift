@@ -30,7 +30,7 @@ public struct DiffPreviewView: View {
                         Text("实施方案与变更审查 (Implementation Plan)")
                             .font(.headline)
                     }
-                    Text(plan?.summary ?? "请审查即将发生变动的文件清单")
+                    Text(plan?.summary ?? L10n.t("请审查即将发生变动的文件清单"))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -45,7 +45,7 @@ public struct DiffPreviewView: View {
                         HStack(spacing: 3) {
                             Image(systemName: isCopiedPlan ? "checkmark" : "doc.on.doc")
                                 .font(.system(size: 9))
-                            Text(isCopiedPlan ? "已复制方案" : "复制方案")
+                            Text(isCopiedPlan ? L10n.t("已复制方案") : L10n.t("复制方案"))
                                 .font(.system(size: 10.5, weight: .medium))
                         }
                     }
@@ -102,7 +102,7 @@ public struct DiffPreviewView: View {
                 .keyboardShortcut(.cancelAction)
                 
                 Button(action: onConfirm) {
-                    Text("确认执行 (\(plan?.selectedActions.count ?? 0) 项)")
+                    Text(L10n.t("确认执行 (%@ 项)", "\(plan?.selectedActions.count ?? 0)"))
                         .bold()
                 }
                 .buttonStyle(.borderedProminent)
@@ -193,7 +193,7 @@ public struct DiffPreviewView: View {
     @ViewBuilder
     private var actionsListSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("📂 待执行物理变动清单 (\(plan?.actions.count ?? 0) 项)")
+            Text(L10n.t("📂 待执行物理变动清单 (%@ 项)", "\(plan?.actions.count ?? 0)"))
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.secondary)
             
@@ -217,7 +217,7 @@ public struct DiffPreviewView: View {
             .labelsHidden()
             
             // Badge
-            Text(action.operationType.rawValue)
+            Text(L10n.t(action.operationType.rawValue))
                 .font(.caption2.bold())
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)

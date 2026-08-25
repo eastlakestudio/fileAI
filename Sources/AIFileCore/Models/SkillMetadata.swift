@@ -86,7 +86,7 @@ public struct SkillMetadata: Identifiable, Hashable, Sendable, Codable {
         if let custom = customCategory?.trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
             return custom
         }
-        return category.rawValue
+        return L10n.t(category.rawValue)
     }
     
     /// 根据分类特征智能推断图标

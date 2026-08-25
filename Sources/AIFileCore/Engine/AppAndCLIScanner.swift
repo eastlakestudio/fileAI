@@ -104,21 +104,21 @@ public final class AppAndCLIScanner: Sendable {
         
         // 预置的知名常用生产力命令行定义清单
         let knownTools: [(id: String, name: String, binaries: [String], category: String, summary: String, exts: [String])] = [
-            ("ffmpeg", "FFmpeg 多媒体音视频处理", ["ffmpeg"], "音视频处理", "音视频极速转码、提取音频、裁剪视频与生成动图", ["mp4", "mov", "avi", "mkv", "mp3", "wav", "m4a", "flac"]),
-            ("imagemagick", "ImageMagick 图像魔法师", ["magick", "convert"], "图片处理", "批量高质量图像转码、裁剪、拼接与滤镜特效", ["png", "jpg", "jpeg", "webp", "heic", "tiff", "gif", "svg"]),
-            ("pandoc", "Pandoc 万能文档转换器", ["pandoc"], "文档与PDF", "Markdown、Word (DOCX)、HTML、PDF、EPUB 跨格式高质量互转", ["md", "docx", "html", "epub", "tex", "txt"]),
-            ("libreoffice", "LibreOffice 办公套件 CLI", ["soffice", "libreoffice"], "文档与PDF", "Word、Excel、PPT 演示文稿无损静默转 PDF 与跨格式转换", ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods"]),
-            ("zip", "ZIP 归档引擎", ["zip"], "文件管理", "文件与文件夹批量打包为标准 .zip 压缩文件", ["*"]),
-            ("tar", "TAR/GZ 归档引擎", ["tar"], "文件管理", "文件与文件夹归档压缩为 .tar.gz / .tar 文件", ["*"]),
-            ("sevenzip", "7-Zip 极速高压缩比引擎", ["7z", "7za"], "文件管理", "解压与高压缩比打包 7z, zip, rar, tar 归档", ["7z", "zip", "rar", "tar", "gz"]),
-            ("jq", "jq JSON 数据处理器", ["jq"], "开发工具", "JSON 数据格式化、结构提取与字段过滤处理", ["json"]),
-            ("typst", "Typst 新一代排版引擎", ["typst"], "文档与PDF", "Typst 标记文档高速排版编译生成标准 PDF", ["typ"]),
-            ("pdftoppm", "Poppler PDF 页面转图片", ["pdftoppm"], "文档与PDF", "将 PDF 的各页渲染提取为高分辨率 PNG/JPG 图像", ["pdf"]),
-            ("pdftotext", "Poppler PDF 纯文本提取器", ["pdftotext"], "文档与PDF", "高速提取 PDF 中的纯文本内容", ["pdf"]),
-            ("tesseract", "Tesseract OCR 离线文字识别", ["tesseract"], "文档与PDF", "高准确度提取图片中的中英文字符", ["png", "jpg", "jpeg", "tiff", "bmp", "pdf"]),
-            ("ytdlp", "yt-dlp 多媒体提取工具", ["yt-dlp"], "音视频处理", "多媒体流提取与音频下载转换", ["*"]),
-            ("optipng", "OptiPNG 图像无损瘦身", ["optipng"], "图片处理", "PNG 图片无损优化压缩体积", ["png"]),
-            ("cwebp", "WebP 极速图像压缩", ["cwebp"], "图片处理", "将 PNG/JPG 图片转换为新一代高效 WebP 格式", ["png", "jpg", "jpeg"])
+            ("ffmpeg", L10n.t("FFmpeg 多媒体音视频处理"), ["ffmpeg"], "音视频处理", L10n.t("音视频极速转码、提取音频、裁剪视频与生成动图"), ["mp4", "mov", "avi", "mkv", "mp3", "wav", "m4a", "flac"]),
+            ("imagemagick", L10n.t("ImageMagick 图像魔法师"), ["magick", "convert"], "图片处理", L10n.t("批量高质量图像转码、裁剪、拼接与滤镜特效"), ["png", "jpg", "jpeg", "webp", "heic", "tiff", "gif", "svg"]),
+            ("pandoc", L10n.t("Pandoc 万能文档转换器"), ["pandoc"], "文档与PDF", L10n.t("Markdown、Word (DOCX)、HTML、PDF、EPUB 跨格式高质量互转"), ["md", "docx", "html", "epub", "tex", "txt"]),
+            ("libreoffice", L10n.t("LibreOffice 办公套件 CLI"), ["soffice", "libreoffice"], "文档与PDF", L10n.t("Word、Excel、PPT 演示文稿无损静默转 PDF 与跨格式转换"), ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods"]),
+            ("zip", L10n.t("ZIP 归档引擎"), ["zip"], "文件管理", L10n.t("文件与文件夹批量打包为标准 .zip 压缩文件"), ["*"]),
+            ("tar", L10n.t("TAR/GZ 归档引擎"), ["tar"], "文件管理", L10n.t("文件与文件夹归档压缩为 .tar.gz / .tar 文件"), ["*"]),
+            ("sevenzip", L10n.t("7-Zip 极速高压缩比引擎"), ["7z", "7za"], "文件管理", L10n.t("解压与高压缩比打包 7z, zip, rar, tar 归档"), ["7z", "zip", "rar", "tar", "gz"]),
+            ("jq", L10n.t("jq JSON 数据处理器"), ["jq"], "开发工具", L10n.t("JSON 数据格式化、结构提取与字段过滤处理"), ["json"]),
+            ("typst", L10n.t("Typst 新一代排版引擎"), ["typst"], "文档与PDF", L10n.t("Typst 标记文档高速排版编译生成标准 PDF"), ["typ"]),
+            ("pdftoppm", L10n.t("Poppler PDF 页面转图片"), ["pdftoppm"], "文档与PDF", L10n.t("将 PDF 的各页渲染提取为高分辨率 PNG/JPG 图像"), ["pdf"]),
+            ("pdftotext", L10n.t("Poppler PDF 纯文本提取器"), ["pdftotext"], "文档与PDF", L10n.t("高速提取 PDF 中的纯文本内容"), ["pdf"]),
+            ("tesseract", L10n.t("Tesseract OCR 离线文字识别"), ["tesseract"], "文档与PDF", L10n.t("高准确度提取图片中的中英文字符"), ["png", "jpg", "jpeg", "tiff", "bmp", "pdf"]),
+            ("ytdlp", L10n.t("yt-dlp 多媒体提取工具"), ["yt-dlp"], "音视频处理", L10n.t("多媒体流提取与音频下载转换"), ["*"]),
+            ("optipng", L10n.t("OptiPNG 图像无损瘦身"), ["optipng"], "图片处理", L10n.t("PNG 图片无损优化压缩体积"), ["png"]),
+            ("cwebp", L10n.t("WebP 极速图像压缩"), ["cwebp"], "图片处理", L10n.t("将 PNG/JPG 图片转换为新一代高效 WebP 格式"), ["png", "jpg", "jpeg"])
         ]
         
         for tool in knownTools {

@@ -1,6 +1,7 @@
 import SwiftUI
 import ServiceManagement
 import AIFileCore
+import AIFileFinderIntegration
 
 /// 配置管理主导航 Tab 枚举 (本地 CLI 纯净模式)
 public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
@@ -37,16 +38,33 @@ public struct UnifiedSettingsView: View {
     @State private var isTesting: Bool = false
     
     // Skill Management 状态
-    @State private var selectedSkillCategory: SkillCategory = .all
     @State private var localSkills: [SkillMetadata] = []
-    @State private var cloudSkills: [SkillMetadata] = []
     @State private var expandedSkillId: String? = nil
-    @State private var expandedCategories: Set<String> = ["图片处理", "文档与PDF", "整理与命名", "企业协同", "自定义扩展", "音视频处理", "数据分析", "开发工具"]
+    @State private var skillSearchText: String = ""
     @State private var isShowingImportModal: Bool = false
     @State private var importMarkdownText: String = ""
     @State private var importErrorMessage: String? = nil
     @State private var isScanningApps: Bool = false
     @State private var harvestNotice: String? = nil
+    
+    // 快捷键自定义状态
+    @ObservedObject private var hotKeyManager = GlobalHotKeyManager.shared
+    @State private var isRecordingHotKey: Bool = false
+    @State private var hotKeyMonitor: Any? = nil
+    
+    // 界面语言（用户覆盖；切换后刷新视图状态使 L10n 文案立即切换）
+    @State private var interfaceLanguage: L10n.InterfaceLanguage = L10n.InterfaceLanguage.current
+    @State private var languageRefreshToken: UUID = UUID()
+    
+    // 云端市场状态 (skills.sh 生态 / GitHub)
+    @State private var marketSkills: [CloudSkillMarketService.CloudSkill] = []
+    @State private var selectedMarketSource: String = CloudSkillMarketService.curatedSources.first!.source
+    @State private var isMarketLoading: Bool = false
+    @State private var marketError: String? = nil
+    @State private var marketSearchText: String = ""
+    @State private var searchedRepos: [String] = []
+    @State private var installingSkillId: String? = nil
+    @State private var installedMarketIds: Set<String> = []
     
     public let onBack: () -> Void
     public var onSelectPrompt: ((String) -> Void)? = nil
@@ -61,7 +79,6 @@ public struct UnifiedSettingsView: View {
         self._discoveredCLIs = State(initialValue: CLIDiscoveryEngine.shared.lastDiscoveredTools)
         self._availableProviders = State(initialValue: ProviderConfigRegistry.shared.providers)
         self._localSkills = State(initialValue: SkillManager.shared.allSkills)
-        self._cloudSkills = State(initialValue: SkillManager.shared.cloudMarketSkills)
         self._selectedTab = State(initialValue: initialTab)
         self.onBack = onBack
         self.onSelectPrompt = onSelectPrompt
@@ -77,13 +94,6 @@ public struct UnifiedSettingsView: View {
     
     private var isUsingLocalCLI: Bool {
         modelSettings.providerId.starts(with: "cli_")
-    }
-    
-    private var displayedLocalSkills: [SkillMetadata] {
-        if selectedSkillCategory == .all {
-            return localSkills
-        }
-        return localSkills.filter { $0.category == selectedSkillCategory }
     }
     
     public var body: some View {
@@ -110,6 +120,11 @@ public struct UnifiedSettingsView: View {
             bottomActionBar
         }
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
+        .id(languageRefreshToken)
+        .onChange(of: interfaceLanguage) { newValue in
+            newValue.apply()
+            languageRefreshToken = UUID()
+        }
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -152,7 +167,7 @@ public struct UnifiedSettingsView: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.accentColor)
-                Text("配置管理中心 • \(selectedTab.rawValue)")
+                Text(L10n.t("配置管理中心 • %@", L10n.t(selectedTab.rawValue)))
                     .font(.system(size: 12, weight: .bold))
             }
             
@@ -177,7 +192,7 @@ public struct UnifiedSettingsView: View {
             // 引擎：本地 CLI
             tabNavRow(
                 tab: .cliModel,
-                badge: "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
+                badge: L10n.t("%@ 就绪", "\(discoveredCLIs.filter { $0.isInstalled }.count)")
             )
             
             Text("功能扩展")
@@ -187,7 +202,7 @@ public struct UnifiedSettingsView: View {
                 .padding(.top, 8)
             
             tabNavRow(tab: .skills, badge: "\(localSkills.count)")
-            tabNavRow(tab: .marketplace, badge: "云端 \(cloudSkills.count)")
+            tabNavRow(tab: .marketplace, badge: isMarketLoading ? L10n.t("同步中…") : "\(marketSkills.count)")
             
             Text("系统设置")
                 .font(.system(size: 10, weight: .bold))
@@ -235,7 +250,7 @@ public struct UnifiedSettingsView: View {
                     .foregroundColor(isSelected ? .accentColor : .secondary)
                     .frame(width: 16)
                 
-                Text(tab.rawValue)
+                Text(L10n.t(tab.rawValue))
                     .font(.system(size: 12, weight: isSelected ? .bold : .regular))
                     .foregroundColor(isSelected ? .primary : .secondary)
                     .lineLimit(1)
@@ -275,6 +290,11 @@ public struct UnifiedSettingsView: View {
                 skillLibraryContentView
             case .marketplace:
                 cloudMarketplaceContentView
+                    .onAppear {
+                        if marketSkills.isEmpty && !isMarketLoading {
+                            Task { await loadMarketSkills() }
+                        }
+                    }
             case .general:
                 generalPreferencesContentView
             }
@@ -430,8 +450,10 @@ public struct UnifiedSettingsView: View {
     
     private var localCLIDiscoverySection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            // 1. 沙箱环境目录授权卡片（重点解决 TestFlight / App Store 扫描不到 CLI 的问题）
-            sandboxAuthorizationCard
+            // 1. 沙箱环境目录授权（仅沙箱构建显示；非沙箱下 CLI 可直接访问无需授权）
+            if isSandboxed {
+                sandboxAuthorizationCard
+            }
             
             // 2. 本地 CLI 工具探测列表
             VStack(alignment: .leading, spacing: 10) {
@@ -446,7 +468,7 @@ public struct UnifiedSettingsView: View {
                     
                     Spacer()
                     
-                    Button(action: { scanLocalCLIs() }) {
+                    Button(action: { rescanWithAuthorizationIfNeeded() }) {
                         HStack(spacing: 3) {
                             if isScanningCLIs {
                                 ProgressView().scaleEffect(0.5)
@@ -472,121 +494,59 @@ public struct UnifiedSettingsView: View {
         }
     }
     
-    // MARK: - 沙箱目录授权卡片
+    // MARK: - 沙箱目录授权管理（紧凑样式，供沙箱构建使用）
     private var sandboxAuthorizationCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 15))
+                    .font(.system(size: 13))
                     .foregroundColor(.accentColor)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("macOS 沙箱 CLI 目录授权")
-                        .font(.system(size: 12, weight: .bold))
-                    Text("在 TestFlight / 沙箱环境下，请授权系统 CLI 所在目录，以便应用扫描并调用终端工具。")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                }
+                Text("沙箱已授权目录:")
+                    .font(.system(size: 11, weight: .semibold))
                 Spacer()
-            }
-            
-            HStack(spacing: 8) {
-                Button(action: {
-                    let homePath = NSString(string: "~").expandingTildeInPath
-                    authorizeDirectory(path: homePath)
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "house.fill")
-                        Text("一键授权用户目录 ~ (含 agy / codebuddy 等)")
-                    }
-                    .font(.system(size: 10, weight: .semibold))
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                
-                Button(action: {
-                    let localBin = NSString(string: "~/.local/bin").expandingTildeInPath
-                    authorizeDirectory(path: localBin)
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.plus")
-                        Text("授权 ~/.local/bin")
-                    }
-                    .font(.system(size: 10))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                
-                Button(action: {
-                    authorizeDirectory(path: "/opt/homebrew")
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.plus")
-                        Text("授权 /opt/homebrew")
-                    }
-                    .font(.system(size: 10))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                
-                Button(action: {
-                    authorizeDirectory(path: "/usr/local")
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "folder.badge.plus")
-                        Text("授权 /usr/local")
-                    }
-                    .font(.system(size: 10))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                
                 Button(action: {
                     authorizeCustomDirectory()
                 }) {
-                    Text("自定义选择...")
-                        .font(.system(size: 10))
+                    HStack(spacing: 3) {
+                        Image(systemName: "folder.badge.plus")
+                        Text("添加授权目录...")
+                    }
+                    .font(.system(size: 10))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.small)
+                .controlSize(.mini)
             }
             
-            Text("💡 提示：您的 agy 位于 ~/.local/bin/agy，codebuddy 位于 ~/.npm-global/bin。点击【一键授权用户目录 ~】可一次性识别所有本地工具。")
-                .font(.system(size: 9.5))
-                .foregroundColor(.secondary)
-            
             let paths = SecurityScopedBookmarkManager.shared.authorizedPaths
-            if !paths.isEmpty {
-                Divider().opacity(0.15)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("已授权访问的系统路径:")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    
-                    ForEach(paths, id: \.self) { path in
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 6, height: 6)
-                            Text(path)
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundColor(.primary)
-                            Spacer()
-                            Button(action: {
-                                SecurityScopedBookmarkManager.shared.revokeBookmark(for: path)
-                                scanLocalCLIs()
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.secondary)
-                            }
-                            .buttonStyle(.plain)
+            if paths.isEmpty {
+                Text("尚无授权目录。点击「重新扫描」会自动引导授权用户目录；也可在此手动添加。")
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            } else {
+                ForEach(paths, id: \.self) { path in
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                        Text(path)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.primary)
+                        Spacer()
+                        Button(action: {
+                            SecurityScopedBookmarkManager.shared.revokeBookmark(for: path)
+                            scanLocalCLIs()
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
                         }
-                        .padding(.vertical, 2)
+                        .buttonStyle(.plain)
                     }
+                    .padding(.vertical, 2)
                 }
             }
         }
-        .padding(12)
+        .padding(10)
         .background(Color.accentColor.opacity(0.06))
         .overlay(
             RoundedRectangle(cornerRadius: 6)
@@ -595,24 +555,12 @@ public struct UnifiedSettingsView: View {
         .cornerRadius(6)
     }
     
-    private func authorizeDirectory(path: String) {
-        Task { @MainActor in
-            if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
-                initialPath: path,
-                prompt: "授权此目录",
-                message: "请点击【授权此目录】以允许沙箱环境探测与执行 \(path) 下的命令行工具。"
-            ) {
-                scanLocalCLIs()
-            }
-        }
-    }
-    
     private func authorizeCustomDirectory() {
         Task { @MainActor in
             if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
                 initialPath: nil,
-                prompt: "授权此目录",
-                message: "请选择包含 CLI 工具的目录（如 ~/.local/bin 或其他工作目录）并授权。"
+                prompt: L10n.t("授权此目录"),
+                message: L10n.t("请选择包含 CLI 工具的目录（如 ~/.local/bin 或其他工作目录）并授权。")
             ) {
                 scanLocalCLIs()
             }
@@ -728,7 +676,7 @@ public struct UnifiedSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("本地已安装 Skill 技能库")
                         .font(.system(size: 13, weight: .bold))
-                    Text("所有分类均可折叠展开，支持随时切换启用状态与查看配置参数：")
+                    Text("支持按名称/描述/格式搜索，随时切换启用状态与查看配置参数：")
                         .font(.system(size: 10.5))
                         .foregroundColor(.secondary)
                 }
@@ -739,11 +687,11 @@ public struct UnifiedSettingsView: View {
                 Button(action: {
                     Task {
                         isScanningApps = true
-                        harvestNotice = "正在扫描本机 /Applications 与 Homebrew/bin 生产力工具..."
+                        harvestNotice = L10n.t("正在扫描本机 /Applications 与 Homebrew/bin 生产力工具...")
                         let generated = await SkillHarvesterEngine.shared.harvestAllLocalSkills()
                         reloadAllData()
                         isScanningApps = false
-                        harvestNotice = "🎉 成功扫描并生成装载 \(generated.count) 款本机软件与命令行指令集！"
+                        harvestNotice = L10n.t("🎉 成功扫描并生成装载 %@ 款本机软件与命令行指令集！", "\(generated.count)")
                     }
                 }) {
                     HStack(spacing: 3.5) {
@@ -752,7 +700,7 @@ public struct UnifiedSettingsView: View {
                         } else {
                             Image(systemName: "sparkles.rectangle.stack.fill")
                         }
-                        Text(isScanningApps ? "扫描构建中..." : "扫描本机建立指令库")
+                        Text(isScanningApps ? L10n.t("扫描构建中...") : L10n.t("扫描本机建立指令库"))
                     }
                     .font(.system(size: 10.5, weight: .semibold))
                 }
@@ -803,11 +751,46 @@ public struct UnifiedSettingsView: View {
             
             Divider().opacity(0.15)
             
-            // 风琴折叠分类列表（支持自动发现新创分类）
+            // 搜索过滤栏
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                TextField(L10n.t("搜索技能 (名称/描述/格式)"), text: $skillSearchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                if !skillSearchText.isEmpty {
+                    Button(action: { skillSearchText = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                Text(L10n.t("%@ 个技能", "\(filteredFlatSkills.count)"))
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            
+            Divider().opacity(0.15)
+            
+            // 平铺技能列表（按名称排序，不再分类分组）
             ScrollView {
-                VStack(spacing: 10) {
-                    ForEach(dynamicCategoryGroups, id: \.name) { group in
-                        categoryAccordionSection(name: group.name, icon: group.icon, skills: group.skills)
+                LazyVStack(spacing: 6) {
+                    ForEach(filteredFlatSkills) { skill in
+                        skillCardRow(skill: skill)
+                    }
+                    if filteredFlatSkills.isEmpty {
+                        Text(skillSearchText.isEmpty
+                             ? L10n.t("尚未安装技能，可从「云端技能库」安装或点击上方「扫描本机建立指令库」")
+                             : L10n.t("没有匹配「%@」的技能", skillSearchText))
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.top, 40)
                     }
                 }
                 .padding(14)
@@ -815,77 +798,19 @@ public struct UnifiedSettingsView: View {
         }
     }
     
-    private var dynamicCategoryGroups: [(name: String, icon: String, skills: [SkillMetadata])] {
-        let uniqueNames = Array(Set(localSkills.map { $0.categoryDisplayName })).sorted()
-        return uniqueNames.map { name in
-            let catSkills = localSkills.filter { $0.categoryDisplayName == name }
-            let icon = catSkills.first?.categoryIcon ?? "folder.badge.gearshape"
-            return (name: name, icon: icon, skills: catSkills)
+    /// 平铺列表数据源：名称排序 + 关键词过滤（名称/描述/格式）
+    private var filteredFlatSkills: [SkillMetadata] {
+        let keyword = skillSearchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let base = localSkills.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        guard !keyword.isEmpty else { return base }
+        return base.filter { skill in
+            skill.name.lowercased().contains(keyword)
+            || skill.summary.lowercased().contains(keyword)
+            || skill.id.lowercased().contains(keyword)
+            || skill.supportedExtensions.contains { $0.lowercased() == keyword }
         }
     }
     
-    @ViewBuilder
-    private func categoryAccordionSection(name: String, icon: String, skills: [SkillMetadata]) -> some View {
-        let isExpanded = expandedCategories.contains(name)
-        
-        VStack(alignment: .leading, spacing: 0) {
-            // 风琴头部
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    if isExpanded {
-                        expandedCategories.remove(name)
-                    } else {
-                        expandedCategories.insert(name)
-                    }
-                }
-            }) {
-                HStack(spacing: 8) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(.secondary)
-                        .frame(width: 12)
-                    
-                    Image(systemName: icon)
-                        .font(.system(size: 12))
-                        .foregroundColor(.accentColor)
-                    
-                    Text(name)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.primary)
-                    
-                    Text("\(skills.count) 个技能")
-                        .font(.system(size: 10))
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("\(skills.filter { $0.isEnabled }.count) 已启用")
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundColor(.green)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color(nsColor: .controlBackgroundColor).opacity(0.8))
-            }
-            .buttonStyle(.plain)
-            
-            // 风琴展开内容
-            if isExpanded {
-                VStack(spacing: 6) {
-                    ForEach(skills) { skill in
-                        skillCardRow(skill: skill)
-                    }
-                }
-                .padding(8)
-                .background(Color.primary.opacity(0.02))
-            }
-        }
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.primary.opacity(0.1), lineWidth: 1)
-        )
-        .cornerRadius(8)
-    }
     
     @ViewBuilder
     private func skillCardRow(skill: SkillMetadata) -> some View {
@@ -905,7 +830,7 @@ public struct UnifiedSettingsView: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(skill.isEnabled ? .primary : .secondary)
                         
-                        Text(skill.category.rawValue)
+                        Text(L10n.t(skill.category.rawValue))
                             .font(.system(size: 8, weight: .semibold))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -926,7 +851,7 @@ public struct UnifiedSettingsView: View {
                         expandedSkillId = isExpanded ? nil : skill.id
                     }
                 }) {
-                    Text(isExpanded ? "收起" : "参数/示例")
+                    Text(isExpanded ? L10n.t("收起") : L10n.t("参数/示例"))
                         .font(.system(size: 9))
                 }
                 .buttonStyle(.bordered)
@@ -982,56 +907,237 @@ public struct UnifiedSettingsView: View {
         .cornerRadius(6)
     }
     
-    // MARK: - Tab: 云端扩展市场
+    // MARK: - Tab: 云端扩展市场 (skills.sh 生态)
     
     private var cloudMarketplaceContentView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("所有技能均以独立 Markdown (.md) 文件提供，点击「一键安装」即可下载至本地：")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                
-                ForEach(cloudSkills) { skill in
-                    HStack(spacing: 8) {
-                        Image(systemName: skill.icon)
-                            .font(.system(size: 16))
-                            .foregroundColor(.blue)
-                            .frame(width: 28, height: 28)
-                            .background(Color.blue.opacity(0.1))
-                            .cornerRadius(5)
-                        
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(skill.name)
-                                .font(.system(size: 12, weight: .bold))
-                            Text(skill.summary)
-                                .font(.system(size: 10))
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        if skill.isInstalled {
-                            Text("✓ 已安装")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.green)
-                        } else {
-                            Button("一键安装") {
-                                installCloudSkill(skill)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.mini)
+        VStack(spacing: 0) {
+            // 顶部：来源选择 + GitHub 搜索
+            HStack(spacing: 8) {
+                Menu {
+                    ForEach(CloudSkillMarketService.curatedSources, id: \.source) { src in
+                        Button(src.display + " (" + src.source + ")") {
+                            selectedMarketSource = src.source
+                            Task { await loadMarketSkills() }
                         }
                     }
-                    .padding(8)
-                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                    .cornerRadius(6)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "icloud.and.arrow.down.fill")
+                        Text(selectedMarketSource)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.down")
+                    }
+                    .font(.system(size: 11, weight: .medium))
+                }
+                .controlSize(.small)
+                .frame(maxWidth: 220)
+                
+                Spacer()
+                
+                TextField(L10n.t("搜索 GitHub 技能仓库 (owner/repo)"), text: $marketSearchText)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+                    .frame(width: 240)
+                    .onSubmit { Task { await searchMarketRepos() } }
+                
+                Button(action: { Task { await searchMarketRepos() } }) {
+                    Image(systemName: "magnifyingglass")
+                }
+                .controlSize(.small)
+                .disabled(marketSearchText.count < 2)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            
+            Divider().opacity(0.15)
+            
+            if isMarketLoading {
+                Spacer()
+                VStack(spacing: 8) {
+                    ProgressView()
+                    Text(L10n.t("正在从 GitHub 拉取技能清单..."))
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+            } else if let err = marketError, marketSkills.isEmpty {
+                Spacer()
+                VStack(spacing: 8) {
+                    Image(systemName: "wifi.exclamationmark")
+                        .font(.system(size: 24))
+                        .foregroundColor(.secondary)
+                    Text(err)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                    Button(L10n.t("重试")) { Task { await loadMarketSkills() } }
+                        .controlSize(.small)
+                }
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        if !searchedRepos.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(L10n.t("搜索到的仓库 (点击浏览):"))
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.secondary)
+                                ForEach(searchedRepos, id: \.self) { repo in
+                                    Button(action: {
+                                        selectedMarketSource = repo
+                                        searchedRepos = []
+                                        marketSearchText = ""
+                                        Task { await loadMarketSkills() }
+                                    }) {
+                                        HStack {
+                                            Image(systemName: "book.fill")
+                                                .font(.system(size: 10))
+                                            Text(repo)
+                                                .font(.system(size: 11, weight: .medium))
+                                            Spacer()
+                                            Image(systemName: "arrow.right.circle")
+                                                .font(.system(size: 10))
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 5)
+                                        .background(Color.accentColor.opacity(0.08))
+                                        .cornerRadius(5)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(10)
+                            .background(Color(nsColor: .controlBackgroundColor).opacity(0.6))
+                            .cornerRadius(8)
+                        }
+                        
+                        ForEach(marketSkills) { skill in
+                            marketSkillRow(skill)
+                        }
+                        
+                        if marketSkills.isEmpty && marketError == nil {
+                            Text(L10n.t("该仓库未发现 SKILL.md 技能"))
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 40)
+                        }
+                    }
+                    .padding(14)
                 }
             }
-            .padding(14)
+        }
+    }
+    
+    private func marketSkillRow(_ skill: CloudSkillMarketService.CloudSkill) -> some View {
+        let installed = localSkills.contains { $0.id == skill.slug } || installedMarketIds.contains(skill.id)
+        return HStack(spacing: 8) {
+            Image(systemName: "sparkles.rectangle.stack.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.blue)
+                .frame(width: 28, height: 28)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(5)
+            
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(skill.name)
+                        .font(.system(size: 12, weight: .bold))
+                        .lineLimit(1)
+                    Text(skill.installsDesc)
+                        .font(.system(size: 9))
+                        .foregroundColor(.secondary)
+                }
+                Text(skill.summary)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+            }
+            
+            Spacer()
+            
+            if installed {
+                Text(L10n.t("✓ 已安装"))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.green)
+            } else if installingSkillId == skill.id {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button(L10n.t("一键安装")) {
+                    installMarketSkill(skill)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
+            }
+        }
+        .padding(8)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+        .cornerRadius(6)
+    }
+    
+    private func loadMarketSkills() async {
+        isMarketLoading = true
+        marketError = nil
+        marketSkills = []
+        do {
+            marketSkills = try await CloudSkillMarketService.shared.fetchSkills(from: selectedMarketSource)
+        } catch {
+            marketError = L10n.t("拉取失败: %@", error.localizedDescription)
+        }
+        isMarketLoading = false
+    }
+    
+    private func searchMarketRepos() async {
+        guard marketSearchText.count >= 2 else { return }
+        // 完整 owner/repo 直接加载
+        if marketSearchText.contains("/"),
+           !marketSearchText.contains(" ") {
+            selectedMarketSource = marketSearchText
+            marketSearchText = ""
+            await loadMarketSkills()
+            return
+        }
+        isMarketLoading = true
+        marketError = nil
+        do {
+            searchedRepos = try await CloudSkillMarketService.shared.searchRepos(query: marketSearchText)
+            if searchedRepos.isEmpty {
+                marketError = L10n.t("未找到匹配的技能仓库")
+            }
+        } catch {
+            marketError = L10n.t("拉取失败: %@", error.localizedDescription)
+        }
+        isMarketLoading = false
+    }
+    
+    private func installMarketSkill(_ skill: CloudSkillMarketService.CloudSkill) {
+        installingSkillId = skill.id
+        Task {
+            defer { installingSkillId = nil }
+            guard let md = await CloudSkillMarketService.shared.fetchSkillMarkdown(repo: skill.source, slug: skill.slug) else {
+                marketError = L10n.t("下载 SKILL.md 失败")
+                return
+            }
+            // 转换 SKILL.md → 本地技能格式：注入 id/summary，保留正文作为文档
+            var converted = md
+            if !converted.contains("id:") {
+                let summaryEscaped = skill.summary.replacingOccurrences(of: "\n", with: " ")
+                converted = converted.replacingOccurrences(of: "---\n", with: "---\nid: \(skill.slug)\nsummary: \(summaryEscaped)\n", options: [], range: converted.startIndex..<converted.index(converted.startIndex, offsetBy: min(4, converted.count)))
+            }
+            let result = SkillManager.shared.installFromMarkdown(content: converted)
+            if result.success {
+                installedMarketIds.insert(skill.id)
+                localSkills = SkillManager.shared.allSkills
+            } else {
+                marketError = result.error
+            }
         }
     }
     
     // MARK: - Tab: 偏好与系统
+    
+    /// 偏好页右侧控件的统一宽度（语言下拉、自启动开关、快捷键徽章等保持等宽右对齐）
+    private let preferenceControlWidth: CGFloat = 150
     
     private var generalPreferencesContentView: some View {
         ScrollView {
@@ -1040,6 +1146,32 @@ public struct UnifiedSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("⚙️ 系统与交互偏好")
                         .font(.system(size: 12, weight: .bold))
+                    
+                    // 界面语言（在自启动上方；与自启动开关等宽右对齐）
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("界面语言")
+                                .font(.system(size: 11, weight: .medium))
+                            Text("默认跟随系统语言，可手动切换中文 / 英文（立即生效）")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        Picker("", selection: $interfaceLanguage) {
+                            ForEach(L10n.InterfaceLanguage.allCases) { lang in
+                                Text(lang.displayName).tag(lang)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .controlSize(.small)
+                        .frame(width: preferenceControlWidth, alignment: .trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    
+                    Divider().opacity(0.15)
                     
                     // 开机自启动
                     HStack {
@@ -1062,6 +1194,7 @@ public struct UnifiedSettingsView: View {
                         ))
                         .toggleStyle(.switch)
                         .controlSize(.small)
+                        .frame(width: preferenceControlWidth, alignment: .trailing)
                     }
                 }
                 .padding(12)
@@ -1078,13 +1211,20 @@ public struct UnifiedSettingsView: View {
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                         Spacer()
-                        Text("⌥ M (Option + M)")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.accentColor.opacity(0.12))
-                            .foregroundColor(.accentColor)
-                            .cornerRadius(4)
+                        Button(action: { toggleHotKeyRecording() }) {
+                            Text(isRecordingHotKey
+                                 ? L10n.t("按下新组合键…")
+                                 : "\(hotKeyManager.hotKeySymbol) (\(hotKeyManager.hotKeyReadable))")
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 2)
+                                .background(isRecordingHotKey ? Color.orange.opacity(0.18) : Color.accentColor.opacity(0.12))
+                                .foregroundColor(isRecordingHotKey ? .orange : .accentColor)
+                                .cornerRadius(4)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: preferenceControlWidth, alignment: .trailing)
+                        .help(isRecordingHotKey ? L10n.t("按 Esc 取消") : L10n.t("点击后按下新组合键以重新定义"))
                     }
                     
                     HStack {
@@ -1094,23 +1234,9 @@ public struct UnifiedSettingsView: View {
                         Spacer()
                         Text("⌘ Z (Command + Z)")
                             .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 6)
+                            .frame(width: preferenceControlWidth, alignment: .center)
                             .padding(.vertical, 2)
                             .background(Color.primary.opacity(0.08))
-                            .cornerRadius(4)
-                    }
-                    
-                    HStack {
-                        Text("退出应用程序:")
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("⌘ Q (Command + Q)")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.red.opacity(0.12))
-                            .foregroundColor(.red)
                             .cornerRadius(4)
                     }
                 }
@@ -1142,23 +1268,50 @@ public struct UnifiedSettingsView: View {
                 .cornerRadius(8)
                 
                 Spacer()
-                
-                // 退出应用
-                Button(action: {
-                    NSApplication.shared.terminate(nil)
-                }) {
-                    HStack {
-                        Image(systemName: "power")
-                        Text("退出文件魔法棒")
-                    }
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.red)
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
             .padding(14)
+            .onDisappear { stopHotKeyRecording() }
+        }
+    }
+    
+    // MARK: - 快捷键自定义录制
+    
+    private func toggleHotKeyRecording() {
+        if isRecordingHotKey {
+            stopHotKeyRecording()
+        } else {
+            startHotKeyRecording()
+        }
+    }
+    
+    private func startHotKeyRecording() {
+        guard hotKeyMonitor == nil else { return }
+        isRecordingHotKey = true
+        hotKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            DispatchQueue.main.async {
+                if event.keyCode == 53 {
+                    stopHotKeyRecording()
+                    return
+                }
+                let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                guard mods.intersection([.command, .option, .control]).isEmpty == false,
+                      let char = event.charactersIgnoringModifiers?.uppercased(), !char.isEmpty else { return }
+                GlobalHotKeyManager.shared.updateHotKey(
+                    keyCode: Int(event.keyCode),
+                    modifiers: mods,
+                    displayChar: char
+                )
+                stopHotKeyRecording()
+            }
+            return nil
+        }
+    }
+    
+    private func stopHotKeyRecording() {
+        isRecordingHotKey = false
+        if let monitor = hotKeyMonitor {
+            NSEvent.removeMonitor(monitor)
+            hotKeyMonitor = nil
         }
     }
     
@@ -1203,7 +1356,7 @@ public struct UnifiedSettingsView: View {
                         .lineLimit(1)
                 }
             } else if selectedTab == .skills {
-                Text("已启用 \(localSkills.filter { $0.isEnabled }.count) / \(localSkills.count) 个本地 Markdown 技能")
+                Text(L10n.t("已启用 %@ / %@ 个本地 Markdown 技能", "\(localSkills.filter { $0.isEnabled }.count)", "\(localSkills.count)"))
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
             }
@@ -1253,7 +1406,7 @@ public struct UnifiedSettingsView: View {
                         reloadSkills()
                         isShowingImportModal = false
                     } else {
-                        importErrorMessage = result.error ?? "安装失败"
+                        importErrorMessage = result.error ?? L10n.t("安装失败")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -1292,6 +1445,11 @@ public struct UnifiedSettingsView: View {
         self.availableProviders = ProviderConfigRegistry.shared.providers
     }
     
+    // 沙箱检测：沙箱进程会被注入该容器环境变量
+    private var isSandboxed: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
+    }
+    
     private func scanLocalCLIs() {
         isScanningCLIs = true
         Task { @MainActor in
@@ -1301,10 +1459,26 @@ public struct UnifiedSettingsView: View {
         }
     }
     
+    /// 沙箱下「重新扫描」增强：若无任何授权目录，先自动弹授权面板（默认定位用户目录）再扫描
+    private func rescanWithAuthorizationIfNeeded() {
+        if isSandboxed && SecurityScopedBookmarkManager.shared.authorizedPaths.isEmpty {
+            Task { @MainActor in
+                if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
+                    initialPath: NSString(string: "~").expandingTildeInPath,
+                    prompt: L10n.t("授权此目录"),
+                    message: L10n.t("为了在沙箱中识别并使用本地 CLI 工具（如 Homebrew、Ollama、Antigravity 等），请授权访问该目录。")
+                ) {
+                    scanLocalCLIs()
+                }
+            }
+        } else {
+            scanLocalCLIs()
+        }
+    }
+    
     private func reloadSkills() {
         SkillManager.shared.reloadLocalSkills()
         self.localSkills = SkillManager.shared.allSkills
-        self.cloudSkills = SkillManager.shared.cloudMarketSkills
     }
     
     private func selectProvider(_ provider: ProviderDefinition) {
@@ -1313,7 +1487,7 @@ public struct UnifiedSettingsView: View {
         if let defModel = provider.defaultModel {
             modelSettings.modelName = defModel.id
         }
-        testStatus = "✅ 已选用 \(provider.name)"
+        testStatus = L10n.t("✅ 已选用 %@", provider.name)
     }
     
     private func selectCLITool(_ tool: DiscoveredCLITool) {
@@ -1322,7 +1496,7 @@ public struct UnifiedSettingsView: View {
         if let firstModel = tool.availableModels.first {
             modelSettings.modelName = firstModel
         }
-        testStatus = "✅ 已选用 \(tool.name) 本地调度"
+        testStatus = L10n.t("✅ 已选用 %@ 本地调度", tool.name)
     }
     
     private func toggleSkill(id: String, isEnabled: Bool) {
@@ -1330,21 +1504,16 @@ public struct UnifiedSettingsView: View {
         reloadSkills()
     }
     
-    private func installCloudSkill(_ skill: SkillMetadata) {
-        SkillManager.shared.installSkill(skill)
-        reloadSkills()
-    }
-    
     private func testConnection() {
         isTesting = true
-        testStatus = "正在测试连接..."
+        testStatus = L10n.t("正在测试连接...")
         Task {
             do {
                 let msg = try await ModelSettingsManager.shared.testConnection(settings: modelSettings)
                 self.testStatus = msg
                 self.isTesting = false
             } catch {
-                self.testStatus = "❌ \(error.localizedDescription)"
+                self.testStatus = L10n.t("❌ %@", error.localizedDescription)
                 self.isTesting = false
             }
         }

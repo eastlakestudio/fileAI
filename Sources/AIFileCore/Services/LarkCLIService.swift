@@ -46,7 +46,7 @@ public final class LarkCLIService: @unchecked Sendable {
     /// 检查 lark-cli 是否已就绪并已完成登录配置
     public func checkAuthStatus() async -> (isInstalled: Bool, isLoggedIn: Bool, userName: String?, errorMsg: String?) {
         guard let execPath = findExecutablePath() else {
-            return (false, false, nil, "未检测到 lark-cli，请先安装飞书官方 CLI")
+            return (false, false, nil, L10n.t("未检测到 lark-cli，请先安装飞书官方 CLI"))
         }
         
         do {
@@ -61,9 +61,9 @@ public final class LarkCLIService: @unchecked Sendable {
                 if available && tokenStatus == "valid" {
                     return (true, true, userName, nil)
                 } else if tokenStatus == "needs_refresh" {
-                    return (true, true, userName ?? "已登录用户", "飞书凭证可能需要刷新 (lark-cli auth login)")
+                    return (true, true, userName ?? L10n.t("已登录用户"), L10n.t("飞书凭证可能需要刷新 (lark-cli auth login)"))
                 }
-                return (true, false, userName, "尚未登录飞书，请运行 `lark-cli auth login` 进行授权")
+                return (true, false, userName, L10n.t("尚未登录飞书，请运行 `lark-cli auth login` 进行授权"))
             }
             return (true, false, nil, output)
         } catch {
@@ -115,13 +115,13 @@ public final class LarkCLIService: @unchecked Sendable {
             throw NSError(
                 domain: "LarkCLIService",
                 code: 404,
-                userInfo: [NSLocalizedDescriptionKey: "未找到 lark-cli 可执行文件，请确认已全局安装 @larksuite/cli"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("未找到 lark-cli 可执行文件，请确认已全局安装 @larksuite/cli")]
             )
         }
         
         var logs: [String] = []
-        logs.append("🚀 启动飞书官方 CLI 协同服务: \(execPath)")
-        logs.append("📄 准备处理目标文件: \(fileURL.lastPathComponent)")
+        logs.append(L10n.t("🚀 启动飞书官方 CLI 协同服务: %@", execPath))
+        logs.append(L10n.t("📄 准备处理目标文件: %@", fileURL.lastPathComponent))
         
         let targetQuery = targetUserOrChat ?? extraParams["targetUser"] ?? extraParams["targetChatId"] ?? "刘明华"
         let fileName = fileURL.lastPathComponent
@@ -137,19 +137,19 @@ public final class LarkCLIService: @unchecked Sendable {
         } else if targetQuery.starts(with: "ou_") {
             targetOpenId = targetQuery
         } else {
-            logs.append("🔍 正在检索飞书联系人:「\(targetQuery)」...")
+            logs.append(L10n.t("🔍 正在检索飞书联系人:「%@」...", targetQuery))
             let resolved = await resolveUserOrChat(query: targetQuery)
             if let cid = resolved.chatId {
                 targetChatId = cid
                 targetOpenId = resolved.openId
                 resolvedDisplayName = resolved.name ?? targetQuery
-                logs.append("✅ 成功解析联系人:「\(resolvedDisplayName)」(ChatID: \(cid))")
+                logs.append(L10n.t("✅ 成功解析联系人:「%@」(ChatID: %@)", resolvedDisplayName, cid))
             } else if let oid = resolved.openId {
                 targetOpenId = oid
                 resolvedDisplayName = resolved.name ?? targetQuery
-                logs.append("✅ 成功解析联系人:「\(resolvedDisplayName)」(OpenID: \(oid))")
+                logs.append(L10n.t("✅ 成功解析联系人:「%@」(OpenID: %@)", resolvedDisplayName, oid))
             } else {
-                logs.append("⚠️ 未在通讯录中精准找到「\(targetQuery)」，将尝试通过默认会话发送")
+                logs.append(L10n.t("⚠️ 未在通讯录中精准找到「%@」，将尝试通过默认会话发送", targetQuery))
             }
         }
         
@@ -157,10 +157,10 @@ public final class LarkCLIService: @unchecked Sendable {
         var arguments: [String] = []
         
         if actionType == "upload_doc" || actionType == "drive" {
-            logs.append("☁️ 执行动作: 上传至飞书云空间 (lark-cli drive)")
+            logs.append(L10n.t("☁️ 执行动作: 上传至飞书云空间 (lark-cli drive)"))
             arguments = ["drive", "files", "upload", "--file", fileName]
         } else {
-            logs.append("💬 执行动作: 发送文件与消息至飞书「\(resolvedDisplayName)」")
+            logs.append(L10n.t("💬 执行动作: 发送文件与消息至飞书「%@」", resolvedDisplayName))
             // 构造消息参数（lark-cli im +messages-send）
             arguments = ["im", "+messages-send", "--as", "user", "--file", fileName]
             
@@ -182,16 +182,16 @@ public final class LarkCLIService: @unchecked Sendable {
         )
         let elapsed = Date().timeIntervalSince(startTime)
         
-        logs.append("📥 lark-cli 退出状态码: \(status) (耗时 \(String(format: "%.2fs", elapsed)))")
+        logs.append(L10n.t("📥 lark-cli 退出状态码: %@ (耗时 %@)", "\(status)", String(format: "%.2fs", elapsed)))
         let preview = output.replacingOccurrences(of: "\n", with: " ")
-        logs.append("📄 lark-cli 返回: \(preview.prefix(160))")
+        logs.append(L10n.t("📄 lark-cli 返回: %@", String(preview.prefix(160))))
         
         if status == 0 {
-            let summary = "✅ 成功通过 lark-cli 将 [\(fileName)] 发送给 [\(resolvedDisplayName)]"
+            let summary = L10n.t("✅ 成功通过 lark-cli 将 [%@] 发送给 [%@]", fileName, resolvedDisplayName)
             logs.append(summary)
             return (true, summary, logs)
         } else {
-            let summary = "⚠️ lark-cli 执行提示: \(output.isEmpty ? "请检查飞书登录授权" : output)"
+            let summary = L10n.t("⚠️ lark-cli 执行提示: %@", output.isEmpty ? L10n.t("请检查飞书登录授权") : output)
             logs.append(summary)
             return (false, summary, logs)
         }

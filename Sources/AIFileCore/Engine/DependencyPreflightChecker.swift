@@ -194,8 +194,8 @@ public final class DependencyPreflightChecker: Sendable {
         // 自动安装失败，生成清晰的指引文案
         let packagesStr = missing.joined(separator: " ")
         let errorMsg = """
-        ⚠️ 技能执行依赖的 Python 库未就绪: [\(missing.joined(separator: ", "))]
-        系统尝试自动安装未成功，请在终端手动执行以下命令进行安装：
+        \(L10n.t("⚠️ 技能执行依赖的 Python 库未就绪: [%@]", missing.joined(separator: ", ")))
+        \(L10n.t("系统尝试自动安装未成功，请在终端手动执行以下命令进行安装："))
         pip3 install \(packagesStr)
         """
         

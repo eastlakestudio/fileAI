@@ -9,7 +9,6 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
     case llm = "llm"
     case aichat = "aichat"
     case ghCopilot = "gh"
-    case llamaCli = "llama-cli"
     
     public var id: String { rawValue }
     
@@ -18,11 +17,10 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
         case .antigravity: return "Google Antigravity CLI (agy)"
         case .codebuddy: return "Tencent CodeBuddy CLI (codebuddy)"
         case .claude: return "Claude Code CLI (Anthropic)"
-        case .ollama: return "Ollama 本地大模型 CLI"
+        case .ollama: return L10n.t("Ollama 本地大模型 CLI")
         case .llm: return "SimonW LLM CLI (Gemini/OpenAI)"
-        case .aichat: return "AIChat 终端通用 CLI"
+        case .aichat: return L10n.t("AIChat 终端通用 CLI")
         case .ghCopilot: return "GitHub Copilot CLI"
-        case .llamaCli: return "llama.cpp 极速推理 CLI"
         }
     }
     
@@ -35,7 +33,6 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
         case .llm: return ["llm"]
         case .aichat: return ["aichat"]
         case .ghCopilot: return ["gh"]
-        case .llamaCli: return ["llama-cli", "llama-run", "main"]
         }
     }
     
@@ -48,20 +45,18 @@ public enum CLIToolType: String, CaseIterable, Identifiable, Sendable, Codable {
         case .llm: return "https://llm.datasette.io/en/stable/setup.html"
         case .aichat: return "https://github.com/sigoden/aichat"
         case .ghCopilot: return "https://docs.github.com/en/copilot/using-github-copilot-in-the-command-line"
-        case .llamaCli: return "https://github.com/ggerganov/llama.cpp"
         }
     }
     
     public var toolDescription: String {
         switch self {
-        case .antigravity: return "Google 官方新一代 Agentic AI 终端工具 (agy)，原生支持 Tool Use 与多模态架构"
-        case .codebuddy: return "腾讯官方 CodeBuddy AI 终端研发助手，支持 DeepSeek-V4、GLM-5 等顶尖大模型免配置即用"
-        case .claude: return "Anthropic 官方终端工具，免配置 Key，直接复用网页登录凭据"
-        case .ollama: return "本地离线模型，自动发现已下载模型 (ollama list)"
-        case .llm: return "极客多模型通用 CLI，支持 Gemini/Claude/OpenAI 插件与本地认证"
-        case .aichat: return "高性能 All-in-One 终端 LLM，自动读取 ~/.config/aichat"
-        case .ghCopilot: return "复用 GitHub Copilot 个人/企业订阅免额外 Token 费用"
-        case .llamaCli: return "C/C++ Metal 硬件加速极速推理"
+        case .antigravity: return L10n.t("Google 官方新一代 Agentic AI 终端工具 (agy)，原生支持 Tool Use 与多模态架构")
+        case .codebuddy: return L10n.t("腾讯官方 CodeBuddy AI 终端研发助手，支持 DeepSeek-V4、GLM-5 等顶尖大模型免配置即用")
+        case .claude: return L10n.t("Anthropic 官方终端工具，免配置 Key，直接复用网页登录凭据")
+        case .ollama: return L10n.t("本地离线模型，自动发现已下载模型 (ollama list)")
+        case .llm: return L10n.t("极客多模型通用 CLI，支持 Gemini/Claude/OpenAI 插件与本地认证")
+        case .aichat: return L10n.t("高性能 All-in-One 终端 LLM，自动读取 ~/.config/aichat")
+        case .ghCopilot: return L10n.t("复用 GitHub Copilot 个人/企业订阅免额外 Token 费用")
         }
     }
 }

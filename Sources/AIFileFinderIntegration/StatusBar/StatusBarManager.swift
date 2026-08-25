@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import AIFileCore
 
 /// 系统状态栏管理器
 @MainActor
@@ -25,7 +26,7 @@ public final class StatusBarManager: NSObject, ObservableObject {
                 image.isTemplate = true
                 button.image = image
             } else {
-                button.title = "✨AI"
+                button.title = L10n.t("✨AI")
             }
             
             button.target = self
@@ -52,26 +53,26 @@ public final class StatusBarManager: NSObject, ObservableObject {
     
     /// 弹出状态栏右键上下文菜单
     public func showContextMenu() {
-        let menu = NSMenu(title: "文件魔法棒")
+        let menu = NSMenu(title: L10n.t("文件魔法棒"))
         menu.delegate = self
         
-        let openItem = NSMenuItem(title: "显示文件魔法棒 (⌥M)", action: #selector(openPanel), keyEquivalent: "")
+        let openItem = NSMenuItem(title: L10n.t("显示文件魔法棒 (%@)", GlobalHotKeyManager.shared.hotKeySymbol), action: #selector(openPanel), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
         
-        let undoItem = NSMenuItem(title: "撤销上次操作 (⌘Z)", action: #selector(triggerUndo), keyEquivalent: "")
+        let undoItem = NSMenuItem(title: L10n.t("撤销上次操作 (⌘Z)"), action: #selector(triggerUndo), keyEquivalent: "")
         undoItem.target = self
         menu.addItem(undoItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let settingsItem = NSMenuItem(title: "配置管理中心...", action: #selector(openPreferences), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: L10n.t("配置管理中心..."), action: #selector(openPreferences), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        let quitItem = NSMenuItem(title: "退出文件魔法棒 (⌘Q)", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L10n.t("退出文件魔法棒 (⌘Q)"), action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
         

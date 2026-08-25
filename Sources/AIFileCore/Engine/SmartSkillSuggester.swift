@@ -26,8 +26,8 @@ public final class SmartSkillSuggester: Sendable {
     public func suggestSkills(for items: [FileItem]) -> [SkillSuggestion] {
         guard !items.isEmpty else {
             return [
-                SkillSuggestion(title: "📂 手动选取文件", promptText: "__PICK_FILES__", icon: "folder.badge.plus", priority: 100),
-                SkillSuggestion(title: "⚡ 抓取 Finder 选中项", promptText: "__REFRESH_FINDER__", icon: "arrow.clockwise", priority: 90)
+                SkillSuggestion(title: L10n.t("📂 手动选取文件"), promptText: "__PICK_FILES__", icon: "folder.badge.plus", priority: 100),
+                SkillSuggestion(title: L10n.t("⚡ 抓取 Finder 选中项"), promptText: "__REFRESH_FINDER__", icon: "arrow.clockwise", priority: 90)
             ]
         }
         
@@ -47,8 +47,8 @@ public final class SmartSkillSuggester: Sendable {
         // 1. 电子表格类智能推荐
         if spreadsheetCount > 0 {
             suggestions.append(SkillSuggestion(
-                title: "📊 电子表格转为 PDF",
-                promptText: "将选中的 Excel 表格转换为标准 PDF 文档",
+                title: L10n.t("📊 电子表格转为 PDF"),
+                promptText: L10n.t("将选中的 Excel 表格转换为标准 PDF 文档"),
                 icon: "tablecells",
                 priority: 20
             ))
@@ -57,8 +57,8 @@ public final class SmartSkillSuggester: Sendable {
         // 2. 演示文稿类智能推荐
         if presentationCount > 0 {
             suggestions.append(SkillSuggestion(
-                title: "📽️ 演示文稿转为 PDF",
-                promptText: "将选中的 PPT/Keynote 转换为 PDF 文档",
+                title: L10n.t("📽️ 演示文稿转为 PDF"),
+                promptText: L10n.t("将选中的 PPT/Keynote 转换为 PDF 文档"),
                 icon: "sparkles.tv",
                 priority: 18
             ))
@@ -67,20 +67,20 @@ public final class SmartSkillSuggester: Sendable {
         // 3. 图像类智能推荐
         if imageCount > 0 {
             suggestions.append(SkillSuggestion(
-                title: "🖼️ 统一修改分辨率为 1920x1080",
-                promptText: "将所有图片统一修改为 1920x1080 分辨率",
+                title: L10n.t("🖼️ 统一修改分辨率为 1920x1080"),
+                promptText: L10n.t("将所有图片统一修改为 1920x1080 分辨率"),
                 icon: "photo.stack",
                 priority: 10
             ))
             suggestions.append(SkillSuggestion(
-                title: "🔄 转换为 PNG 格式",
-                promptText: "将所有选中的图片转换为 PNG 格式",
+                title: L10n.t("🔄 转换为 PNG 格式"),
+                promptText: L10n.t("将所有选中的图片转换为 PNG 格式"),
                 icon: "arrow.triangle.2.circlepath.doc.on.clipboard",
                 priority: 9
             ))
             suggestions.append(SkillSuggestion(
-                title: "🪄 图片转为 PDF",
-                promptText: "将这些图片转换并输出为 PDF 文档",
+                title: L10n.t("🪄 图片转为 PDF"),
+                promptText: L10n.t("将这些图片转换并输出为 PDF 文档"),
                 icon: "doc.viewfinder",
                 priority: 8
             ))
@@ -89,21 +89,21 @@ public final class SmartSkillSuggester: Sendable {
         // 4. PDF 类智能推荐
         if pdfCount >= 2 {
             suggestions.append(SkillSuggestion(
-                title: "📑 合并 \(pdfCount) 个 PDF 为单个文件",
-                promptText: "将选中的所有 PDF 合并为一个新 PDF 文件",
+                title: L10n.t("📑 合并 %@ 个 PDF 为单个文件", "\(pdfCount)"),
+                promptText: L10n.t("将选中的所有 PDF 合并为一个新 PDF 文件"),
                 icon: "doc.on.doc.fill",
                 priority: 15
             ))
         } else if pdfCount == 1 {
             suggestions.append(SkillSuggestion(
-                title: "✂️ 拆分 PDF 为单页",
-                promptText: "将选中的 PDF 拆分为单页文件",
+                title: L10n.t("✂️ 拆分 PDF 为单页"),
+                promptText: L10n.t("将选中的 PDF 拆分为单页文件"),
                 icon: "scissors",
                 priority: 12
             ))
             suggestions.append(SkillSuggestion(
-                title: "📐 重构为 A3 横版 PDF",
-                promptText: "转成 A3 横版 pdf",
+                title: L10n.t("📐 重构为 A3 横版 PDF"),
+                promptText: L10n.t("转成 A3 横版 pdf"),
                 icon: "aspectratio",
                 priority: 11
             ))
@@ -112,8 +112,8 @@ public final class SmartSkillSuggester: Sendable {
         // 5. 文档类智能推荐
         if docCount > 0 {
             suggestions.append(SkillSuggestion(
-                title: "📄 Word/文档批量转 PDF",
-                promptText: "将选中的所有文档转为标准 PDF 格式",
+                title: L10n.t("📄 Word/文档批量转 PDF"),
+                promptText: L10n.t("将选中的所有文档转为标准 PDF 格式"),
                 icon: "doc.richtext",
                 priority: 16
             ))
@@ -121,8 +121,8 @@ public final class SmartSkillSuggester: Sendable {
         
         // 4. 通用智能重命名（任何文件均可触发）
         suggestions.append(SkillSuggestion(
-            title: "🏷️ 批量添加【已整理_】前缀",
-            promptText: "给选中的所有文件批量添加前缀【已整理_】",
+            title: L10n.t("🏷️ 批量添加【已整理_】前缀"),
+            promptText: L10n.t("给选中的所有文件批量添加前缀【已整理_】"),
             icon: "tag.fill",
             priority: 5
         ))

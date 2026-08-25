@@ -90,10 +90,10 @@ public final class SkillManager: @unchecked Sendable {
     @discardableResult
     public func installFromMarkdown(content: String) -> (success: Bool, error: String?) {
         guard let parsed = SkillMarkdownParser.parse(markdown: content) else {
-            return (false, "无法解析 Markdown 头部 Frontmatter 元数据，请确保包含 id/name/summary 等字段。")
+            return (false, L10n.t("无法解析 Markdown 头部 Frontmatter 元数据，请确保包含 id/name/summary 等字段。"))
         }
         let ok = installSkill(parsed)
-        return (ok, ok ? nil : "写入磁盘失败")
+        return (ok, ok ? nil : L10n.t("写入磁盘失败"))
     }
     
     /// 卸载/删除已安装的 Skill (.md 文件)

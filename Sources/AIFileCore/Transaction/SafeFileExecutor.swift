@@ -31,7 +31,7 @@ public final class SafeFileExecutor: Sendable {
             throw NSError(
                 domain: "SafeFileExecutor",
                 code: 400,
-                userInfo: [NSLocalizedDescriptionKey: "待执行的操作列表为空，未进行任何物理变动"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("待执行的操作列表为空，未进行任何物理变动")]
             )
         }
         

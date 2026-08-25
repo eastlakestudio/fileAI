@@ -97,7 +97,7 @@ public struct TaskDetailSheetView: View {
                 HStack(spacing: 3) {
                     Image(systemName: copiedKey == "all" ? "checkmark" : "doc.on.doc")
                         .font(.system(size: 9))
-                    Text(copiedKey == "all" ? "已拷贝全部" : "拷贝全部")
+                    Text(copiedKey == "all" ? L10n.t("已拷贝全部") : L10n.t("拷贝全部"))
                         .font(.system(size: 10.5, weight: .medium))
                 }
             }
@@ -143,16 +143,16 @@ public struct TaskDetailSheetView: View {
                 .textSelection(.enabled)
             
             HStack(spacing: 8) {
-                Text("创建时间: \(task.createdAt.formatted())")
+                Text(L10n.t("创建时间: %@", task.createdAt.formatted()))
                 if let end = task.completedAt {
-                    Text("• 完成时间: \(end.formatted())")
+                    Text(L10n.t("• 完成时间: %@", end.formatted()))
                 }
-                Text("• ⏱️ 总耗时: \(task.formattedDuration)")
+                Text(L10n.t("• ⏱️ 总耗时: %@", task.formattedDuration))
                     .fontWeight(.medium)
                     .foregroundColor(.accentColor)
                 
                 if let model = task.plan.modelProviderInfo {
-                    Text("• 🤖 模型: \(model)")
+                    Text(L10n.t("• 🤖 模型: %@", model))
                         .foregroundColor(.purple)
                 }
             }
@@ -248,7 +248,7 @@ public struct TaskDetailSheetView: View {
     private func planAndActionsSection(for task: TaskExecutionRecord) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("📋 实施方案与文件变动清单 (\(task.plan.actions.count) 项)")
+                Text(L10n.t("📋 实施方案与文件变动清单 (%@ 项)", "\(task.plan.actions.count)"))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.secondary)
             }
@@ -261,7 +261,7 @@ public struct TaskDetailSheetView: View {
                 VStack(spacing: 4) {
                     ForEach(task.plan.actions) { action in
                         HStack(spacing: 6) {
-                            Text(action.operationType.rawValue)
+                            Text(L10n.t(action.operationType.rawValue))
                                 .font(.system(size: 9, weight: .bold))
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 2)
@@ -301,7 +301,7 @@ public struct TaskDetailSheetView: View {
     private func outputFilesSection(for task: TaskExecutionRecord) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("📂 执行结果与产出 (\(task.plan.actions.count) 项)")
+                Text(L10n.t("📂 执行结果与产出 (%@ 项)", "\(task.plan.actions.count)"))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundColor(.secondary)
                 
@@ -356,7 +356,7 @@ public struct TaskDetailSheetView: View {
                                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                         .foregroundColor(.primary)
                                     
-                                    Text("路径: \(targetURL.path)")
+                                    Text(L10n.t("路径: %@", targetURL.path))
                                         .font(.system(size: 9, design: .monospaced))
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
@@ -405,7 +405,7 @@ public struct TaskDetailSheetView: View {
     private func pipelineLogsSection(for task: TaskExecutionRecord) -> some View {
         let logs = task.executionLogs.isEmpty ? task.plan.executionLogs : task.executionLogs
         return VStack(alignment: .leading, spacing: 6) {
-            Text("⚡ 全链路执行日志流水线 (\(logs.count) 条)")
+            Text(L10n.t("⚡ 全链路执行日志流水线 (%@ 条)", "\(logs.count)"))
                 .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.secondary)
             
@@ -431,7 +431,7 @@ public struct TaskDetailSheetView: View {
     }
     
     private func errorDiagnosisSection(for task: TaskExecutionRecord) -> some View {
-        let err = task.errorMessage ?? "未知执行异常"
+        let err = task.errorMessage ?? L10n.t("未知执行异常")
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -488,7 +488,7 @@ public struct TaskDetailSheetView: View {
             HStack(spacing: 3) {
                 Image(systemName: isCopied ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 8.5))
-                Text(isCopied ? "已复制" : "复制")
+                Text(isCopied ? L10n.t("已复制") : L10n.t("复制"))
                     .font(.system(size: 9.5))
             }
         }
@@ -514,30 +514,30 @@ public struct TaskDetailSheetView: View {
     
     private func buildFullTaskSummary(_ task: TaskExecutionRecord) -> String {
         var lines: [String] = []
-        lines.append("任务目标: \(task.prompt)")
-        lines.append("状态: \(task.status.rawValue)")
-        lines.append("耗时: \(task.formattedDuration)")
+        lines.append(L10n.t("任务目标: %@", task.prompt))
+        lines.append(L10n.t("状态: %@", task.status.rawValue))
+        lines.append(L10n.t("耗时: %@", task.formattedDuration))
         if let model = task.plan.modelProviderInfo {
-            lines.append("模型引擎: \(model)")
+            lines.append(L10n.t("模型引擎: %@", model))
         }
         if let thought = task.plan.thoughtProcess, !thought.isEmpty {
-            lines.append("\n【思考过程】\n\(thought)")
+            lines.append(L10n.t("\n【思考过程】\n%@", thought))
         }
         if let report = task.walkthroughReport, !report.isEmpty {
-            lines.append("\n【执行总结报告】\n\(cleanReport(report))")
+            lines.append(L10n.t("\n【执行总结报告】\n%@", cleanReport(report)))
         }
         if let err = task.errorMessage, !err.isEmpty {
-            lines.append("\n【错误信息】\n\(err)")
+            lines.append(L10n.t("\n【错误信息】\n%@", err))
         }
         if !task.plan.actions.isEmpty {
-            lines.append("\n【文件操作列表】")
+            lines.append(L10n.t("\n【文件操作列表】"))
             for action in task.plan.actions {
-                lines.append("- [\(action.operationType.rawValue)] \(action.sourceURL.path) -> \(action.targetURL?.path ?? "同源")")
+                lines.append(L10n.t("- [%@] %@ -> %@", action.operationType.rawValue, action.sourceURL.path, action.targetURL?.path ?? L10n.t("同源")))
             }
         }
         let logs = task.executionLogs.isEmpty ? task.plan.executionLogs : task.executionLogs
         if !logs.isEmpty {
-            lines.append("\n【执行日志】")
+            lines.append(L10n.t("\n【执行日志】"))
             lines.append(contentsOf: logs)
         }
         return lines.joined(separator: "\n")
@@ -566,7 +566,7 @@ public struct TaskDetailSheetView: View {
     
     @ViewBuilder
     private func statusBadge(_ status: TaskStatus) -> some View {
-        Text(status.rawValue)
+        Text(L10n.t(status.rawValue))
             .font(.system(size: 10, weight: .bold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)

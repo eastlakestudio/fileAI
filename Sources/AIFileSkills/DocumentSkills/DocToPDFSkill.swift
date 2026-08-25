@@ -5,8 +5,8 @@ import AIFileCore
 
 public final class DocToPDFSkill: FileSkill, Sendable {
     public let identifier = "doc_to_pdf"
-    public let name = "文档/演示/图片转PDF"
-    public let skillDescription = "将 PPT/PPTX、Keynote、Word 文档 (DOC/DOCX)、Markdown、文本或图片安全转换为标准矢量 PDF"
+    public let name = L10n.t("文档/演示/图片转PDF")
+    public let skillDescription = L10n.t("将 PPT/PPTX、Keynote、Word 文档 (DOC/DOCX)、Markdown、文本或图片安全转换为标准矢量 PDF")
     public var supportedOperations: [FileOperationType] { [.convertToPDF] }
     
     public var parametersSchema: [String: Any] {
@@ -16,7 +16,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
                 "fileNames": [
                     "type": "array",
                     "items": ["type": "string"],
-                    "description": "需要转换为 PDF 的文件名列表"
+                    "description": L10n.t("需要转换为 PDF 的文件名列表")
                 ]
             ],
             "required": []
@@ -43,11 +43,11 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         }
         
         guard !targetItems.isEmpty else {
-            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? L10n.t("无后缀") : ".\($0.fileExtension)" }).joined(separator: ", ")
             throw NSError(
                 domain: "DocToPDFSkill",
                 code: 400,
-                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 无法转为 PDF。转 PDF 支持：Excel 表格 (.xlsx/.xls/.csv)、Word (.docx)、PPT (.pptx)、Keynote/Numbers、图片 (.png/.jpg) 等。"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("当前选中的文件 (%@) 无法转为 PDF。转 PDF 支持：Excel 表格 (.xlsx/.xls/.csv)、Word (.docx)、PPT (.pptx)、Keynote/Numbers、图片 (.png/.jpg) 等。", presentExts)]
             )
         }
         
@@ -64,12 +64,12 @@ public final class DocToPDFSkill: FileSkill, Sendable {
                 operationType: .convertToPDF,
                 sourceURL: item.url,
                 targetURL: targetURL,
-                detailDescription: ext == "pdf" ? "重构为 A3 横版标准 PDF" : "将 \(item.fileExtension.uppercased()) 转换为 PDF 文档"
+                detailDescription: ext == "pdf" ? L10n.t("重构为 A3 横版标准 PDF") : L10n.t("将 %@ 转换为 PDF 文档", item.fileExtension.uppercased())
             ))
         }
         
         return ExecutionPlan(
-            summary: "将 \(actions.count) 个文件转换为 PDF",
+            summary: L10n.t("将 %@ 个文件转换为 PDF", "\(actions.count)"),
             actions: actions
         )
     }
@@ -91,7 +91,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
             // 图片转 PDF
             guard let image = NSImage(contentsOf: action.sourceURL),
                   let pdfData = imageToPDFData(image: image) else {
-                throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "图片转PDF失败"])
+                throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: L10n.t("图片转PDF失败")])
             }
             try pdfData.write(to: targetURL)
         } else if ["doc", "docx", "pages"].contains(ext) {
@@ -189,7 +189,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         throw NSError(
             domain: "DocToPDFSkill",
             code: 404,
-            userInfo: [NSLocalizedDescriptionKey: "PPT 转换需要系统安装有 Keynote、Microsoft PowerPoint 或 LibreOffice。请确认已安装上述任一应用。"]
+            userInfo: [NSLocalizedDescriptionKey: L10n.t("PPT 转换需要系统安装有 Keynote、Microsoft PowerPoint 或 LibreOffice。请确认已安装上述任一应用。")]
         )
     }
     
@@ -260,7 +260,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         throw NSError(
             domain: "DocToPDFSkill",
             code: 404,
-            userInfo: [NSLocalizedDescriptionKey: "Excel 表格转换需要系统安装有 Microsoft Excel、Apple Numbers 或 LibreOffice。请确认已安装上述任一应用。"]
+            userInfo: [NSLocalizedDescriptionKey: L10n.t("Excel 表格转换需要系统安装有 Microsoft Excel、Apple Numbers 或 LibreOffice。请确认已安装上述任一应用。")]
         )
     }
     
@@ -385,7 +385,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
         
         guard let consumer = CGDataConsumer(data: pdfData as CFMutableData),
               let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
-            throw NSError(domain: "DocToPDFSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: "无法初始化 PDF 上下文"])
+            throw NSError(domain: "DocToPDFSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法初始化 PDF 上下文")])
         }
         
         let framesetter = CTFramesetterCreateWithAttributedString(attributedString as CFAttributedString)
@@ -442,7 +442,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
     
     private func reformatPDFToA3Landscape(sourceURL: URL, targetURL: URL) throws {
         guard let sourceDoc = PDFDocument(url: sourceURL) else {
-            throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法打开源 PDF 文件"])
+            throw NSError(domain: "DocToPDFSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法打开源 PDF 文件")])
         }
         let outputDoc = PDFDocument()
         let a3LandscapeRect = CGRect(x: 0, y: 0, width: 1190.55, height: 841.89) // A3 横版尺寸
@@ -457,7 +457,7 @@ public final class DocToPDFSkill: FileSkill, Sendable {
             }
         }
         guard outputDoc.write(to: targetURL) else {
-            throw NSError(domain: "DocToPDFSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: "A3 横版 PDF 保存失败"])
+            throw NSError(domain: "DocToPDFSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.t("A3 横版 PDF 保存失败")])
         }
     }
 }

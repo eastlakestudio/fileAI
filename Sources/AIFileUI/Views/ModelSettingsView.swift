@@ -96,7 +96,7 @@ public struct ModelSettingsView: View {
             
             Picker("", selection: $selectedTab) {
                 Text("🌐 云端 API 模型").tag(0)
-                Text("💻 本地已安装 CLI (\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪)").tag(1)
+                Text(L10n.t("💻 本地已安装 CLI (%@ 就绪)", "\(discoveredCLIs.filter { $0.isInstalled }.count)")).tag(1)
             }
             .pickerStyle(.segmented)
             .frame(width: 250)
@@ -170,7 +170,7 @@ public struct ModelSettingsView: View {
                     // 模型说明提示
                     if let activeDesc = provider.models.first(where: { $0.id == settings.modelName })?.description, !activeDesc.isEmpty {
                         HStack {
-                            Text("💡 \(activeDesc)")
+                            Text(L10n.t("💡 %@", activeDesc))
                                 .font(.system(size: 11))
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -279,7 +279,7 @@ public struct ModelSettingsView: View {
                         Link(destination: url) {
                             HStack(spacing: 4) {
                                 Image(systemName: "arrow.up.right.square")
-                                Text("查看 \(provider.name) 官方开发文档与 API Key 申请")
+                                Text(L10n.t("查看 %@ 官方开发文档与 API Key 申请", provider.name))
                             }
                             .font(.system(size: 11))
                             .foregroundColor(.accentColor)
@@ -382,7 +382,7 @@ public struct ModelSettingsView: View {
                         .foregroundColor(.secondary)
                     
                     if let path = cli.executablePath {
-                        Text("路径: \(path)")
+                        Text(L10n.t("路径: %@", path))
                             .font(.system(size: 9, design: .monospaced))
                             .foregroundColor(.secondary.opacity(0.8))
                     }
@@ -506,7 +506,7 @@ public struct ModelSettingsView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
-            .help("重新读取本地 providers_config.json")
+            .help(L10n.t("重新读取本地 providers_config.json"))
             
             // 测试连通性
             Button(action: testConnection) {
@@ -559,7 +559,7 @@ public struct ModelSettingsView: View {
         if let firstModel = tool.availableModels.first {
             settings.modelName = firstModel
         }
-        testStatus = "✅ 已选用 \(tool.name) 本地调度"
+        testStatus = L10n.t("✅ 已选用 %@ 本地调度", tool.name)
     }
     
     private func reloadProviders() {
@@ -578,14 +578,14 @@ public struct ModelSettingsView: View {
     
     private func testConnection() {
         isTesting = true
-        testStatus = "正在测试连接..."
+        testStatus = L10n.t("正在测试连接...")
         Task {
             do {
                 let msg = try await ModelSettingsManager.shared.testConnection(settings: settings)
                 self.testStatus = msg
                 self.isTesting = false
             } catch {
-                self.testStatus = "❌ \(error.localizedDescription)"
+                self.testStatus = L10n.t("❌ %@", error.localizedDescription)
                 self.isTesting = false
             }
         }
@@ -594,20 +594,20 @@ public struct ModelSettingsView: View {
     private func temperatureCategory(_ temp: Double) -> (badge: String, explanation: String, color: Color) {
         if temp <= 0.3 {
             return (
-                badge: "🎯 精准严谨 (推荐)",
-                explanation: "确定性极高，严格遵守匹配规则与规划，最适合批量重命名、裁剪与格式转换等精准操作。",
+                badge: L10n.t("🎯 精准严谨 (推荐)"),
+                explanation: L10n.t("确定性极高，严格遵守匹配规则与规划，最适合批量重命名、裁剪与格式转换等精准操作。"),
                 color: .green
             )
         } else if temp <= 0.7 {
             return (
-                badge: "⚖️ 平衡模式",
-                explanation: "兼顾逻辑严谨度与表达多样性，适合常规自然语言分析与意图推断。",
+                badge: L10n.t("⚖️ 平衡模式"),
+                explanation: L10n.t("兼顾逻辑严谨度与表达多样性，适合常规自然语言分析与意图推断。"),
                 color: .blue
             )
         } else {
             return (
-                badge: "🎨 创意发散",
-                explanation: "随机性高，容易产生多样化命名或发散结果，不建议在需要严密一致性的文件批处理中使用。",
+                badge: L10n.t("🎨 创意发散"),
+                explanation: L10n.t("随机性高，容易产生多样化命名或发散结果，不建议在需要严密一致性的文件批处理中使用。"),
                 color: .orange
             )
         }

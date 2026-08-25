@@ -6,8 +6,8 @@ import AIFileCore
 
 public final class ImageResizeSkill: FileSkill, Sendable {
     public let identifier = "image_resize"
-    public let name = "批量调整图片尺寸"
-    public let skillDescription = "将指定图片批量缩放或修改为指定分辨率（例如 1920x1080、宽度 800、或按比例缩放）"
+    public let name = L10n.t("批量调整图片尺寸")
+    public let skillDescription = L10n.t("将指定图片批量缩放或修改为指定分辨率（例如 1920x1080、宽度 800、或按比例缩放）")
     public var supportedOperations: [FileOperationType] { [.resizeImage] }
     
     public var parametersSchema: [String: Any] {
@@ -16,20 +16,20 @@ public final class ImageResizeSkill: FileSkill, Sendable {
             "properties": [
                 "targetWidth": [
                     "type": "integer",
-                    "description": "目标宽度（像素）"
+                    "description": L10n.t("目标宽度（像素）")
                 ],
                 "targetHeight": [
                     "type": "integer",
-                    "description": "目标高度（像素）"
+                    "description": L10n.t("目标高度（像素）")
                 ],
                 "scaleFactor": [
                     "type": "number",
-                    "description": "缩放比例（例如 0.5 代表缩小 50%）"
+                    "description": L10n.t("缩放比例（例如 0.5 代表缩小 50%）")
                 ],
                 "fileNames": [
                     "type": "array",
                     "items": ["type": "string"],
-                    "description": "要处理的文件名列表，为空则处理所有支持的图片"
+                    "description": L10n.t("要处理的文件名列表，为空则处理所有支持的图片")
                 ]
             ],
             "required": []
@@ -51,11 +51,11 @@ public final class ImageResizeSkill: FileSkill, Sendable {
         }
         
         guard !targetItems.isEmpty else {
-            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? "无后缀" : ".\($0.fileExtension)" }).joined(separator: ", ")
+            let presentExts = Set(items.map { $0.fileExtension.isEmpty ? L10n.t("无后缀") : ".\($0.fileExtension)" }).joined(separator: ", ")
             throw NSError(
                 domain: "ImageResizeSkill",
                 code: 400,
-                userInfo: [NSLocalizedDescriptionKey: "当前选中的文件 (\(presentExts)) 不是支持的图片格式。修改尺寸仅支持：.png, .jpg, .heic, .webp, .tiff 等图片。"]
+                userInfo: [NSLocalizedDescriptionKey: L10n.t("当前选中的文件 (%@) 不是支持的图片格式。修改尺寸仅支持：.png, .jpg, .heic, .webp, .tiff 等图片。", presentExts)]
             )
         }
         
@@ -73,18 +73,18 @@ public final class ImageResizeSkill: FileSkill, Sendable {
             let baseName = item.url.deletingPathExtension().lastPathComponent
             let targetURL = parentDir.appendingPathComponent("\(baseName)_\(newW)x\(newH).\(item.fileExtension)")
             
-            let oldRes = (item.imageWidth != nil && item.imageHeight != nil) ? "\(item.imageWidth!)x\(item.imageHeight!)" : "未知"
-            
+            let oldRes = (item.imageWidth != nil && item.imageHeight != nil) ? "\(item.imageWidth!)x\(item.imageHeight!)" : L10n.t("未知")
+
             actions.append(FileActionItem(
                 operationType: .resizeImage,
                 sourceURL: item.url,
                 targetURL: targetURL,
-                detailDescription: "分辨率: \(oldRes) ➔ \(newW)x\(newH)"
+                detailDescription: L10n.t("分辨率: %@ ➔ %@x%@", oldRes, "\(newW)", "\(newH)")
             ))
         }
         
         return ExecutionPlan(
-            summary: "批量调整 \(actions.count) 张图片尺寸",
+            summary: L10n.t("批量调整 %@ 张图片尺寸", "\(actions.count)"),
             actions: actions
         )
     }
@@ -93,7 +93,7 @@ public final class ImageResizeSkill: FileSkill, Sendable {
         guard let targetURL = action.targetURL else { return nil }
         guard let imageSource = CGImageSourceCreateWithURL(action.sourceURL as CFURL, nil),
               let originalImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
-            throw NSError(domain: "ImageResizeSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: "无法读取图片"])
+            throw NSError(domain: "ImageResizeSkill", code: 1, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法读取图片")])
         }
         
         // 从目标文件名解析目标宽高，若无则使用标准尺寸
@@ -119,24 +119,24 @@ public final class ImageResizeSkill: FileSkill, Sendable {
             space: colorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else {
-            throw NSError(domain: "ImageResizeSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: "无法创建绘图上下文"])
+            throw NSError(domain: "ImageResizeSkill", code: 2, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法创建绘图上下文")])
         }
         
         context.interpolationQuality = .high
         context.draw(originalImage, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
         
         guard let resizedImage = context.makeImage() else {
-            throw NSError(domain: "ImageResizeSkill", code: 3, userInfo: [NSLocalizedDescriptionKey: "图像渲染失败"])
+            throw NSError(domain: "ImageResizeSkill", code: 3, userInfo: [NSLocalizedDescriptionKey: L10n.t("图像渲染失败")])
         }
         
         let uti = utiForExtension(targetURL.pathExtension)
         guard let destination = CGImageDestinationCreateWithURL(targetURL as CFURL, uti as CFString, 1, nil) else {
-            throw NSError(domain: "ImageResizeSkill", code: 4, userInfo: [NSLocalizedDescriptionKey: "无法创建目标文件写入流"])
+            throw NSError(domain: "ImageResizeSkill", code: 4, userInfo: [NSLocalizedDescriptionKey: L10n.t("无法创建目标文件写入流")])
         }
         
         CGImageDestinationAddImage(destination, resizedImage, nil)
         guard CGImageDestinationFinalize(destination) else {
-            throw NSError(domain: "ImageResizeSkill", code: 5, userInfo: [NSLocalizedDescriptionKey: "图片保存失败"])
+            throw NSError(domain: "ImageResizeSkill", code: 5, userInfo: [NSLocalizedDescriptionKey: L10n.t("图片保存失败")])
         }
         
         return targetURL

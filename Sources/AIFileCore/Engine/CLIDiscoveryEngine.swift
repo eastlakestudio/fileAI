@@ -104,8 +104,6 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
             ]
         case .ghCopilot:
             models = ["copilot-gpt-4o", "copilot-claude-3.7", "copilot-claude-3.5", "o3-mini"]
-        case .llamaCli:
-            models = ["local-gguf-model"]
         }
         
         return DiscoveredCLITool(
