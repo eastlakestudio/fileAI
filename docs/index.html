@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文件魔法棒 AI File Assistant — macOS AI 文件批处理助手</title>
+<meta name="description" content="文件魔法棒：macOS 原生 AI 文件批处理助手。Finder 抓取 → LLM 意图规划 → 技能流水线执行 → 原子事务可撤销。AI File Assistant: batch-process files on macOS with natural language.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>">
+<style>
+:root{
+  --bg:#0b0d12; --bg2:#10131b; --card:#161a24; --card2:#1b2030;
+  --text:#e8ecf4; --muted:#9aa5b8; --accent:#5b8cff; --accent2:#8b5cf6;
+  --green:#34d399; --border:rgba(255,255,255,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* Hero */
+.hero{position:relative;padding:110px 0 90px;text-align:center;background:
+  radial-gradient(600px 300px at 20% 0%,rgba(91,140,255,.18),transparent 70%),
+  radial-gradient(600px 300px at 80% 10%,rgba(139,92,246,.15),transparent 70%),
+  linear-gradient(180deg,var(--bg2),var(--bg));}
+.hero .badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);
+  border:1px solid var(--border);border-radius:99px;padding:6px 14px;margin-bottom:26px;background:rgba(255,255,255,.03)}
+.hero .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+.hero h1{font-size:clamp(34px,6vw,56px);font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.hero h1 .grad{background:linear-gradient(120deg,#7aa5ff,#a78bfa 60%,#5b8cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .sub{font-size:clamp(15px,2.2vw,19px);color:var(--muted);max-width:680px;margin:18px auto 0}
+.hero .sub-en{display:block;font-size:.88em;opacity:.8;margin-top:4px}
+.cta{margin-top:38px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;font-weight:600;font-size:16px;padding:14px 28px;border-radius:12px;transition:.2s}
+.btn-primary{background:linear-gradient(120deg,var(--accent),var(--accent2));color:#fff;box-shadow:0 8px 24px rgba(91,140,255,.35)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(91,140,255,.45)}
+.btn-ghost{border:1px solid var(--border);color:var(--text);background:rgba(255,255,255,.04)}
+.btn-ghost:hover{background:rgba(255,255,255,.08)}
+.hero .meta{margin-top:22px;font-size:13px;color:var(--muted)}
+.hero .meta .ok{color:var(--green)}
+
+/* Pipeline */
+.pipeline{padding:70px 0 20px}
+.pipeline .flow{display:flex;align-items:stretch;justify-content:center;gap:0;flex-wrap:wrap;margin-top:36px}
+.step{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px;width:190px;text-align:left}
+.step .ico{font-size:26px}
+.step h4{font-size:15px;margin:10px 0 4px}
+.step p{font-size:12px;color:var(--muted)}
+.step p span{display:block;font-size:11px;opacity:.75}
+.arrow{align-self:center;color:var(--accent);font-size:20px;padding:0 10px}
+
+/* Features */
+.features{padding:70px 0}
+.sec-head{text-align:center;margin-bottom:44px}
+.sec-head h2{font-size:clamp(24px,4vw,34px);font-weight:800}
+.sec-head p{color:var(--muted);margin-top:8px;font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:26px;transition:.2s}
+.card:hover{background:var(--card2);border-color:rgba(91,140,255,.35);transform:translateY(-3px)}
+.card .ico{width:44px;height:44px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:22px;
+  background:linear-gradient(135deg,rgba(91,140,255,.18),rgba(139,92,246,.18));margin-bottom:16px}
+.card h3{font-size:17px;margin-bottom:6px}
+.card h3 small{display:block;font-weight:500;font-size:12px;color:var(--muted);margin-top:2px}
+.card p{font-size:14px;color:var(--muted)}
+.card p span{display:block;font-size:12.5px;opacity:.78;margin-top:6px}
+
+/* Download */
+.download{padding:80px 0 90px;text-align:center;background:linear-gradient(180deg,var(--bg),var(--bg2))}
+.dl-card{background:var(--card);border:1px solid var(--border);border-radius:20px;max-width:640px;margin:0 auto;padding:44px 32px}
+.dl-card .big{font-size:22px;font-weight:800;margin:14px 0 6px}
+.dl-card .note{color:var(--muted);font-size:14px}
+.dl-card .note span{display:block;font-size:12.5px;opacity:.78;margin-top:4px}
+.dl-card .btn{margin-top:26px}
+.dl-meta{display:flex;justify-content:center;gap:26px;flex-wrap:wrap;margin-top:24px;font-size:13px;color:var(--muted)}
+.dl-meta b{color:var(--text);font-weight:600}
+footer{padding:34px 0;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:13px}
+@media (max-width:720px){.arrow{transform:rotate(90deg);padding:6px 0}.step{width:86%}}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="badge"><span class="dot"></span> v1.0.0 · macOS 14+ · Apple Silicon · Notarized</div>
+    <h1><span class="grad">文件魔法棒</span><br>AI File Assistant</h1>
+    <p class="sub">用一句话，让 AI 批量处理你的文件：压缩、转 PDF、重命名、发飞书……
+      <span class="sub-en">One sentence. Let AI batch-process your files: compress, convert to PDF, rename, send to Feishu…</span>
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#download">⬇ 下载 DMG · Download</a>
+      <a class="btn btn-ghost" href="https://github.com/eastlakestudio/fileAI" target="_blank">★ GitHub</a>
+    </div>
+    <p class="meta"><span class="ok">✓ Developer ID 签名</span> · <span class="ok">✓ Apple 公证</span> · <span class="ok">✓ 打开无安全警告</span>（Gatekeeper-ready）</p>
+  </div>
+</section>
+
+<section class="pipeline wrap">
+  <div class="sec-head">
+    <h2>它是怎么工作的 · How it works</h2>
+    <p>Finder 选中文件 → ⌥M 呼出 → 说一句话 → AI 完成</p>
+  </div>
+  <div class="flow">
+    <div class="step"><div class="ico">📂</div><h4>Finder 抓取</h4><p>自动读取当前访达选中文件<span>Grab selected files from Finder</span></p></div>
+    <div class="arrow">➔</div>
+    <div class="step"><div class="ico">🧠</div><h4>AI 意图规划</h4><p>LLM 拆解指令、匹配技能、规划流水线<span>LLM parses intent &amp; plans pipeline</span></p></div>
+    <div class="arrow">➔</div>
+    <div class="step"><div class="ico">⚡</div><h4>技能执行</h4><p>多步原子技能链自动执行<span>Atomic skill chain executes</span></p></div>
+    <div class="arrow">➔</div>
+    <div class="step"><div class="ico">↩️</div><h4>可撤销</h4><p>原子事务日志，⌘Z 无损回滚<span>Transactional journal, lossless ⌘Z undo</span></p></div>
+  </div>
+</section>
+
+<section class="features wrap">
+  <div class="sec-head">
+    <h2>核心能力 · Features</h2>
+    <p>隐私优先 · 离线可用的原生 macOS 体验<span style="display:block">Privacy-first, native macOS experience</span></p>
+  </div>
+  <div class="grid">
+    <div class="card"><div class="ico">🖥️</div><h3>本地 CLI 引擎调度<small>Local CLI engine routing</small></h3>
+      <p>自动发现 CodeBuddy / Antigravity / Claude Code / Ollama 等本地已登录 CLI，免 API Key 直接调度。
+      <span>Auto-discovers signed-in CLIs (CodeBuddy, Antigravity, Claude Code, Ollama) — no API keys needed.</span></p></div>
+    <div class="card"><div class="ico">☁️</div><h3>云端技能市场<small>Cloud skill market (skills.sh ecosystem)</small></h3>
+      <p>内置 Anthropic / 飞书 / Vercel / Microsoft 官方技能源，浏览 GitHub 全站技能仓库，SKILL.md 一键安装。
+      <span>Browse curated official sources &amp; all of GitHub; install any SKILL.md in one click.</span></p></div>
+    <div class="card"><div class="ico">🔐</div><h3>零内容隐私保护<small>Zero-content privacy</small></h3>
+      <p>LLM 只见文件元数据（文件名/格式/大小），正文外发前需你显式确认，全程可拦截。
+      <span>LLM sees metadata only; content leaves your Mac only after explicit consent.</span></p></div>
+    <div class="card"><div class="ico">🌏</div><h3>中英双语<small>Chinese &amp; English</small></h3>
+      <p>跟随系统语言自适应，也可在设置中手动即时切换。
+      <span>Follows system language by default; switch manually anytime, takes effect instantly.</span></p></div>
+    <div class="card"><div class="ico">⌨️</div><h3>全局快捷键呼出<small>Global hotkey</small></h3>
+      <p>⌥M 随时呼出 / 隐藏悬浮窗（组合键可自定义），从 Finder 直接抓取目标文件。
+      <span>⌥M toggles the floating panel anywhere (redefinable); grabs Finder selection directly.</span></p></div>
+    <div class="card"><div class="ico">🧩</div><h3>自主编写新技能<small>Self-authoring skills</small></h3>
+      <p>现有技能不够用？AI 现场编写并持久化新技能（Python/Bash），下次直接复用。
+      <span>Need something new? The AI writes &amp; persists new skills (Python/Bash) on the fly.</span></p></div>
+  </div>
+</section>
+
+<section class="download" id="download">
+  <div class="wrap">
+    <div class="dl-card">
+      <div style="font-size:44px">✨⬇</div>
+      <div class="big">下载文件魔法棒 · Download AI File Assistant</div>
+      <p class="note">macOS 14 以上 · Apple Silicon (arm64)
+        <span>macOS 14 or later · Apple Silicon (arm64)</span></p>
+      <a class="btn btn-primary" href="https://github.com/eastlakestudio/fileAI/releases/download/v1.0.0/AIFileAssistant-1.0.0-arm64.dmg">
+        ⬇ 下载 DMG · Download DMG (v1.0.0)</a>
+      <div class="dl-meta">
+        <div><b>✓</b> Developer ID 签名</div>
+        <div><b>✓</b> Apple 公证 Notarized</div>
+        <div><b>✓</b> 免费 Free</div>
+        <div><a href="https://github.com/eastlakestudio/fileAI/releases">全部版本 → All releases</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">© 2026 Eastlake Studio · <a href="https://github.com/eastlakestudio/fileAI">GitHub</a> · 文件魔法棒 AI File Assistant</div>
+</footer>
+
+</body>
+</html>
