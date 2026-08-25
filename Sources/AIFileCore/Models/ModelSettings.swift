@@ -9,10 +9,10 @@ public struct ModelSettings: Sendable, Codable {
     public var temperature: Double
     
     public init(
-        providerId: String = "deepseek",
+        providerId: String = "cli_antigravity",
         apiKey: String = "",
-        baseURL: String = "https://api.deepseek.com/v1",
-        modelName: String = "deepseek-chat",
+        baseURL: String = "",
+        modelName: String = "default",
         temperature: Double = 0.2
     ) {
         self.providerId = providerId

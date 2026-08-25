@@ -29,13 +29,19 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         messages: [[String: String]],
         tools: [[String: Any]]?
     ) async throws -> LLMResponse {
-        guard let execPath = tool.executablePath else {
+        let finalExecPath: String
+        if let path = tool.executablePath, path.hasPrefix("/") && FileManager.default.fileExists(atPath: path) {
+            finalExecPath = path
+        } else if let scanned = CLIDiscoveryEngine.shared.findExecutablePath(for: tool.type.executableNames) {
+            finalExecPath = scanned
+        } else {
             throw NSError(
                 domain: "CLIModelClient",
                 code: 404,
-                userInfo: [NSLocalizedDescriptionKey: "未找到 \(tool.name) 可执行文件，请确保已安装并在 PATH 中"]
+                userInfo: [NSLocalizedDescriptionKey: "未找到 \(tool.name) 可执行文件，请在设置中心授权其所在目录（例如 \(CLIEnvironmentHelper.realUserHome)/.local/bin）"]
             )
         }
+        let execPath = finalExecPath
         
         // 构造发送给 CLI 的提示词（系统提示词 + 可用 Tools Schema + 用户指令 + JSON Schema 约束）
         let systemMsg = messages.first(where: { $0["role"] == "system" })?["content"] ?? ""
@@ -103,7 +109,6 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         🚀 [CLI Request Input]
         Tool: \(tool.name) (\(tool.type.rawValue))
         Executable: \(execPath)
-        Arguments: \(arguments.prefix(1)) ... (共 \(arguments.count) 项参数)
         Model: \(modelName)
         Prompt Payload:
         \(promptPayload)
@@ -111,7 +116,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         """)
         
         let startTime = Date()
-        let result = try await executeSubprocess(executablePath: execPath, arguments: arguments)
+        let result = try await executeSubprocess(executablePath: execPath, promptPayload: promptPayload)
         let elapsed = Date().timeIntervalSince(startTime)
         
         // 控制台与日志全量打印 CLI 响应输出
@@ -146,93 +151,193 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
     
     // MARK: - Private Execution & Parsing
     
-    private func executeSubprocess(executablePath: String, arguments: [String]) async throws -> String {
+    private func executeSubprocess(executablePath: String, promptPayload: String) async throws -> String {
+        do {
+            return try await executeViaProcess(executablePath: executablePath, promptPayload: promptPayload)
+        } catch {
+            print("⚠️ [CLIModelClient] Process 通道遇到异常，尝试 AppleScript 降级通道: \(error.localizedDescription)")
+            return try await executeViaAppleScript(executablePath: executablePath, promptPayload: promptPayload)
+        }
+    }
+    
+    private func executeViaProcess(executablePath: String, promptPayload: String) async throws -> String {
+        let base64Prompt = Data(promptPayload.utf8).base64EncodedString()
+        
+        var toolArgs = ""
+        switch tool.type {
+        case .antigravity:
+            toolArgs = "--print \"$CLI_PROMPT\" --dangerously-skip-permissions"
+            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
+                toolArgs += " --model \(modelName) --effort low"
+            }
+        case .codebuddy:
+            toolArgs = "-p -y"
+            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
+                toolArgs += " --model \(modelName)"
+            }
+            toolArgs += " \"$CLI_PROMPT\""
+        case .claude:
+            toolArgs = "--print -p \"$CLI_PROMPT\""
+        case .ollama:
+            toolArgs = "run \(modelName) \"$CLI_PROMPT\""
+        case .llm:
+            toolArgs = "-m \(modelName) \"$CLI_PROMPT\""
+        case .aichat:
+            toolArgs = "-m \(modelName) \"$CLI_PROMPT\""
+        case .ghCopilot:
+            toolArgs = "copilot suggest -t shell \"$CLI_PROMPT\""
+        case .llamaCli:
+            toolArgs = "-p \"$CLI_PROMPT\" --temp 0.2"
+        }
+        
+        let home = CLIEnvironmentHelper.realUserHome
+        let user = CLIEnvironmentHelper.realUserName
+        let fullCommand = """
+        export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; [ -f "\(home)/.zprofile" ] && source "\(home)/.zprofile" 2>/dev/null || true; [ -f "\(home)/.zshrc" ] && source "\(home)/.zshrc" 2>/dev/null || true; cd "\(home)"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
+        """
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            process.arguments = ["-c", fullCommand]
+            process.environment = CLIEnvironmentHelper.makeHostEnvironment()
+            
+            let outPipe = Pipe()
+            let errPipe = Pipe()
+            process.standardOutput = outPipe
+            process.standardError = errPipe
+            
+            // 使用 OSAllocatedUnfairLock（或 NSLock）保护 isResumed，避免 continuation 重复 resume
+            var isResumed = false
+            let lock = NSLock()
+            
+            // 超时 Timer：使用 .userInitiated QoS，与主调用方保持同优先级，不触发优先级反转
+            let timeoutTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
+            timeoutTimer.schedule(deadline: .now() + self.timeoutSeconds)
+            timeoutTimer.setEventHandler {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !isResumed else { return }
+                isResumed = true
+                if process.isRunning { process.terminate() }
+                continuation.resume(throwing: NSError(
+                    domain: "CLIModelClient",
+                    code: 408,
+                    userInfo: [NSLocalizedDescriptionKey: "\(self.tool.name) 执行超时（超过 \(Int(self.timeoutSeconds)) 秒）"]
+                ))
+            }
+            timeoutTimer.resume()
+            
+            // terminationHandler 在子进程退出后由系统在后台线程回调，完全无阻塞，无优先级反转
+            process.terminationHandler = { proc in
+                timeoutTimer.cancel()
+                
+                let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+                let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                
+                lock.lock()
+                defer { lock.unlock() }
+                guard !isResumed else { return }
+                isResumed = true
+                
+                if proc.terminationStatus == 0 && !output.isEmpty {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(throwing: NSError(
+                        domain: "CLIModelClient",
+                        code: Int(proc.terminationStatus),
+                        userInfo: [NSLocalizedDescriptionKey: "CLI 执行退出码 (\(proc.terminationStatus)): \(errStr.isEmpty ? output : errStr)"]
+                    ))
+                }
+            }
+            
+            do {
+                try process.run()
+            } catch {
+                timeoutTimer.cancel()
+                lock.lock()
+                defer { lock.unlock() }
+                guard !isResumed else { return }
+                isResumed = true
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+    
+    private func executeViaAppleScript(executablePath: String, promptPayload: String) async throws -> String {
+        // 使用 Base64 内存载荷，100% 避免临时磁盘文件读写权限问题与任何 Shell 字符转义问题
+        let base64Prompt = Data(promptPayload.utf8).base64EncodedString()
+        
+        var toolArgs = ""
+        switch tool.type {
+        case .antigravity:
+            toolArgs = "--print \"$CLI_PROMPT\" --dangerously-skip-permissions"
+            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
+                toolArgs += " --model \(modelName) --effort low"
+            }
+        case .codebuddy:
+            toolArgs = "-p -y"
+            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
+                toolArgs += " --model \(modelName)"
+            }
+            toolArgs += " \"$CLI_PROMPT\""
+        case .claude:
+            toolArgs = "--print -p \"$CLI_PROMPT\""
+        case .ollama:
+            toolArgs = "run \(modelName) \"$CLI_PROMPT\""
+        case .llm:
+            toolArgs = "-m \(modelName) \"$CLI_PROMPT\""
+        case .aichat:
+            toolArgs = "-m \(modelName) \"$CLI_PROMPT\""
+        case .ghCopilot:
+            toolArgs = "copilot suggest -t shell \"$CLI_PROMPT\""
+        case .llamaCli:
+            toolArgs = "-p \"$CLI_PROMPT\" --temp 0.2"
+        }
+        
+        let home = CLIEnvironmentHelper.realUserHome
+        let user = CLIEnvironmentHelper.realUserName
+        
+        let shellScript = """
+        export HOME="\(home)"
+        export USER="\(user)"
+        export LOGNAME="\(user)"
+        export JETSKI_APP_DATA_DIR="antigravity-cli"
+        export AI_AGENT="antigravity"
+        export ANTIGRAVITY_AGENT="1"
+        export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"
+        [ -f "\(home)/.zprofile" ] && source "\(home)/.zprofile" 2>/dev/null || true
+        [ -f "\(home)/.zshrc" ] && source "\(home)/.zshrc" 2>/dev/null || true
+        cd "\(home)"
+        CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode)
+        "\(executablePath)" \(toolArgs)
+        """
+        
+        let escapedScript = shellScript
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "; ")
+        
+        let appleScriptSource = "do shell script \"\(escapedScript)\""
+        
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: executablePath)
-                process.arguments = arguments
-                process.currentDirectoryURL = URL(fileURLWithPath: CLIEnvironmentHelper.realUserHome)
-                
-                // 注入宿主真实环境（包括物理 HOME, 完整 PATH, 终端登录凭证）
-                process.environment = CLIEnvironmentHelper.makeHostEnvironment()
-                
-                let outPipe = Pipe()
-                let errPipe = Pipe()
-                process.standardOutput = outPipe
-                process.standardError = errPipe
-                
-                var isResumed = false
-                let lock = NSLock()
-                let startTime = Date()
-                
-                // 超时监控定时器
-                let timeoutTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-                timeoutTimer.schedule(deadline: .now() + self.timeoutSeconds)
-                timeoutTimer.setEventHandler {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    if !isResumed {
-                        isResumed = true
-                        if process.isRunning {
-                            process.terminate()
-                        }
-                        print("❌ [CLI Error] \(self.tool.name) 执行超时（超过 \(Int(self.timeoutSeconds)) 秒）")
-                        continuation.resume(throwing: NSError(
-                            domain: "CLIModelClient",
-                            code: 408,
-                            userInfo: [NSLocalizedDescriptionKey: "\(self.tool.name) 执行超时（超过 \(Int(self.timeoutSeconds)) 秒），请检查网络或切换模型"]
-                        ))
-                    }
+                var errorDict: NSDictionary?
+                guard let script = NSAppleScript(source: appleScriptSource) else {
+                    continuation.resume(throwing: NSError(domain: "CLIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: "无法构建 AppleScript 执行引擎"]))
+                    return
                 }
-                timeoutTimer.resume()
                 
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    timeoutTimer.cancel()
-                    
-                    lock.lock()
-                    defer { lock.unlock() }
-                    if isResumed { return }
-                    isResumed = true
-                    
-                    let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                    let elapsed = Date().timeIntervalSince(startTime)
-                    
-                    if process.terminationStatus == 0 && !output.isEmpty {
-                        continuation.resume(returning: output)
-                    } else {
-                        print("""
-                        ======================================================================
-                        ❌ [CLI Failure Output]
-                        Tool: \(self.tool.name)
-                        Exit Code: \(process.terminationStatus)
-                        Duration: \(String(format: "%.2fs", elapsed))
-                        Stderr:
-                        \(errStr)
-                        Stdout:
-                        \(output)
-                        ======================================================================
-                        """)
-                        continuation.resume(throwing: NSError(
-                            domain: "CLIModelClient",
-                            code: Int(process.terminationStatus),
-                            userInfo: [NSLocalizedDescriptionKey: "CLI 执行失败 (\(process.terminationStatus)): \(errStr.isEmpty ? output : errStr)"]
-                        ))
-                    }
-                } catch {
-                    timeoutTimer.cancel()
-                    lock.lock()
-                    defer { lock.unlock() }
-                    if !isResumed {
-                        isResumed = true
-                        print("❌ [CLI Launch Exception] \(error)")
-                        continuation.resume(throwing: error)
-                    }
+                let result = script.executeAndReturnError(&errorDict)
+                if let error = errorDict {
+                    let errMsg = error[NSAppleScript.errorMessage] as? String ?? "AppleScript 执行失败"
+                    continuation.resume(throwing: NSError(domain: "CLIModelClient", code: -1, userInfo: [NSLocalizedDescriptionKey: errMsg]))
+                } else if let output = result.stringValue {
+                    continuation.resume(returning: output)
+                } else {
+                    continuation.resume(returning: "")
                 }
             }
         }

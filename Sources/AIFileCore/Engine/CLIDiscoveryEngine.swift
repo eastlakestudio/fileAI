@@ -4,16 +4,21 @@ import Foundation
 public final class CLIDiscoveryEngine: @unchecked Sendable {
     public static let shared = CLIDiscoveryEngine()
     
-    private let commonSearchDirectories: [String] = [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/bin").path,
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".cargo/bin").path,
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".npm-global/bin").path,
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".nvm/current/bin").path,
-        "/usr/bin",
-        "/bin"
-    ]
+    private var commonSearchDirectories: [String] {
+        let home = CLIEnvironmentHelper.realUserHome
+        return [
+            "/opt/homebrew/bin",
+            "/opt/homebrew/sbin",
+            "/usr/local/bin",
+            "\(home)/.local/bin",
+            "\(home)/bin",
+            "\(home)/.cargo/bin",
+            "\(home)/.npm-global/bin",
+            "\(home)/.nvm/current/bin",
+            "/usr/bin",
+            "/bin"
+        ]
+    }
     
     private var cachedTools: [DiscoveredCLITool] = []
     
@@ -21,6 +26,9 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
     
     /// 自动发现所有受支持的本地 CLI
     public func discoverAllTools() async -> [DiscoveredCLITool] {
+        // 1. 扫描前先全局激活/恢复所有已授权的安全书签
+        _ = SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
+        
         var results: [DiscoveredCLITool] = []
         
         for type in CLIToolType.allCases {
@@ -113,11 +121,16 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
     public func findExecutablePath(for names: [String]) -> String? {
         let fileManager = FileManager.default
         
-        // 1. 优先扫描常见 Homebrew / 用户 bin 目录
+        // 0. 优先在用户已授予权限的 Security-Scoped 目录下查找（沙箱破障）
+        if let authPath = SecurityScopedBookmarkManager.shared.findExecutableInAuthorizedScopes(executableNames: names) {
+            return authPath
+        }
+        
+        // 1. 扫描常见 Homebrew / 用户 bin 目录
         for dir in commonSearchDirectories {
             for name in names {
                 let fullPath = (dir as NSString).appendingPathComponent(name)
-                if fileManager.isExecutableFile(atPath: fullPath) {
+                if fileManager.fileExists(atPath: fullPath) {
                     return fullPath
                 }
             }
@@ -128,7 +141,7 @@ public final class CLIDiscoveryEngine: @unchecked Sendable {
             for dir in pathEnv.components(separatedBy: ":") where !dir.isEmpty {
                 for name in names {
                     let fullPath = (dir as NSString).appendingPathComponent(name)
-                    if fileManager.isExecutableFile(atPath: fullPath) {
+                    if fileManager.fileExists(atPath: fullPath) {
                         return fullPath
                     }
                 }

@@ -11,7 +11,6 @@ final class UnifiedSettingsNavigationTests: XCTestCase {
             XCTAssertEqual(tab.id, tab.rawValue)
         }
         
-        XCTAssertEqual(SettingsNavTab.cloudModel.rawValue, "云端 API 引擎")
         XCTAssertEqual(SettingsNavTab.cliModel.rawValue, "本地 CLI 引擎")
         XCTAssertEqual(SettingsNavTab.skills.rawValue, "本地技能库")
         XCTAssertEqual(SettingsNavTab.marketplace.rawValue, "云端技能库")
@@ -22,9 +21,6 @@ final class UnifiedSettingsNavigationTests: XCTestCase {
     func testPanelViewModelNavigationToSettings() {
         let viewModel = PanelViewModel()
         XCTAssertEqual(viewModel.currentPage, .main)
-        
-        viewModel.currentPage = .settings(initialTab: .cloudModel)
-        XCTAssertEqual(viewModel.currentPage, .settings(initialTab: .cloudModel))
         
         viewModel.currentPage = .settings(initialTab: .cliModel)
         XCTAssertEqual(viewModel.currentPage, .settings(initialTab: .cliModel))

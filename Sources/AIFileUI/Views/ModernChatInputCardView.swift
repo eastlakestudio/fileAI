@@ -169,10 +169,10 @@ public struct ModernChatInputCardView: View {
     private var modelSelectorMenu: some View {
         let isCLI = viewModel.activeModelDisplayName.contains("CLI") || viewModel.activeModelDisplayName.contains("Ollama") || viewModel.activeModelDisplayName.contains("Claude")
         return Menu {
-            Section("当前活跃模型/CLI 引擎") {
+            Section("当前活跃本地 CLI 引擎") {
                 Button(action: {
                     withAnimation {
-                        viewModel.currentPage = .settings(initialTab: isCLI ? .cliModel : .cloudModel)
+                        viewModel.currentPage = .settings(initialTab: .cliModel)
                     }
                 }) {
                     Label("\(viewModel.activeModelDisplayName)", systemImage: "checkmark")
@@ -183,18 +183,10 @@ public struct ModernChatInputCardView: View {
             
             Button(action: {
                 withAnimation {
-                    viewModel.currentPage = .settings(initialTab: .cloudModel)
-                }
-            }) {
-                Label("切换云端大模型...", systemImage: "icloud")
-            }
-            
-            Button(action: {
-                withAnimation {
                     viewModel.currentPage = .settings(initialTab: .cliModel)
                 }
             }) {
-                Label("切换/扫描本地 CLI 引擎...", systemImage: "terminal")
+                Label("切换/管理本地 CLI 引擎...", systemImage: "terminal.fill")
             }
         } label: {
             HStack(spacing: 3) {

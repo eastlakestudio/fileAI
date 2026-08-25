@@ -205,12 +205,25 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
         workingDirectory: URL,
         timeoutSeconds: TimeInterval
     ) async throws -> (output: String, exitCode: Int32, errOutput: String) {
+        // 先确保所有安全书签全部处于已访问激活状态
+        _ = SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
+        
         return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: executablePath)
                 process.arguments = arguments
-                process.currentDirectoryURL = workingDirectory
+                
+                if SecurityScopedBookmarkManager.shared.isAuthorized(path: workingDirectory.path) || FileManager.default.isWritableFile(atPath: workingDirectory.path) {
+                    process.currentDirectoryURL = workingDirectory
+                } else {
+                    let execDirURL = URL(fileURLWithPath: executablePath).deletingLastPathComponent()
+                    if SecurityScopedBookmarkManager.shared.isAuthorized(path: execDirURL.path) {
+                        process.currentDirectoryURL = execDirURL
+                    } else {
+                        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+                    }
+                }
                 
                 process.environment = CLIEnvironmentHelper.makeHostEnvironment()
                 

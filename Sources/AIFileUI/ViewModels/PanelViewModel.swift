@@ -92,7 +92,14 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         if settings.providerId.starts(with: "cli_") {
             let toolTypeRaw = String(settings.providerId.dropFirst(4))
             if let type = CLIToolType(rawValue: toolTypeRaw) {
-                let execPath = CLIDiscoveryEngine.shared.findExecutablePath(for: type.executableNames)
+                // 优先使用扫描并保存在配置中的确切绝对路径，若无则实时探测
+                var execPath: String? = nil
+                if !settings.baseURL.isEmpty && !settings.baseURL.starts(with: "cli://") && FileManager.default.fileExists(atPath: settings.baseURL) {
+                    execPath = settings.baseURL
+                } else {
+                    execPath = CLIDiscoveryEngine.shared.findExecutablePath(for: type.executableNames)
+                }
+                
                 let tool = DiscoveredCLITool(type: type, executablePath: execPath, isInstalled: execPath != nil)
                 let client = CLIModelClient(tool: tool, modelName: settings.modelName)
                 return AgentDispatcher(provider: client, registry: registry)
@@ -112,7 +119,17 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         return AgentDispatcher(provider: MockLLMClient(), registry: registry)
     }
     
-    /// 从 Finder 抓取最新选中的文件
+    /// 从 Finder 抓取最新选中的文件（异步非阻塞）
+    public func fetchFromFinderAsync() {
+        Task { [weak self] in
+            let urls = await FinderContextReader.shared.getSelectedFinderItemsAsync()
+            await MainActor.run {
+                self?.setTargetURLs(urls)
+            }
+        }
+    }
+    
+    /// 从 Finder 抓取最新选中的文件（同步）
     public func fetchFromFinder() {
         let urls = FinderContextReader.shared.getSelectedFinderItems()
         setTargetURLs(urls)

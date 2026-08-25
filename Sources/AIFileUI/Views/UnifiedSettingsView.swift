@@ -2,9 +2,8 @@ import SwiftUI
 import ServiceManagement
 import AIFileCore
 
-/// 配置管理主导航 Tab 枚举 (云端 API 与本地 CLI 明确解耦二选一)
+/// 配置管理主导航 Tab 枚举 (本地 CLI 纯净模式)
 public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
-    case cloudModel = "云端 API 引擎"
     case cliModel = "本地 CLI 引擎"
     case skills = "本地技能库"
     case marketplace = "云端技能库"
@@ -14,7 +13,6 @@ public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
     
     public var icon: String {
         switch self {
-        case .cloudModel: return "network"
         case .cliModel: return "terminal.fill"
         case .skills: return "puzzlepiece.extension.fill"
         case .marketplace: return "icloud.and.arrow.down.fill"
@@ -23,7 +21,7 @@ public enum SettingsNavTab: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// 统一配置管理页面：整合云端/本地模型设置、Skill 技能管理、云端市场与系统偏好
+/// 统一配置管理页面：整合本地模型 CLI 设置、Skill 技能管理、云端市场与系统偏好
 public struct UnifiedSettingsView: View {
     @State private var selectedTab: SettingsNavTab
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
@@ -54,7 +52,7 @@ public struct UnifiedSettingsView: View {
     public var onSelectPrompt: ((String) -> Void)? = nil
     
     public init(
-        initialTab: SettingsNavTab = .cloudModel,
+        initialTab: SettingsNavTab = .cliModel,
         onBack: @escaping () -> Void,
         onSelectPrompt: ((String) -> Void)? = nil
     ) {
@@ -64,13 +62,7 @@ public struct UnifiedSettingsView: View {
         self._availableProviders = State(initialValue: ProviderConfigRegistry.shared.providers)
         self._localSkills = State(initialValue: SkillManager.shared.allSkills)
         self._cloudSkills = State(initialValue: SkillManager.shared.cloudMarketSkills)
-        
-        // 若未显式指定，根据当前活跃 Provider 自动定位到云端或本地 CLI 导航
-        let activeTab: SettingsNavTab = {
-            if initialTab != .cloudModel { return initialTab }
-            return initialSettings.providerId.starts(with: "cli_") ? .cliModel : .cloudModel
-        }()
-        self._selectedTab = State(initialValue: activeTab)
+        self._selectedTab = State(initialValue: initialTab)
         self.onBack = onBack
         self.onSelectPrompt = onSelectPrompt
     }
@@ -176,22 +168,16 @@ public struct UnifiedSettingsView: View {
     
     private var leftSidebarNavigation: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("AI 引擎模式 (二选一)")
+            Text("AI 模型引擎")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
             
-            // 引擎 1：云端 API
-            tabNavRow(
-                tab: .cloudModel,
-                badge: !isUsingLocalCLI ? "当前" : "\(cloudProviders.count) 个"
-            )
-            
-            // 引擎 2：本地 CLI
+            // 引擎：本地 CLI
             tabNavRow(
                 tab: .cliModel,
-                badge: isUsingLocalCLI ? "当前" : "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
+                badge: "\(discoveredCLIs.filter { $0.isInstalled }.count) 就绪"
             )
             
             Text("功能扩展")
@@ -229,19 +215,6 @@ public struct UnifiedSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
-                
-                Button(action: {
-                    ProviderConfigRegistry.shared.openConfigFileInFinder()
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "doc.badge.gearshape")
-                        Text("编辑 providers.json")
-                    }
-                    .font(.system(size: 10))
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
             }
             .padding(10)
         }
@@ -251,7 +224,6 @@ public struct UnifiedSettingsView: View {
     @ViewBuilder
     private func tabNavRow(tab: SettingsNavTab, badge: String) -> some View {
         let isSelected = selectedTab == tab
-        let isCurrentEngine = (tab == .cloudModel && !isUsingLocalCLI) || (tab == .cliModel && isUsingLocalCLI)
         
         Button(action: {
             selectedTab = tab
@@ -271,13 +243,13 @@ public struct UnifiedSettingsView: View {
                 Spacer(minLength: 2)
                 
                 Text(badge)
-                    .font(.system(size: 9, weight: isCurrentEngine ? .bold : .regular, design: .monospaced))
+                    .font(.system(size: 9, weight: isSelected ? .bold : .regular, design: .monospaced))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 1)
-                    .background(isCurrentEngine ? Color.green.opacity(0.18) : (isSelected ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06)))
-                    .foregroundColor(isCurrentEngine ? .green : (isSelected ? .accentColor : .secondary))
+                    .background(isSelected ? Color.accentColor.opacity(0.2) : Color.primary.opacity(0.06))
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
                     .cornerRadius(3)
             }
             .padding(.horizontal, 8)
@@ -294,11 +266,6 @@ public struct UnifiedSettingsView: View {
     private var rightContentArea: some View {
         Group {
             switch selectedTab {
-            case .cloudModel:
-                ScrollView {
-                    cloudAPISection
-                        .padding(14)
-                }
             case .cliModel:
                 ScrollView {
                     localCLIDiscoverySection
@@ -459,42 +426,195 @@ public struct UnifiedSettingsView: View {
         }
     }
     
-    // MARK: - Tab 2: 本地 CLI 配置区
+    // MARK: - Tab: 本地 CLI 配置区
     
     private var localCLIDiscoverySection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            // 1. 沙箱环境目录授权卡片（重点解决 TestFlight / App Store 扫描不到 CLI 的问题）
+            sandboxAuthorizationCard
+            
+            // 2. 本地 CLI 工具探测列表
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("本地已安装 AI CLI 工具 (自动检测无需 API Key):")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("选择下方任意已就绪的 CLI 工具，将自动切换为本地终端引擎：")
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: { scanLocalCLIs() }) {
+                        HStack(spacing: 3) {
+                            if isScanningCLIs {
+                                ProgressView().scaleEffect(0.5)
+                            } else {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            Text("重新扫描")
+                        }
+                        .font(.system(size: 10))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .disabled(isScanningCLIs)
+                }
+                
+                VStack(spacing: 8) {
+                    ForEach(discoveredCLIs) { cli in
+                        let isSelected = modelSettings.providerId == cli.id
+                        cliToolCardRow(cli: cli, isSelected: isSelected)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - 沙箱目录授权卡片
+    private var sandboxAuthorizationCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("本地已安装 AI CLI 工具 (自动检测无需 API Key):")
+            HStack(spacing: 8) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 15))
+                    .foregroundColor(.accentColor)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("macOS 沙箱 CLI 目录授权")
                         .font(.system(size: 12, weight: .bold))
-                    Text("选择下方任意已就绪的 CLI 工具，将自动切换为本地终端引擎：")
+                    Text("在 TestFlight / 沙箱环境下，请授权系统 CLI 所在目录，以便应用扫描并调用终端工具。")
                         .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
-                
                 Spacer()
+            }
+            
+            HStack(spacing: 8) {
+                Button(action: {
+                    let homePath = NSString(string: "~").expandingTildeInPath
+                    authorizeDirectory(path: homePath)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "house.fill")
+                        Text("一键授权用户目录 ~ (含 agy / codebuddy 等)")
+                    }
+                    .font(.system(size: 10, weight: .semibold))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 
-                Button(action: { scanLocalCLIs() }) {
-                    HStack(spacing: 3) {
-                        if isScanningCLIs {
-                            ProgressView().scaleEffect(0.5)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        Text("重新扫描")
+                Button(action: {
+                    let localBin = NSString(string: "~/.local/bin").expandingTildeInPath
+                    authorizeDirectory(path: localBin)
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.badge.plus")
+                        Text("授权 ~/.local/bin")
                     }
                     .font(.system(size: 10))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.mini)
-                .disabled(isScanningCLIs)
+                .controlSize(.small)
+                
+                Button(action: {
+                    authorizeDirectory(path: "/opt/homebrew")
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.badge.plus")
+                        Text("授权 /opt/homebrew")
+                    }
+                    .font(.system(size: 10))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                
+                Button(action: {
+                    authorizeDirectory(path: "/usr/local")
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "folder.badge.plus")
+                        Text("授权 /usr/local")
+                    }
+                    .font(.system(size: 10))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                
+                Button(action: {
+                    authorizeCustomDirectory()
+                }) {
+                    Text("自定义选择...")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
             
-            VStack(spacing: 8) {
-                ForEach(discoveredCLIs) { cli in
-                    let isSelected = modelSettings.providerId == cli.id
-                    cliToolCardRow(cli: cli, isSelected: isSelected)
+            Text("💡 提示：您的 agy 位于 ~/.local/bin/agy，codebuddy 位于 ~/.npm-global/bin。点击【一键授权用户目录 ~】可一次性识别所有本地工具。")
+                .font(.system(size: 9.5))
+                .foregroundColor(.secondary)
+            
+            let paths = SecurityScopedBookmarkManager.shared.authorizedPaths
+            if !paths.isEmpty {
+                Divider().opacity(0.15)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("已授权访问的系统路径:")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
+                    
+                    ForEach(paths, id: \.self) { path in
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 6, height: 6)
+                            Text(path)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Button(action: {
+                                SecurityScopedBookmarkManager.shared.revokeBookmark(for: path)
+                                scanLocalCLIs()
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
+            }
+        }
+        .padding(12)
+        .background(Color.accentColor.opacity(0.06))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+        )
+        .cornerRadius(6)
+    }
+    
+    private func authorizeDirectory(path: String) {
+        Task { @MainActor in
+            if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
+                initialPath: path,
+                prompt: "授权此目录",
+                message: "请点击【授权此目录】以允许沙箱环境探测与执行 \(path) 下的命令行工具。"
+            ) {
+                scanLocalCLIs()
+            }
+        }
+    }
+    
+    private func authorizeCustomDirectory() {
+        Task { @MainActor in
+            if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
+                initialPath: nil,
+                prompt: "授权此目录",
+                message: "请选择包含 CLI 工具的目录（如 ~/.local/bin 或其他工作目录）并授权。"
+            ) {
+                scanLocalCLIs()
             }
         }
     }
@@ -1060,7 +1180,7 @@ public struct UnifiedSettingsView: View {
     
     private var bottomActionBar: some View {
         HStack(spacing: 10) {
-            if selectedTab == .cloudModel || selectedTab == .cliModel {
+            if selectedTab == .cliModel {
                 Button(action: testConnection) {
                     HStack(spacing: 4) {
                         if isTesting {
@@ -1174,7 +1294,7 @@ public struct UnifiedSettingsView: View {
     
     private func scanLocalCLIs() {
         isScanningCLIs = true
-        Task {
+        Task { @MainActor in
             let tools = await CLIDiscoveryEngine.shared.discoverAllTools()
             self.discoveredCLIs = tools
             self.isScanningCLIs = false

@@ -11,9 +11,14 @@ public final class ModelSettingsManager: @unchecked Sendable {
     public init() {
         if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
            let saved = try? JSONDecoder().decode(ModelSettings.self, from: data) {
-            self.currentSettings = saved
+            if saved.providerId.starts(with: "cli_") {
+                self.currentSettings = saved
+            } else {
+                // 自动迁移到本地 CLI
+                self.currentSettings = ModelSettings(providerId: "cli_antigravity", modelName: "default")
+            }
         } else {
-            self.currentSettings = ModelSettings()
+            self.currentSettings = ModelSettings(providerId: "cli_antigravity", modelName: "default")
         }
     }
     
@@ -43,15 +48,23 @@ public final class ModelSettingsManager: @unchecked Sendable {
         if settings.providerId.starts(with: "cli_") {
             let toolTypeRaw = String(settings.providerId.dropFirst(4))
             if let type = CLIToolType(rawValue: toolTypeRaw) {
-                if let execPath = CLIDiscoveryEngine.shared.findExecutablePath(for: type.executableNames) {
-                    let version = await fetchCLIVersion(path: execPath)
+                var execPath: String? = nil
+                if !settings.baseURL.isEmpty && !settings.baseURL.starts(with: "cli://") && FileManager.default.fileExists(atPath: settings.baseURL) {
+                    execPath = settings.baseURL
+                } else {
+                    execPath = CLIDiscoveryEngine.shared.findExecutablePath(for: type.executableNames)
+                }
+                
+                if let path = execPath {
+                    _ = SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
+                    let version = await fetchCLIVersion(path: path)
                     let verStr = version.map { " (版本: \($0))" } ?? ""
-                    return "✅ 本地 CLI 运行就绪：\(type.displayName)\(verStr)"
+                    return "✅ 本地 CLI 运行就绪：\(type.displayName)\(verStr) [\(path)]"
                 } else {
                     throw NSError(
                         domain: "ModelSettings",
                         code: 404,
-                        userInfo: [NSLocalizedDescriptionKey: "未在系统 PATH 中找到 \(type.displayName)，请先安装"]
+                        userInfo: [NSLocalizedDescriptionKey: "未在已授权目录中找到 \(type.displayName)，请在上方点击授权所在目录"]
                     )
                 }
             }
@@ -85,8 +98,9 @@ public final class ModelSettingsManager: @unchecked Sendable {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: path)
-                process.arguments = ["--version"]
+                process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+                process.arguments = ["-l", "-c", "\"\(path)\" --version"]
+                process.environment = CLIEnvironmentHelper.makeHostEnvironment()
                 let pipe = Pipe()
                 process.standardOutput = pipe
                 process.standardError = pipe

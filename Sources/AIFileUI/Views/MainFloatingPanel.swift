@@ -245,7 +245,7 @@ public struct MainFloatingPanel: View {
                 // 配置管理入口
                 Button(action: {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        viewModel.currentPage = .settings(initialTab: .cloudModel)
+                        viewModel.currentPage = .settings(initialTab: .cliModel)
                     }
                 }) {
                     Image(systemName: "slider.horizontal.3")
@@ -253,7 +253,7 @@ public struct MainFloatingPanel: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("配置管理（LLM API、CLI 引擎与本地技能库）")
+                .help("配置管理（本地 CLI 引擎与本地技能库）")
                 
                 // 迷你模式切换按钮
                 Button(action: {

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import AIFileCore
 import AIFileUI
 import AIFileFinderIntegration
 
@@ -43,15 +44,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables = Set<AnyCancellable>()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 0. 监听单进程唤醒广播：当外部尝试重复启动时，激活当前窗口
+        // 0. 恢复与激活已持久化的安全目录授权书签
+        SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
+        
+        // 0.0 触发 Finder 自动化权限检查与系统授权弹窗
+        FinderContextReader.shared.requestAutomationPermissionIfNeeded()
+        
+        // 0.1 监听单进程唤醒广播：当外部尝试重复启动时，激活当前窗口
         DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name(singleInstanceNotificationName),
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.viewModel.fetchFromFinder()
                 self?.showWindow()
+                self?.viewModel.fetchFromFinderAsync()
             }
         }
         
@@ -68,15 +75,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.viewModel.undoLastOperation()
         }
         StatusBarManager.shared.onOpenSettings = { [weak self] in
-            self?.viewModel.currentPage = .settings(initialTab: .cloudModel)
+            self?.viewModel.currentPage = .settings(initialTab: .cliModel)
             self?.showWindow()
         }
         
         // 2. 注册快捷键
         GlobalHotKeyManager.shared.registerDefaultHotKey()
         GlobalHotKeyManager.shared.onHotKeyTriggered = { [weak self] in
-            self?.viewModel.fetchFromFinder()
             self?.showWindow()
+            self?.viewModel.fetchFromFinderAsync()
         }
         
         // 3. 配置全局标准主菜单（让输入框原生支持 Cmd+C/Cmd+V/Cmd+A/Cmd+X/Cmd+Z）
@@ -205,9 +212,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.standardWindowButton(.zoomButton)?.isHidden = isMini
     }
     
+    private var hasInitialCentered: Bool = false
+    
     func showWindow() {
         guard let window = window else { return }
-        window.center()
+        if !hasInitialCentered {
+            window.center()
+            hasInitialCentered = true
+        }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -217,8 +229,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if window.isVisible {
             window.orderOut(nil)
         } else {
-            viewModel.fetchFromFinder()
             showWindow()
+            viewModel.fetchFromFinderAsync()
         }
     }
 }
