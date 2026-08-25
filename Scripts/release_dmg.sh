@@ -45,14 +45,17 @@ echo "==> [3/7] 制作 DMG"
 rm -rf "${BUILD_DIR}/dmgroot"
 mkdir -p "${BUILD_DIR}/dmgroot"
 cp -R "$APP_PATH" "${BUILD_DIR}/dmgroot/"
-ln -s /Applications "${BUILD_DIR}/dmgroot/Applications"
+# Applications 快捷方式（若 create-dmg 挂载残留导致 ln 失败则跳过，其内部会重建）
+ln -sf /Applications "${BUILD_DIR}/dmgroot/Applications" 2>/dev/null || true
 mkdir -p "${BUILD_DIR}"
 rm -f "$DMG_PATH"
+# 清理可能残留的挂载点
+hdiutil detach "$(hdiutil info | grep 'dmgroot' -B5 | grep '^/dev/disk' | awk '{print $1}' | tail -1)" 2>/dev/null || true
 create-dmg --volname "$APP_NAME" --volicon "${APP_PATH}/Contents/Resources/AppIcon.icns" \
   --window-pos 200 120 --window-size 560 360 --icon-size 120 \
   --icon "$APP_NAME" 140 180 --app-drop-link 420 180 \
   --no-internet-enable "$DMG_PATH" "${BUILD_DIR}/dmgroot" || \
-  hdiutil create -volname "$APP_NAME" -srcfolder "${BUILD_DIR}/dmgroot}" -ov -format UDZO "$DMG_PATH"
+  hdiutil create -volname "$APP_NAME" -srcfolder "${BUILD_DIR}/dmgroot" -ov -format UDZO "$DMG_PATH"
 
 echo "==> [4/7] 公证 (Notarization)"
 NOTARY_PROFILE="notarytool-key"
@@ -67,7 +70,7 @@ else
     xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
     echo "==> [5/7] Staple 公证票据"
     xcrun stapler staple "$DMG_PATH"
-    spctl -assess -t open --context context:primary-signature -v "$DMG_PATH" || true
+    xcrun stapler validate "$DMG_PATH"
 fi
 
 echo "==> [6/7] 校验产物"
