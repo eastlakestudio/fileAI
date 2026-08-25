@@ -50,6 +50,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 0. 恢复与激活已持久化的安全目录授权书签
         SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
         
+        // 0.0 沙箱环境首启动引导：无任何授权目录时弹 NSOpenPanel 引导用户授权用户目录（访问宿主 CLI 的唯一合规通道）
+        if SecurityScopedBookmarkManager.shared.isSandboxActive
+            && SecurityScopedBookmarkManager.shared.authorizedPaths.isEmpty
+            && !UserDefaults.standard.bool(forKey: "aifiles.didPromptInitialAuthorization") {
+            UserDefaults.standard.set(true, forKey: "aifiles.didPromptInitialAuthorization")
+            Task { @MainActor in
+                _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
+                    initialPath: NSString(string: "~").expandingTildeInPath,
+                    prompt: L10n.t("授权此目录"),
+                    message: L10n.t("为了在沙箱中识别并使用本地 CLI 工具（如 Homebrew、Ollama、Antigravity 等），请授权访问该目录。")
+                )
+            }
+        }
+        
         // 0.0 触发 Finder 自动化权限检查与系统授权弹窗
         FinderContextReader.shared.requestAutomationPermissionIfNeeded()
         

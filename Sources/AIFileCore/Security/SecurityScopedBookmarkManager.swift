@@ -186,25 +186,32 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
         return false
     }
     
-    /// 在所有已授权的安全目录及其 bin / 用户工具子目录中检索可执行文件
+    /// 在所有已授权的安全目录及其常见 CLI 子目录中检索可执行文件（含 symlink 解析，覆盖 Homebrew Cellar 等真实路径）
     public func findExecutableInAuthorizedScopes(executableNames: [String]) -> String? {
         let fileManager = FileManager.default
-        let currentPaths = authorizedPaths
         
-        for basePath in currentPaths {
-            // 检查 basePath 本身、bin 子目录以及常见的用户 CLI 隐藏子目录
-            let candidateDirs = [
-                basePath,
-                (basePath as NSString).appendingPathComponent("bin"),
-                (basePath as NSString).appendingPathComponent(".local/bin"),
-                (basePath as NSString).appendingPathComponent(".npm-global/bin"),
-                (basePath as NSString).appendingPathComponent(".cargo/bin"),
-                (basePath as NSString).appendingPathComponent(".nvm/current/bin")
+        for basePath in authorizedPaths {
+            // 常见用户 CLI 安装子目录（授权 ~ 即可全部覆盖；授权更细粒度目录时按此布局检索）
+            let subDirs = [
+                "",
+                "bin", "sbin",
+                ".local/bin", ".npm-global/bin", ".cargo/bin",
+                ".nvm/current/bin", ".volta/bin", ".bun/bin",
+                "Library/Application Support/Antigravity/bin",
+                ".gemini/antigravity-cli/bin"
             ]
-            for dir in candidateDirs {
+            for sub in subDirs {
+                let dir = sub.isEmpty ? basePath : (basePath as NSString).appendingPathComponent(sub)
                 for name in executableNames {
                     let fullPath = (dir as NSString).appendingPathComponent(name)
                     if fileManager.fileExists(atPath: fullPath) {
+                        // 解析 symlink（如 Homebrew /opt/homebrew/bin/ffmpeg -> ../Cellar/...），
+                        // 返回真实物理路径，确保子进程沙箱扩展命中授权作用域
+                        if let resolved = try? URL(fileURLWithPath: fullPath)
+                            .resolvingSymlinksInPath().path,
+                           fileManager.isExecutableFile(atPath: resolved) {
+                            return resolved
+                        }
                         return fullPath
                     }
                 }

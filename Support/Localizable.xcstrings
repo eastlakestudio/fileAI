@@ -6129,6 +6129,22 @@
         }
       }
     },
+    "未在已授权目录中发现 CLI 工具。Homebrew 安装的 CLI 通常位于 /opt/homebrew（Intel 机型为 /usr/local），请授权对应目录。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No CLI tools found in authorized folders. Homebrew CLIs usually live in /opt/homebrew (Intel: /usr/local) — please grant access to that folder."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未在已授权目录中发现 CLI 工具。Homebrew 安装的 CLI 通常位于 /opt/homebrew（Intel 机型为 /usr/local），请授权对应目录。"
+          }
+        }
+      }
+    },
     "未在已授权目录中找到 %@，请在上方点击授权所在目录": {
       "localizations": {
         "en": {
