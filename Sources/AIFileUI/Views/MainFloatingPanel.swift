@@ -137,7 +137,38 @@ public struct MainFloatingPanel: View {
                     VStack(spacing: 4) {
                         Spacer(minLength: 4)
                         
-                        if let msg = viewModel.statusMessage {
+                        if viewModel.isShowingAutomationGuide {
+                            HStack(spacing: 6) {
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.system(size: 10.5))
+                                    .foregroundColor(.orange)
+                                Text(L10n.t("需要「自动化」权限读取 Finder 选中项，点击右侧按钮去开启"))
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .lineLimit(2)
+                                Spacer()
+                                Button(L10n.t("去系统设置开启")) {
+                                    FinderContextReader.shared.openAutomationSettingsPane()
+                                    viewModel.isShowingAutomationGuide = false
+                                }
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.mini)
+                                Button {
+                                    viewModel.isShowingAutomationGuide = false
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 9))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundColor(.secondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(Color.orange.opacity(0.12))
+                            .cornerRadius(6)
+                            .padding(.horizontal, 14)
+                            .transition(.opacity)
+                        } else if let msg = viewModel.statusMessage {
                             HStack(spacing: 5) {
                                 Image(systemName: msg.contains("✅") ? "checkmark.circle.fill" : (msg.contains("❌") ? "xmark.circle.fill" : "info.circle.fill"))
                                     .font(.system(size: 10.5))

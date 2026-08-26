@@ -50,17 +50,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 0. 恢复与激活已持久化的安全目录授权书签
         SecurityScopedBookmarkManager.shared.restoreAndAccessAll()
         
-        // 0.0 沙箱环境首启动引导：无任何授权目录时弹 NSOpenPanel 引导用户授权用户目录（访问宿主 CLI 的唯一合规通道）
+        // 0.0 沙箱环境首启动引导：无任何授权目录时启动分步授权向导（HOME → ~/.local → /opt/homebrew）
         if SecurityScopedBookmarkManager.shared.isSandboxActive
             && SecurityScopedBookmarkManager.shared.authorizedPaths.isEmpty
             && !UserDefaults.standard.bool(forKey: "aifiles.didPromptInitialAuthorization") {
             UserDefaults.standard.set(true, forKey: "aifiles.didPromptInitialAuthorization")
             Task { @MainActor in
-                _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
-                    initialPath: NSString(string: "~").expandingTildeInPath,
-                    prompt: L10n.t("授权此目录"),
-                    message: L10n.t("为了在沙箱中识别并使用本地 CLI 工具（如 Homebrew、Ollama、Antigravity 等），请授权访问该目录。")
-                )
+                _ = await SecurityScopedBookmarkManager.shared.requestCLIAuthorizationWizard()
             }
         }
         
@@ -265,7 +261,7 @@ struct AIFileApplication {
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
-        app.setActivationPolicy(.accessory)
+        app.setActivationPolicy(.regular) // TEMP-DEBUG: 测试 TCC 弹窗是否需要 regular policy
         app.run()
     }
 }

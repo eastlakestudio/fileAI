@@ -1460,17 +1460,11 @@ public struct UnifiedSettingsView: View {
         }
     }
     
-    /// 沙箱下「重新扫描」增强：
-    /// 1) 无任何授权目录 → 先弹授权面板（默认定位用户目录），授权后扫描
-    /// 2) 扫描后仍无已安装 CLI → 提示可继续追加授权其他目录（CLI 常在 /opt/homebrew 等）
+    /// 沙箱下「重新扫描」增强：无授权目录时启动分步授权向导（HOME → ~/.local → /opt/homebrew），授权后自动扫描
     private func rescanWithAuthorizationIfNeeded() {
         if isSandboxed && SecurityScopedBookmarkManager.shared.authorizedPaths.isEmpty {
             Task { @MainActor in
-                if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
-                    initialPath: NSString(string: "~").expandingTildeInPath,
-                    prompt: L10n.t("授权此目录"),
-                    message: L10n.t("为了在沙箱中识别并使用本地 CLI 工具（如 Homebrew、Ollama、Antigravity 等），请授权访问该目录。")
-                ) {
+                if await SecurityScopedBookmarkManager.shared.requestCLIAuthorizationWizard() {
                     scanLocalCLIs()
                 }
             }
@@ -1484,11 +1478,7 @@ public struct UnifiedSettingsView: View {
         guard isSandboxed,
               discoveredCLIs.contains(where: { $0.isInstalled }) == false else { return }
         Task { @MainActor in
-            if let _ = await SecurityScopedBookmarkManager.shared.requestDirectoryAuthorization(
-                initialPath: "/opt",
-                prompt: L10n.t("授权此目录"),
-                message: L10n.t("未在已授权目录中发现 CLI 工具。Homebrew 安装的 CLI 通常位于 /opt/homebrew（Intel 机型为 /usr/local），请授权对应目录。")
-            ) {
+            if await SecurityScopedBookmarkManager.shared.requestCLIAuthorizationWizard() {
                 scanLocalCLIs()
             }
         }

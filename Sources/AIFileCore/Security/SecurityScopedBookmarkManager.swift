@@ -37,6 +37,8 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
     }
     
     /// 唤起系统原生 NSOpenPanel 文件选择器引导用户主动授予目录访问权限（采用异步 Sheet 模式，避免阻塞 SwiftUI 手势系统）
+    /// 沙箱注意：macOS 15+ 的 TCC 通常禁止沙箱 App 直接选择整个 HOME 根目录（用户点开仍可确认），
+    /// 若用户取消则返回 nil，由调用方引导更细粒度的子目录授权。
     @MainActor
     public func requestDirectoryAuthorization(
         initialPath: String? = nil,
@@ -80,7 +82,31 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
         }
     }
     
-    /// 为给定的目录 URL 生成 Security-Scoped Bookmark 并持久化到 UserDefaults
+    /// 沙箱引导式授权（分步降级）：先试 HOME → 被拒/取消则引导 ~/.local 等具体 CLI 目录 → 再试 /opt/homebrew
+    /// 返回最终是否成功授权了至少一个目录
+    @MainActor
+    public func requestCLIAuthorizationWizard() async -> Bool {
+        let candidates: [(path: String, message: String)] = [
+            (NSString(string: "~").expandingTildeInPath,
+             L10n.t("授权访问您的用户目录，以识别本地已安装的 CLI 工具（如 ~/.local/bin/agy、~/.npm-global/bin 等）及其登录凭据。")),
+            ((NSString(string: "~/.local").expandingTildeInPath),
+             L10n.t("未授权用户目录。请选择 ~/.local 目录（包含 agy 等 CLI）。")),
+            ("/opt/homebrew",
+             L10n.t("仍未发现 CLI。Homebrew 安装的 CLI 位于 /opt/homebrew，请授权该目录。"))
+        ]
+        for candidate in candidates {
+            if let granted = await requestDirectoryAuthorization(
+                initialPath: candidate.path,
+                prompt: L10n.t("授权此目录"),
+                message: candidate.message
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+    
+    /// 为给定的目录 URL 生成安全作用域书签并持久化（沙箱 App 使用 withSecurityScope，由 app-scope entitlement 支撑）
     @discardableResult
     public func saveBookmark(for url: URL) -> Bool {
         lock.lock()
@@ -105,6 +131,7 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
             }
             return true
         } catch {
+            print("⚠️ [BookmarkManager] 创建书签失败: \(error.localizedDescription)")
             return false
         }
     }

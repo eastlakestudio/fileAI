@@ -153,6 +153,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         do {
             return try await executeViaProcess(executablePath: executablePath, promptPayload: promptPayload)
         } catch {
+            // 沙箱内禁止 AppleScript 降级通道（do shell script 逃逸沙箱，违反 MAS 规则）
+            if SecurityScopedBookmarkManager.shared.isSandboxActive {
+                throw error
+            }
             print("⚠️ [CLIModelClient] Process 通道遇到异常，尝试 AppleScript 降级通道: \(error.localizedDescription)")
             return try await executeViaAppleScript(executablePath: executablePath, promptPayload: promptPayload)
         }
@@ -188,9 +192,19 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         
         let home = CLIEnvironmentHelper.realUserHome
         let user = CLIEnvironmentHelper.realUserName
-        let fullCommand = """
-        export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; [ -f "\(home)/.zprofile" ] && source "\(home)/.zprofile" 2>/dev/null || true; [ -f "\(home)/.zshrc" ] && source "\(home)/.zshrc" 2>/dev/null || true; cd "\(home)"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
-        """
+        let isSandbox = SecurityScopedBookmarkManager.shared.isSandboxActive
+        let fullCommand: String
+        if isSandbox {
+            // 沙箱内：仅用已授权作用域内的可执行文件，不 cd / source rc（HOME 在容器内不可写），
+            // 沙箱扩展随 fork/exec 自动传播到子进程
+            fullCommand = """
+            export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
+            """
+        } else {
+            fullCommand = """
+            export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; [ -f "\(home)/.zprofile" ] && source "\(home)/.zprofile" 2>/dev/null || true; [ -f "\(home)/.zshrc" ] && source "\(home)/.zshrc" 2>/dev/null || true; cd "\(home)"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
+            """
+        }
         
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()

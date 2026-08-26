@@ -44,6 +44,8 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var isThinking: Bool = false
     @Published public var thinkingElapsedSeconds: Double = 0
     @Published public var statusMessage: String? = nil
+    /// Finder 自动化权限缺失时的引导横幅
+    @Published public var isShowingAutomationGuide: Bool = false
     @Published public var latestOutputURLs: [URL] = []
     private var thinkingTimerCancellable: AnyCancellable?
     
@@ -119,20 +121,24 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         return AgentDispatcher(provider: MockLLMClient(), registry: registry)
     }
     
-    /// 从 Finder 抓取最新选中的文件（异步非阻塞）
+    /// 从 Finder 抓取最新选中的文件（异步非阻塞；未授权时由 osascript 触发 TCC 授权弹窗）
     public func fetchFromFinderAsync() {
         Task { [weak self] in
-            let urls = await FinderContextReader.shared.getSelectedFinderItemsAsync()
+            let urls = await FinderContextReader.shared.getSelectedFinderItemsAsync(onPermissionDenied: {
+                Task { @MainActor in
+                    self?.statusMessage = L10n.t("需要「自动化」权限读取 Finder 选中项：请在系统设置 → 隐私与安全性 → 自动化 中允许本应用控制 Finder")
+                    self?.isShowingAutomationGuide = true
+                }
+            })
             await MainActor.run {
                 self?.setTargetURLs(urls)
             }
         }
     }
     
-    /// 从 Finder 抓取最新选中的文件（同步）
+    /// 从 Finder 抓取最新选中的文件（历史同步接口：内部改走异步，避免 AppleScript 阻塞主线程）
     public func fetchFromFinder() {
-        let urls = FinderContextReader.shared.getSelectedFinderItems()
-        setTargetURLs(urls)
+        fetchFromFinderAsync()
     }
     
     /// 手动打开文件选择器
