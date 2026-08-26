@@ -131,6 +131,10 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 }
             })
             await MainActor.run {
+                // 诊断模式：结果为空时在状态栏显示剪贴板已含诊断信息提示
+                if urls.isEmpty {
+                    self?.statusMessage = L10n.t("未获取到选中文件（诊断信息已复制到剪贴板，可粘贴反馈）")
+                }
                 self?.setTargetURLs(urls)
             }
         }

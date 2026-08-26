@@ -69,6 +69,7 @@ public final class FinderContextReader: @unchecked Sendable {
     /// 未授权时返回 empty 并回调需要引导（调用方展示引导 UI）
     public func getSelectedFinderItemsAsync(onPermissionDenied: (() -> Void)? = nil) async -> [URL] {
         let log = Logger(subsystem: "com.eastlakestudio.aifiles.debug", category: "FinderFlow")
+        var diagParts: [String] = []
         // 1. 主线程触发/检查 TCC 授权（未授权时弹系统窗）
         let granted: Bool = await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
@@ -77,6 +78,7 @@ public final class FinderContextReader: @unchecked Sendable {
                 continuation.resume(returning: ok)
             }
         }
+        diagParts.append("TCCgranted=\(granted)")
         // TCC 进程内询问被拒时不中止：本地未公证构建会被静默拒绝（-1743），
         // 但 osascript 子进程发起的 Apple Event 有独立归因链，仍可能触发 TCC 授权弹窗。
         // MAS/公证构建下 prompt 正常弹出，granted=true 直接走读取。
@@ -84,17 +86,34 @@ public final class FinderContextReader: @unchecked Sendable {
             log.notice("in-process TCC denied — still trying osascript subprocess channel")
         }
         // 2. 后台执行 osascript 读取
+        var rawDiag = ""
         let urls: [URL] = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let urls = self.getSelectedFinderItems()
+                let (urls, raw) = self.getSelectedFinderItemsWithDiag()
+                rawDiag = raw
                 continuation.resume(returning: urls)
             }
         }
-        log.notice("fetch complete urls=\(urls.count, privacy: .public)")
+        diagParts.append("osascript[\(rawDiag)]")
+        diagParts.append("urls=\(urls.count)")
+        log.notice("fetch complete urls=\\(urls.count, privacy: .public)")
+        // 诊断快照写入剪贴板（TestFlight 环境无法读日志，用剪贴板带回）
+        await MainActor.run {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(diagParts.joined(separator: " | "), forType: .string)
+        }
         if urls.isEmpty && !granted {
             onPermissionDenied?()
         }
         return urls
+    }
+    
+    /// 带原始输出的诊断版读取
+    public func getSelectedFinderItemsWithDiag() -> ([URL], String) {
+        lock.lock()
+        defer { lock.unlock() }
+        return runViaOSAScriptWithDiag()
     }
     
     /// 获取当前 Finder 中选中的文件/文件夹 URL 列表（内部加锁；建议走 getSelectedFinderItemsAsync）
@@ -106,6 +125,11 @@ public final class FinderContextReader: @unchecked Sendable {
     
     @discardableResult
     private func runViaOSAScript() -> [URL] {
+        runViaOSAScriptWithDiag().0
+    }
+    
+    /// 执行 JXA 读取并返回 (URL 列表, 诊断摘要 "exit=N|outLen=N|err=...")
+    private func runViaOSAScriptWithDiag() -> ([URL], String) {
         let log = Logger(subsystem: "com.eastlakestudio.aifiles.debug", category: "FinderFlow")
         log.notice("osascript spawn starting")
         let process = Process()
@@ -123,28 +147,24 @@ public final class FinderContextReader: @unchecked Sendable {
             process.waitUntilExit()
             let data = outPipe.fileHandleForReading.readDataToEndOfFile()
             let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            if !errData.isEmpty {
-                let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-                if !errStr.isEmpty {
-                    log.notice("osascript stderr: \(errStr, privacy: .public)")
-                }
-            }
+            let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let rawOutput = String(data: data, encoding: .utf8) ?? ""
+            let diag = "exit=\(process.terminationStatus) outLen=\(rawOutput.count) err=\(errStr.prefix(80))"
             log.notice("osascript exit=\(process.terminationStatus, privacy: .public) outLen=\(rawOutput.count, privacy: .public)")
             guard let output = rawOutput.trimmingCharacters(in: .whitespacesAndNewlines) as String?,
                   !output.isEmpty else {
-                return []
+                return ([], diag)
             }
-            // JXA 输出： 分隔的 POSIX 路径列表
-            let paths = output.components(separatedBy: "\0")
-            return paths.compactMap { path in
+            // JXA 输出：NUL 分隔的 POSIX 路径列表
+            let paths = output.components(separatedBy: String(Character(UnicodeScalar(0))))
+            let urls = paths.compactMap { (path: String) -> URL? in
                 let clean = path.trimmingCharacters(in: .whitespacesAndNewlines)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
                 return clean.isEmpty ? nil : URL(fileURLWithPath: clean)
             }
+            return (urls, diag)
         } catch {
-            print("⚠️ [FinderContextReader] osascript failed: \(error)")
-            return []
+            return ([], "spawn-failed: \(error.localizedDescription)")
         }
     }
 }
