@@ -31,6 +31,8 @@
 	<string>public.app-category.utilities</string>
 	<key>LSUIElement</key>
 	<false/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>用于读取 Finder 当前选中的文件作为 AI 批处理目标，以及在授权目录内调度本地 CLI 工具。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSPrincipalClass</key>
