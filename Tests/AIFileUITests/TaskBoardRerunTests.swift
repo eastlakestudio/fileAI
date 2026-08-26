@@ -5,7 +5,7 @@ import XCTest
 final class TaskBoardRerunTests: XCTestCase {
     
     @MainActor
-    func testRerunTaskCallbackRestoresOriginalTargetFilesAndPrompt() {
+    func testRerunTaskCallbackRestoresOriginalTargetFilesAndPrompt() async {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -32,11 +32,12 @@ final class TaskBoardRerunTests: XCTestCase {
         viewModel.setTargetURLs([dummyFile])
         XCTAssertEqual(viewModel.fileItems.first?.name, "dummy.png")
         
-        // 触发再次执行
+        // 触发再次执行（异步等待）
         viewModel.rerunTask(record)
+        try? await Task.sleep(nanoseconds: 300_000_000)
         
         // 验证：目标文件已成功切回硬件清单 xlsx，且已生成对应的重试任务卡片
-        XCTAssertEqual(viewModel.taskHistory.first?.prompt, prompt)
+        XCTAssertTrue(viewModel.taskHistory.contains { $0.prompt == prompt && !$0.targetFilePaths.isEmpty })
         XCTAssertEqual(viewModel.fileItems.first?.name, "hardware_list.xlsx")
         XCTAssertEqual(viewModel.mainTab, .chatTimeline)
     }

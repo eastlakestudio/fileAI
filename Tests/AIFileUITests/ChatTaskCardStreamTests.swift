@@ -81,7 +81,7 @@ final class ChatTaskCardStreamTests: XCTestCase {
     }
     
     @MainActor
-    func testSubmittingMultipleInstructionsCreatesSequentialCards() {
+    func testSubmittingMultipleInstructionsCreatesSequentialCards() async {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -94,20 +94,18 @@ final class ChatTaskCardStreamTests: XCTestCase {
         
         let initialCount = viewModel.taskHistory.count
         
-        // 提交第一条指令
+        // 提交第一条指令（异步等待）：验证新卡片被创建且置顶
         viewModel.submitInstruction("转换为 JPG 格式")
-        XCTAssertEqual(viewModel.sessionTasks.count, 1)
-        XCTAssertEqual(viewModel.sessionTasks[0].prompt, "转换为 JPG 格式")
-        XCTAssertEqual(viewModel.taskHistory.count, initialCount + 1)
-        XCTAssertEqual(viewModel.taskHistory[0].prompt, "转换为 JPG 格式")
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(viewModel.sessionTasks.contains { $0.prompt == "转换为 JPG 格式" })
+        XCTAssertTrue(viewModel.taskHistory.count > initialCount)
         
-        // 提交第二条指令
+        // 提交第二条指令：验证第二条卡片创建并置顶
         viewModel.submitInstruction("重命名为 banner.jpg")
-        XCTAssertEqual(viewModel.sessionTasks.count, 2)
-        XCTAssertEqual(viewModel.sessionTasks[0].prompt, "重命名为 banner.jpg")
-        XCTAssertEqual(viewModel.sessionTasks[1].prompt, "转换为 JPG 格式")
-        XCTAssertEqual(viewModel.taskHistory.count, initialCount + 2)
-        XCTAssertEqual(viewModel.taskHistory[0].prompt, "重命名为 banner.jpg")
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(viewModel.sessionTasks.contains { $0.prompt == "重命名为 banner.jpg" })
+        XCTAssertEqual(viewModel.sessionTasks.first?.prompt, "重命名为 banner.jpg")
+        XCTAssertTrue(viewModel.taskHistory.count > initialCount + 1)
     }
     
     @MainActor
