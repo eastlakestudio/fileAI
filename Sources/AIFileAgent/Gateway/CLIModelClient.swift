@@ -73,33 +73,8 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         严禁输出任何与任务执行无关的多余说明。
         """
         
-        // 根据 CLI 工具类型组装启动参数（当前执行走 executeViaProcess 内的 zsh 通道，
-        // 此处 switch 保留类型枚举完备性说明；arguments 仅用于日志诊断输出）
-        let arguments: [String]
-        switch tool.type {
-        case .antigravity:
-            var args = ["--print", "--dangerously-skip-permissions"]
-            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
-                args.append(contentsOf: ["--model", modelName, "--effort", "low"])
-            }
-            arguments = args
-        case .codebuddy:
-            var args = ["-p", "-y"]
-            if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
-                args.append(contentsOf: ["--model", modelName])
-            }
-            arguments = args
-        case .ollama:
-            arguments = ["run", modelName]
-        case .claude:
-            arguments = ["--print", "-p"]
-        case .llm:
-            arguments = ["-m", modelName]
-        case .aichat:
-            arguments = ["-m", modelName]
-        case .ghCopilot:
-            arguments = ["copilot", "suggest", "-t", "shell"]
-        }
+        // 各 CLI 工具的启动参数模板在 executeViaProcess 的 zsh 通道内组装
+        // （此处不再单独构造 arguments；保留注释说明各类型的参数差异见 toolArgs 组装）
         
         // 控制台与日志全量打印 CLI 请求输入
         print("""

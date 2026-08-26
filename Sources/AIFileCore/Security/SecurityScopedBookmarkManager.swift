@@ -95,11 +95,12 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
              L10n.t("仍未发现 CLI。Homebrew 安装的 CLI 位于 /opt/homebrew，请授权该目录。"))
         ]
         for candidate in candidates {
-            if let granted = await requestDirectoryAuthorization(
+            let grantedURL = await requestDirectoryAuthorization(
                 initialPath: candidate.path,
                 prompt: L10n.t("授权此目录"),
                 message: candidate.message
-            ) {
+            )
+            if grantedURL != nil {
                 return true
             }
         }
@@ -159,8 +160,11 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
                     bookmarkDataIsStale: &isStale
                 )
                 
-                if resolvedURL.startAccessingSecurityScopedResource() {
+                let granted = resolvedURL.startAccessingSecurityScopedResource()
+                if granted {
                     refreshedURLs.append(resolvedURL)
+                } else {
+                    print("⚠️ [BookmarkManager] startAccessing failed for \(resolvedURL.path)")
                 }
                 
                 if isStale {
@@ -234,9 +238,8 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
                     if fileManager.fileExists(atPath: fullPath) {
                         // 解析 symlink（如 Homebrew /opt/homebrew/bin/ffmpeg -> ../Cellar/...），
                         // 返回真实物理路径，确保子进程沙箱扩展命中授权作用域
-                        if let resolved = try? URL(fileURLWithPath: fullPath)
-                            .resolvingSymlinksInPath().path,
-                           fileManager.isExecutableFile(atPath: resolved) {
+                        let resolved = URL(fileURLWithPath: fullPath).resolvingSymlinksInPath().path
+                        if fileManager.isExecutableFile(atPath: resolved) {
                             return resolved
                         }
                         return fullPath

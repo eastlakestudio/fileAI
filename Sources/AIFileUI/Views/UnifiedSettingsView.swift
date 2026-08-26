@@ -121,11 +121,10 @@ public struct UnifiedSettingsView: View {
         }
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: 450, maxHeight: .infinity, alignment: .top)
         .id(languageRefreshToken)
-        .onChange(of: interfaceLanguage) { newValue in
+        .onChange(of: interfaceLanguage) { _, newValue in
             newValue.apply()
             languageRefreshToken = UUID()
-        }
-        .background(
+        }        .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.thickMaterial)

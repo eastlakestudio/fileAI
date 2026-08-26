@@ -93,7 +93,7 @@ public enum L10n {
     }
 
     /// 拦截主 Bundle 本地化查询的子类：有覆盖时重定向到覆盖语言的子 Bundle
-    final class LanguageOverrideBundle: Bundle {
+    final class LanguageOverrideBundle: Bundle, @unchecked Sendable {
         override func localizedString(forKey key: String, value: String?, table tableName: String?) -> String {
             if let override = L10n.overrideBundle {
                 return override.localizedString(forKey: key, value: value, table: tableName)
