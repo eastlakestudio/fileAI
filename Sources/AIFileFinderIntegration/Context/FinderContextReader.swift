@@ -67,7 +67,7 @@ public final class FinderContextReader: @unchecked Sendable {
     /// 异步获取当前 Finder 中选中的文件/文件夹 URL 列表
     /// 流程：主线程 TCC 询问（首次弹系统授权窗）→ 已授权后 osascript 子进程读取
     /// 未授权时返回 empty 并回调需要引导（调用方展示引导 UI）
-    public func getSelectedFinderItemsAsync(onPermissionDenied: (() -> Void)? = nil) async -> [URL] {
+    public func getSelectedFinderItemsAsync(onPermissionDenied: (() -> Void)? = nil, onDiagnostics: ((String) -> Void)? = nil) async -> [URL] {
         let log = Logger(subsystem: "com.eastlakestudio.aifiles.debug", category: "FinderFlow")
         var diagParts: [String] = []
         // 1. 主线程触发/检查 TCC 授权（未授权时弹系统窗）
@@ -98,10 +98,12 @@ public final class FinderContextReader: @unchecked Sendable {
         diagParts.append("urls=\(urls.count)")
         log.notice("fetch complete urls=\\(urls.count, privacy: .public)")
         // 诊断快照写入剪贴板（TestFlight 环境无法读日志，用剪贴板带回）
+        let diagText = diagParts.joined(separator: " | ")
         await MainActor.run {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
-            pasteboard.setString(diagParts.joined(separator: " | "), forType: .string)
+            pasteboard.setString(diagText, forType: .string)
+            onDiagnostics?(diagText)
         }
         if urls.isEmpty && !granted {
             onPermissionDenied?()

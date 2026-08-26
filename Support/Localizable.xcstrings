@@ -6461,6 +6461,22 @@
         }
       }
     },
+    "暂无诊断记录（请先点 ↻ 抓取一次）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No diagnostics yet (click ↻ first)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无诊断记录（请先点 ↻ 抓取一次）"
+          }
+        }
+      }
+    },
     "替换后的字符": {
       "extractionState": "stale",
       "localizations": {
@@ -6796,6 +6812,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "未获取到选中文件（诊断信息已复制到剪贴板，可粘贴反馈）"
+          }
+        }
+      }
+    },
+    "未获取到选中文件，点击右侧「诊断」查看详情": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No selection captured — click \"Diagnostics\" for details"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未获取到选中文件，点击右侧「诊断」查看详情"
           }
         }
       }
@@ -8190,6 +8222,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "访达定位"
+          }
+        }
+      }
+    },
+    "诊断": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diagnostics"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "诊断"
           }
         }
       }
@@ -10128,6 +10176,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "🔄 转换为 PNG 格式"
+          }
+        }
+      }
+    },
+    "🔍 Finder 抓取诊断": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔍 Finder Fetch Diagnostics"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🔍 Finder 抓取诊断"
           }
         }
       }

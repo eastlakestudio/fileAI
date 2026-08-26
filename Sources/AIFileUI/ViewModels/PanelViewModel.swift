@@ -46,6 +46,10 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var statusMessage: String? = nil
     /// Finder 自动化权限缺失时的引导横幅
     @Published public var isShowingAutomationGuide: Bool = false
+    /// 最近一次 Finder 抓取的诊断信息（界面弹窗展示）
+    @Published public var lastFinderDiagnostics: String? = nil
+    /// 诊断弹窗显示状态
+    @Published public var isShowingDiagnosticsSheet: Bool = false
     @Published public var latestOutputURLs: [URL] = []
     private var thinkingTimerCancellable: AnyCancellable?
     
@@ -124,16 +128,23 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     /// 从 Finder 抓取最新选中的文件（异步非阻塞；未授权时由 osascript 触发 TCC 授权弹窗）
     public func fetchFromFinderAsync() {
         Task { [weak self] in
-            let urls = await FinderContextReader.shared.getSelectedFinderItemsAsync(onPermissionDenied: {
-                Task { @MainActor in
-                    self?.statusMessage = L10n.t("需要「自动化」权限读取 Finder 选中项：请在系统设置 → 隐私与安全性 → 自动化 中允许本应用控制 Finder")
-                    self?.isShowingAutomationGuide = true
+            let urls = await FinderContextReader.shared.getSelectedFinderItemsAsync(
+                onPermissionDenied: {
+                    Task { @MainActor in
+                        self?.statusMessage = L10n.t("需要「自动化」权限读取 Finder 选中项：请在系统设置 → 隐私与安全性 → 自动化 中允许本应用控制 Finder")
+                        self?.isShowingAutomationGuide = true
+                    }
+                },
+                onDiagnostics: { diag in
+                    Task { @MainActor in
+                        self?.lastFinderDiagnostics = diag
+                    }
                 }
-            })
+            )
             await MainActor.run {
-                // 诊断模式：结果为空时在状态栏显示剪贴板已含诊断信息提示
+                // 诊断模式：结果为空时在状态栏显示可查看诊断弹窗
                 if urls.isEmpty {
-                    self?.statusMessage = L10n.t("未获取到选中文件（诊断信息已复制到剪贴板，可粘贴反馈）")
+                    self?.statusMessage = L10n.t("未获取到选中文件，点击右侧「诊断」查看详情")
                 }
                 self?.setTargetURLs(urls)
             }

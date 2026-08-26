@@ -114,6 +114,40 @@ public struct MainFloatingPanel: View {
                 }
             )
         }
+        .sheet(isPresented: $viewModel.isShowingDiagnosticsSheet) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(L10n.t("🔍 Finder 抓取诊断"))
+                        .font(.system(size: 14, weight: .bold))
+                    Spacer()
+                    Button(L10n.t("复制")) {
+                        if let diag = viewModel.lastFinderDiagnostics {
+                            let pb = NSPasteboard.general
+                            pb.clearContents()
+                            pb.setString(diag, forType: .string)
+                        }
+                    }
+                    .controlSize(.mini)
+                    Button(L10n.t("关闭")) {
+                        viewModel.isShowingDiagnosticsSheet = false
+                    }
+                    .controlSize(.mini)
+                    .keyboardShortcut(.cancelAction)
+                }
+                ScrollView {
+                    Text(viewModel.lastFinderDiagnostics ?? L10n.t("暂无诊断记录（请先点 ↻ 抓取一次）"))
+                        .font(.system(size: 11, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                }
+                .frame(maxHeight: 220)
+                .background(Color.primary.opacity(0.04))
+                .cornerRadius(8)
+            }
+            .padding(16)
+            .frame(width: 480)
+        }
         .onAppear {
             viewModel.fetchFromFinder()
             viewModel.loadTaskHistory()
@@ -178,6 +212,15 @@ public struct MainFloatingPanel: View {
                                     .font(.system(size: 10.5, weight: .medium))
                                     .foregroundColor(msg.contains("✅") ? .green : (msg.contains("❌") ? .red : .primary))
                                     .lineLimit(1)
+                                
+                                if viewModel.lastFinderDiagnostics != nil {
+                                    Button(L10n.t("诊断")) {
+                                        viewModel.isShowingDiagnosticsSheet = true
+                                    }
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.mini)
+                                }
                                 
                                 Spacer()
                                 
