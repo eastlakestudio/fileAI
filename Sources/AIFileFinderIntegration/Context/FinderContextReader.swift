@@ -11,7 +11,29 @@ public final class FinderContextReader: @unchecked Sendable {
     
     private let lock = NSLock()
     
-    /// JXA 版本：Application("Finder") 通过 ScriptingBridge 桥接寻址，不受 AppleScript 文本编译限制
+    /// AppleScript 通道：POSIX 路径逗号分隔输出（非沙箱与 TCC 已授权的沙箱环境均可工作）
+    private static let applescriptSource = """
+    tell application "Finder"
+        set outputPaths to {}
+        set sel to selection
+        if (count of sel) > 0 then
+            repeat with itemRef in sel
+                try
+                    set end of outputPaths to POSIX path of (itemRef as alias)
+                end try
+            end repeat
+        else
+            try
+                set end of outputPaths to POSIX path of (target of front Finder window as alias)
+            end try
+        end if
+        set AppleScript\'s text item delimiters to ","
+        set outputString to outputPaths as string
+        set AppleScript\'s text item delimiters to ""
+        return outputString
+    end tell
+    """
+    /// JXA 备用通道：Application("Finder").selection() 直读（不依赖文本编译的应用寻址）
     private static let jxaScriptSource = "try { var s = Application(\"Finder\").selection(); s.length ? s.map(f=>f.path()).join(\"\\u0000\") : \"\" } catch(e) { \"\" }"
     
     private static let scriptSource = """
@@ -130,43 +152,64 @@ public final class FinderContextReader: @unchecked Sendable {
         runViaOSAScriptWithDiag().0
     }
     
-    /// 执行 JXA 读取并返回 (URL 列表, 诊断摘要 "exit=N|outLen=N|err=...")
+    /// 双通道读取：AppleScript 主通道（逗号分隔 POSIX 路径）→ 失败/空时 JXA 备用（NUL 分隔）
+    /// 诊断摘要格式："AS[exit=N out=... err=...] JS[exit=N out=... err=...]"
     private func runViaOSAScriptWithDiag() -> ([URL], String) {
         let log = Logger(subsystem: "com.eastlakestudio.aifiles.debug", category: "FinderFlow")
-        log.notice("osascript spawn starting")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        // JXA 形式：绕过 AppleScript 文本编译的应用寻址（沙箱内按名/ID寻址均报 -600）
-        process.arguments = ["-l", "JavaScript", "-e", Self.jxaScriptSource]
-        // 最小干净环境：避免沙箱注入的变量破坏子进程 LaunchServices 解析
-        process.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
-        let outPipe = Pipe()
-        let errPipe = Pipe()
-        process.standardOutput = outPipe
-        process.standardError = errPipe
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-            let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
-            let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let rawOutput = String(data: data, encoding: .utf8) ?? ""
-            let diag = "exit=\(process.terminationStatus) outLen=\(rawOutput.count) err=\(errStr.prefix(80))"
-            log.notice("osascript exit=\(process.terminationStatus, privacy: .public) outLen=\(rawOutput.count, privacy: .public)")
-            guard let output = rawOutput.trimmingCharacters(in: .whitespacesAndNewlines) as String?,
-                  !output.isEmpty else {
-                return ([], diag)
+        
+        func runScript(_ args: [String]) -> (exit: Int32, out: String, err: String) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = args
+            process.environment = ["PATH": "/usr/bin:/bin", "HOME": NSHomeDirectory()]
+            let outPipe = Pipe()
+            let errPipe = Pipe()
+            process.standardOutput = outPipe
+            process.standardError = errPipe
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let out = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                let err = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+                return (process.terminationStatus, out, err)
+            } catch {
+                return (-1, "", "spawn-failed: \(error.localizedDescription)")
             }
-            // JXA 输出：NUL 分隔的 POSIX 路径列表
-            let paths = output.components(separatedBy: String(Character(UnicodeScalar(0))))
-            let urls = paths.compactMap { (path: String) -> URL? in
-                let clean = path.trimmingCharacters(in: .whitespacesAndNewlines)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-                return clean.isEmpty ? nil : URL(fileURLWithPath: clean)
-            }
-            return (urls, diag)
-        } catch {
-            return ([], "spawn-failed: \(error.localizedDescription)")
         }
+        
+        // 通道 1：AppleScript（POSIX 路径逗号连接）
+        let asResult = runScript(["-e", Self.applescriptSource])
+        var diag = "AS[exit=\(asResult.exit) out=\(asResult.out.prefix(60).replacingOccurrences(of: "\n", with: "⏎")) err=\(asResult.err.prefix(100).replacingOccurrences(of: "\n", with: "⏎"))]"
+        log.notice("AppleScript exit=\\(asResult.exit, privacy: .public) outLen=\\(asResult.out.count, privacy: .public) err=\\(asResult.err, privacy: .public)")
+        
+        var urls: [URL] = []
+        if asResult.exit == 0 {
+            let cleaned = asResult.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleaned.isEmpty {
+                urls = cleaned.components(separatedBy: ",").compactMap { raw in
+                    let p = raw.trimmingCharacters(in: .whitespaces)
+                    return p.isEmpty ? nil : URL(fileURLWithPath: p)
+                }
+            }
+        }
+        
+        // 通道 2：AppleScript 失败（-600 寻址等）或空结果时，JXA 备用
+        if urls.isEmpty {
+            let jsResult = runScript(["-l", "JavaScript", "-e", Self.jxaScriptSource])
+            diag += " JS[exit=\(jsResult.exit) out=\(jsResult.out.prefix(60).replacingOccurrences(of: "\n", with: "⏎")) err=\(jsResult.err.prefix(100).replacingOccurrences(of: "\n", with: "⏎"))]"
+            log.notice("JXA exit=\\(jsResult.exit, privacy: .public) outLen=\\(jsResult.out.count, privacy: .public) err=\\(jsResult.err, privacy: .public)")
+            if jsResult.exit == 0 {
+                let cleaned = jsResult.out.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !cleaned.isEmpty {
+                    urls = cleaned.components(separatedBy: String(Character(UnicodeScalar(0)))).compactMap { raw in
+                        let p = raw.trimmingCharacters(in: .whitespaces)
+                            .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                        return p.isEmpty ? nil : URL(fileURLWithPath: p)
+                    }
+                }
+            }
+        }
+        
+        return (urls, diag)
     }
 }
