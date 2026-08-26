@@ -73,11 +73,12 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         严禁输出任何与任务执行无关的多余说明。
         """
         
-        // 根据 CLI 工具类型组装启动参数
-        var arguments: [String] = []
+        // 根据 CLI 工具类型组装启动参数（当前执行走 executeViaProcess 内的 zsh 通道，
+        // 此处 switch 保留类型枚举完备性说明；arguments 仅用于日志诊断输出）
+        let arguments: [String]
         switch tool.type {
         case .antigravity:
-            var args = ["--print", promptPayload, "--dangerously-skip-permissions"]
+            var args = ["--print", "--dangerously-skip-permissions"]
             if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
                 args.append(contentsOf: ["--model", modelName, "--effort", "low"])
             }
@@ -87,18 +88,17 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
                 args.append(contentsOf: ["--model", modelName])
             }
-            args.append(promptPayload)
             arguments = args
         case .ollama:
-            arguments = ["run", modelName, promptPayload]
+            arguments = ["run", modelName]
         case .claude:
-            arguments = ["--print", "-p", promptPayload]
+            arguments = ["--print", "-p"]
         case .llm:
-            arguments = ["-m", modelName, promptPayload]
+            arguments = ["-m", modelName]
         case .aichat:
-            arguments = ["-m", modelName, promptPayload]
+            arguments = ["-m", modelName]
         case .ghCopilot:
-            arguments = ["copilot", "suggest", "-t", "shell", userMsg]
+            arguments = ["copilot", "suggest", "-t", "shell"]
         }
         
         // 控制台与日志全量打印 CLI 请求输入
@@ -217,18 +217,26 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             process.standardOutput = outPipe
             process.standardError = errPipe
             
-            // 使用 OSAllocatedUnfairLock（或 NSLock）保护 isResumed，避免 continuation 重复 resume
-            var isResumed = false
-            let lock = NSLock()
+            // 原子 Resume 门闩：Sendable 引用类型封装 isResumed + NSLock，
+            // 避免闭包捕获 var 在并发上下文中的数据竞争（Swift 6 严格并发合规）
+            final class ResumeLatch: @unchecked Sendable {
+                private let lock = NSLock()
+                private var resumed = false
+                func tryResume() -> Bool {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    if resumed { return false }
+                    resumed = true
+                    return true
+                }
+            }
+            let latch = ResumeLatch()
             
             // 超时 Timer：使用 .userInitiated QoS，与主调用方保持同优先级，不触发优先级反转
             let timeoutTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInitiated))
             timeoutTimer.schedule(deadline: .now() + self.timeoutSeconds)
             timeoutTimer.setEventHandler {
-                lock.lock()
-                defer { lock.unlock() }
-                guard !isResumed else { return }
-                isResumed = true
+                guard latch.tryResume() else { return }
                 if process.isRunning { process.terminate() }
                 continuation.resume(throwing: NSError(
                     domain: "CLIModelClient",
@@ -247,10 +255,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
                 let errStr = String(data: errData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 
-                lock.lock()
-                defer { lock.unlock() }
-                guard !isResumed else { return }
-                isResumed = true
+                guard latch.tryResume() else { return }
                 
                 if proc.terminationStatus == 0 && !output.isEmpty {
                     continuation.resume(returning: output)
@@ -267,10 +272,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 try process.run()
             } catch {
                 timeoutTimer.cancel()
-                lock.lock()
-                defer { lock.unlock() }
-                guard !isResumed else { return }
-                isResumed = true
+                guard latch.tryResume() else { return }
                 continuation.resume(throwing: error)
             }
         }
