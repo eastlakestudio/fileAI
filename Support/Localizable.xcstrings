@@ -7344,6 +7344,22 @@
         }
       }
     },
+    "沙箱限制：CLI (%@) 不在已授权目录内。请到 设置 → CLI 引擎 → 重新扫描 并按引导授权其所在目录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sandbox: CLI (%@) is outside authorized folders. Go to Settings → CLI Engines → Rescan and grant its folder."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沙箱限制：CLI (%@) 不在已授权目录内。请到 设置 → CLI 引擎 → 重新扫描 并按引导授权其所在目录"
+          }
+        }
+      }
+    },
     "没有匹配「%@」的技能": {
       "extractionState": "stale",
       "localizations": {

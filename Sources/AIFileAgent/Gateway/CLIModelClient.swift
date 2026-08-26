@@ -29,7 +29,7 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         messages: [[String: String]],
         tools: [[String: Any]]?
     ) async throws -> LLMResponse {
-        let finalExecPath: String
+        var finalExecPath: String
         if let path = tool.executablePath, path.hasPrefix("/") && FileManager.default.fileExists(atPath: path) {
             finalExecPath = path
         } else if let scanned = CLIDiscoveryEngine.shared.findExecutablePath(for: tool.type.executableNames) {
@@ -40,6 +40,18 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 code: 404,
                 userInfo: [NSLocalizedDescriptionKey: L10n.t("未找到 %@ 可执行文件，请在设置中心授权其所在目录（例如 %@）", tool.name, "\(CLIEnvironmentHelper.realUserHome)/.local/bin")]
             )
+        }
+        // 沙箱关键：解析 symlink 到真实物理路径（必须在授权作用域内才能被内核放行 exec）
+        let resolvedExecPath = URL(fileURLWithPath: finalExecPath).resolvingSymlinksInPath().path
+        finalExecPath = resolvedExecPath
+        if SecurityScopedBookmarkManager.shared.isSandboxActive {
+            guard SecurityScopedBookmarkManager.shared.isAuthorized(path: resolvedExecPath) else {
+                throw NSError(
+                    domain: "CLIModelClient",
+                    code: 403,
+                    userInfo: [NSLocalizedDescriptionKey: L10n.t("沙箱限制：CLI (%@) 不在已授权目录内。请到 设置 → CLI 引擎 → 重新扫描 并按引导授权其所在目录", resolvedExecPath)]
+                )
+            }
         }
         let execPath = finalExecPath
         
