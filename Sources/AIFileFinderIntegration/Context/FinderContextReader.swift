@@ -101,6 +101,26 @@ public final class FinderContextReader: @unchecked Sendable {
             }
         }
         diagParts.append("TCCgranted=\(granted)")
+        // 0. 进程内 NSAppleScript 主通道（主线程；未授权时此调用触发系统授权弹窗——MAS 标准路径）
+        let inProcess: [URL]? = await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume(returning: self.runViaInProcessAppleScript())
+            }
+        }
+        if let urls = inProcess, !urls.isEmpty {
+            diagParts.append(self.lastInProcessDiag)
+            diagParts.append("urls=\(urls.count)")
+            log.notice("in-process NSAppleScript succeeded urls=\(urls.count, privacy: .public)")
+            let diagText = diagParts.joined(separator: " | ")
+            await MainActor.run {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(diagText, forType: .string)
+                onDiagnostics?(diagText)
+            }
+            return urls
+        }
+        diagParts.append(self.lastInProcessDiag.isEmpty ? "NSAS[skipped]" : self.lastInProcessDiag)
         // TCC 进程内询问被拒时不中止：本地未公证构建会被静默拒绝（-1743），
         // 但 osascript 子进程发起的 Apple Event 有独立归因链，仍可能触发 TCC 授权弹窗。
         // MAS/公证构建下 prompt 正常弹出，granted=true 直接走读取。
@@ -139,6 +159,32 @@ public final class FinderContextReader: @unchecked Sendable {
         defer { lock.unlock() }
         return runViaOSAScriptWithDiag()
     }
+    
+    /// 进程内 NSAppleScript 通道（MAS 官方推荐）：主线程调用，未授权时由本调用触发系统弹窗
+    /// 返回 nil 表示通道失败（-600 寻址等），调用方降级子进程通道
+    @MainActor
+    private func runViaInProcessAppleScript() -> [URL]? {
+        guard let script = NSAppleScript(source: Self.applescriptSource) else { return nil }
+        var error: NSDictionary?
+        let descriptor = script.executeAndReturnError(&error)
+        if let error = error {
+            let code = error[NSAppleScript.errorNumber] as? Int ?? 0
+            // -600 procNotFound：沙箱内按名字寻址失败（macOS 27 观察）；其他错误也降级
+            let diag = "NSAS[err=\(code) \(error[NSAppleScript.errorMessage] ?? "")]"
+            lastInProcessDiag = diag
+            return nil
+        }
+        var urls: [URL] = []
+        for i in 1...max(1, descriptor.numberOfItems) {
+            if let s = descriptor.atIndex(i)?.stringValue, !s.isEmpty {
+                urls.append(URL(fileURLWithPath: s))
+            }
+        }
+        lastInProcessDiag = "NSAS[ok count=\(urls.count)]"
+        return urls
+    }
+    
+    nonisolated(unsafe) private var lastInProcessDiag: String = ""
     
     /// 获取当前 Finder 中选中的文件/文件夹 URL 列表（内部加锁；建议走 getSelectedFinderItemsAsync）
     public func getSelectedFinderItems() -> [URL] {
