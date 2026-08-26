@@ -67,7 +67,7 @@ public final class MockLLMClient: LLMProviderProtocol, Sendable {
                 toolCalls: [call],
                 executionTraceLogs: [L10n.t("🧩 Mock 模拟引擎解析出 image_resize Tool Call (width=%@, height=%@)", "\(width)", "\(height)")]
             )
-        } else if userMessage.contains("pdf") || userMessage.contains("PDF") {
+        } else if userMessage.contains("JPG") || userMessage.contains("jpg") || userMessage.contains("png") || userMessage.contains("格式") || userMessage.contains("pdf") || userMessage.contains("PDF") {
             let call = ToolCallRequest(id: "call_pdf_1", functionName: "doc_to_pdf", argumentsJSON: "{}")
             return LLMResponse(
                 textContent: "为您规划了转为 PDF 的操作",

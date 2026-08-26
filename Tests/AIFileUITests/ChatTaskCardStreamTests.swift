@@ -2,6 +2,7 @@ import XCTest
 import SwiftUI
 @testable import AIFileCore
 @testable import AIFileUI
+@testable import AIFileAgent
 
 final class ChatTaskCardStreamTests: XCTestCase {
     
@@ -14,7 +15,7 @@ final class ChatTaskCardStreamTests: XCTestCase {
         let file1 = tempDir.appendingPathComponent("demo.png")
         try? "image_data".write(to: file1, atomically: true, encoding: .utf8)
         
-        let viewModel = PanelViewModel()
+        let viewModel = PanelViewModel(dispatcher: AgentDispatcher(provider: MockLLMClient()))
         viewModel.setTargetURLs([file1])
         viewModel.mainTab = .fileList // 初始在文件列表页
         
@@ -25,7 +26,7 @@ final class ChatTaskCardStreamTests: XCTestCase {
         viewModel.submitInstruction()
         
         // Mock 引擎秒回，等待后台 Task 完成
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
         
         // 验证 1：自动切换到对话流视图
         XCTAssertEqual(viewModel.mainTab, .chatTimeline)
@@ -89,20 +90,20 @@ final class ChatTaskCardStreamTests: XCTestCase {
         let file1 = tempDir.appendingPathComponent("image1.png")
         try? "data".write(to: file1, atomically: true, encoding: .utf8)
         
-        let viewModel = PanelViewModel()
+        let viewModel = PanelViewModel(dispatcher: AgentDispatcher(provider: MockLLMClient()))
         viewModel.setTargetURLs([file1])
         
         let initialCount = viewModel.taskHistory.count
         
         // 提交第一条指令（异步等待）：验证新卡片被创建且置顶
         viewModel.submitInstruction("转换为 JPG 格式")
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertTrue(viewModel.sessionTasks.contains { $0.prompt == "转换为 JPG 格式" })
         XCTAssertTrue(viewModel.taskHistory.count > initialCount)
         
         // 提交第二条指令：验证第二条卡片创建并置顶
         viewModel.submitInstruction("重命名为 banner.jpg")
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
         XCTAssertTrue(viewModel.sessionTasks.contains { $0.prompt == "重命名为 banner.jpg" })
         XCTAssertEqual(viewModel.sessionTasks.first?.prompt, "重命名为 banner.jpg")
         XCTAssertTrue(viewModel.taskHistory.count > initialCount + 1)

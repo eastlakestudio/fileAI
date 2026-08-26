@@ -89,6 +89,14 @@ public final class PythonSkillRunner: Sendable {
         // 3. 构造环境变量
         var environment = ProcessInfo.processInfo.environment
         let inputPaths = inputFiles.map { $0.path }
+        // 脚本 argv 传相对 cwd 的路径：避免 zip -r 等工具把绝对路径中的父目录层级打进归档
+        // （跨目录文件无法相对化时回退绝对路径，保证功能正确性）
+        let relativePaths = inputFiles.map { url -> String in
+            if url.deletingLastPathComponent().path == outDir.path {
+                return url.lastPathComponent
+            }
+            return url.path
+        }
         if let inputData = try? JSONSerialization.data(withJSONObject: inputPaths, options: []),
            let inputJson = String(data: inputData, encoding: .utf8) {
             environment["AIFILE_INPUT_FILES"] = inputJson
@@ -123,7 +131,7 @@ public final class PythonSkillRunner: Sendable {
             tempScriptURL = tempPy
             
             var args = [tempPy.path]
-            args.append(contentsOf: inputPaths)
+            args.append(contentsOf: relativePaths)
             process.arguments = args
             
         case .bash, .zsh:
@@ -135,7 +143,7 @@ public final class PythonSkillRunner: Sendable {
             tempScriptURL = tempSh
             
             var args = [tempSh.path]
-            args.append(contentsOf: inputPaths)
+            args.append(contentsOf: relativePaths)
             process.arguments = args
             
         case .applescript:
@@ -145,7 +153,7 @@ public final class PythonSkillRunner: Sendable {
             tempScriptURL = tempScpt
             
             var args = [tempScpt.path]
-            args.append(contentsOf: inputPaths)
+            args.append(contentsOf: relativePaths)
             process.arguments = args
         }
         
