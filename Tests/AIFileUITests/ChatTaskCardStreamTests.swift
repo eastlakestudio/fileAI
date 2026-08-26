@@ -20,9 +20,12 @@ final class ChatTaskCardStreamTests: XCTestCase {
         
         let initialCount = viewModel.taskHistory.count
         
-        // 提交新指令
+        // 提交新指令（异步流程：意图探测 → 规划 → 卡片入列）
         viewModel.inputText = "将图片调整为 1920x1080"
         viewModel.submitInstruction()
+        
+        // Mock 引擎秒回，等待后台 Task 完成
+        try? await Task.sleep(nanoseconds: 300_000_000)
         
         // 验证 1：自动切换到对话流视图
         XCTAssertEqual(viewModel.mainTab, .chatTimeline)
@@ -64,7 +67,7 @@ final class ChatTaskCardStreamTests: XCTestCase {
     }
     
     @MainActor
-    func testSubmitInstructionWithoutFilesDoesNotCreateCardAndShowsWarning() {
+    func testSubmitInstructionWithoutFilesProceedsToIntentDetection() {
         let viewModel = PanelViewModel()
         viewModel.setTargetURLs([])
         let initialCount = viewModel.taskHistory.count
@@ -72,11 +75,9 @@ final class ChatTaskCardStreamTests: XCTestCase {
         viewModel.inputText = "随便处理一下文件"
         viewModel.submitInstruction()
         
-        // 验证：未选文件时不增加任务卡片，并给出相应提示
-        XCTAssertEqual(viewModel.sessionTasks.count, 0)
-        XCTAssertEqual(viewModel.taskHistory.count, initialCount)
-        XCTAssertNotNil(viewModel.statusMessage)
-        XCTAssertTrue(viewModel.statusMessage?.contains("请先在 Finder 中选择文件") ?? false)
+        // 新行为：无文件不再拦截/警告（意图完全由 CLI/LLM 判断，交由异步探测与规划流程）
+        XCTAssertNil(viewModel.statusMessage)
+        XCTAssertEqual(viewModel.taskHistory.count, initialCount) // 同步瞬间尚未生成卡片（异步流程）
     }
     
     @MainActor
