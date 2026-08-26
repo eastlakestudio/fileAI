@@ -41,18 +41,6 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 userInfo: [NSLocalizedDescriptionKey: L10n.t("未找到 %@ 可执行文件，请在设置中心授权其所在目录（例如 %@）", tool.name, "\(CLIEnvironmentHelper.realUserHome)/.local/bin")]
             )
         }
-        // 沙箱关键：解析 symlink 到真实物理路径（必须在授权作用域内才能被内核放行 exec）
-        let resolvedExecPath = URL(fileURLWithPath: finalExecPath).resolvingSymlinksInPath().path
-        finalExecPath = resolvedExecPath
-        if SecurityScopedBookmarkManager.shared.isSandboxActive {
-            guard SecurityScopedBookmarkManager.shared.isAuthorized(path: resolvedExecPath) else {
-                throw NSError(
-                    domain: "CLIModelClient",
-                    code: 403,
-                    userInfo: [NSLocalizedDescriptionKey: L10n.t("沙箱限制：CLI (%@) 不在已授权目录内。请到 设置 → CLI 引擎 → 重新扫描 并按引导授权其所在目录", resolvedExecPath)]
-                )
-            }
-        }
         let execPath = finalExecPath
         
         // 构造发送给 CLI 的提示词（系统提示词 + 可用 Tools Schema + 用户指令 + JSON Schema 约束）
@@ -140,10 +128,6 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         do {
             return try await executeViaProcess(executablePath: executablePath, promptPayload: promptPayload)
         } catch {
-            // 沙箱内禁止 AppleScript 降级通道（do shell script 逃逸沙箱，违反 MAS 规则）
-            if SecurityScopedBookmarkManager.shared.isSandboxActive {
-                throw error
-            }
             print("⚠️ [CLIModelClient] Process 通道遇到异常，尝试 AppleScript 降级通道: \(error.localizedDescription)")
             return try await executeViaAppleScript(executablePath: executablePath, promptPayload: promptPayload)
         }
@@ -179,19 +163,9 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         
         let home = CLIEnvironmentHelper.realUserHome
         let user = CLIEnvironmentHelper.realUserName
-        let isSandbox = SecurityScopedBookmarkManager.shared.isSandboxActive
-        let fullCommand: String
-        if isSandbox {
-            // 沙箱内：仅用已授权作用域内的可执行文件，不 cd / source rc（HOME 在容器内不可写），
-            // 沙箱扩展随 fork/exec 自动传播到子进程
-            fullCommand = """
-            export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
-            """
-        } else {
-            fullCommand = """
-            export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; [ -f "\(home)/.zprofile" ] && source "\(home)/.zprofile" 2>/dev/null || true; [ -f "\(home)/.zshrc" ] && source "\(home)/.zshrc" 2>/dev/null || true; cd "\(home)"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
-            """
-        }
+        let fullCommand = """
+        export HOME="\(home)"; export USER="\(user)"; export LOGNAME="\(user)"; export JETSKI_APP_DATA_DIR="antigravity-cli"; export AI_AGENT="antigravity"; export ANTIGRAVITY_AGENT="1"; export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:\(home)/.local/bin:\(home)/.npm-global/bin:\(home)/.cargo/bin:\(home)/.nvm/current/bin:\(home)/Library/Application Support/Antigravity/bin:\(home)/.gemini/antigravity-cli/bin:/usr/bin:/bin:$PATH"; [ -f "\(home)/.zprofile" ] && source "\(home)/.zprofile" 2>/dev/null || true; [ -f "\(home)/.zshrc" ] && source "\(home)/.zshrc" 2>/dev/null || true; cd "\(home)"; CLI_PROMPT=$(echo "\(base64Prompt)" | base64 --decode); "\(executablePath)" \(toolArgs)
+        """
         
         return try await withCheckedThrowingContinuation { continuation in
             let process = Process()
