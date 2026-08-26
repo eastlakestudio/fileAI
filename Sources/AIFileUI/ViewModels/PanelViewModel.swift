@@ -245,6 +245,29 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         
         self.inputText = "" // 发送后清空输入框
         self.mainTab = .chatTimeline // 发送指令后自动聚焦到对话任务流
+        
+        // 0. 闲聊短路（语义判定，非字符数）：问候/确认类输入直接本地秒回，不发起 LLM 调用
+        if SkillIntentClassifier.shared.classify(userPrompt: prompt, fileItems: fileItems).type == .casualChat {
+            let reply = L10n.t("你好！我是文件魔法棒 ✨ 在 Finder 选中文件后，直接告诉我你想做什么（如「压缩后发飞书」「转成 PDF」「批量重命名」），我立刻处理。")
+            let casualPlan = ExecutionPlan(summary: reply, actions: [])
+            var casualTask = TaskExecutionRecord(
+                prompt: prompt,
+                status: .completed,
+                plan: casualPlan,
+                targetFilePaths: []
+            )
+            casualTask.completedAt = Date()
+            casualTask.walkthroughReport = reply
+            self.sessionTasks.removeAll(where: { $0.id == casualTask.id })
+            self.sessionTasks.insert(casualTask, at: 0)
+            self.taskHistory.removeAll(where: { $0.id == casualTask.id })
+            self.taskHistory.insert(casualTask, at: 0)
+            self.activeTask = nil
+            self.statusMessage = nil
+            Task { await TaskManager.shared.recordTask(casualTask) }
+            return
+        }
+        
         isThinking = true
         thinkingElapsedSeconds = 0.0
         statusMessage = L10n.t("AI 正在分析意图并规划操作方案... (⏱️ %@)", "0.0s")

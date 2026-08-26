@@ -2,20 +2,62 @@ import Foundation
 import AIFileCore
 
 /// System Prompt 组装器：构建具备零内容隐私保护规则并整合全部可用 Skill 技能池的系统提示词
+/// 性能设计：【静态部分】（技能池 + Tools Schema）按内容指纹缓存，技能清单未变化时跨请求复用，
+/// 每次调用只重新生成【动态部分】（当前文件元数据），显著缩短 CLI 输入与首 token 延迟。
 public struct SystemPromptBuilder: Sendable {
+
+    /// 静态块缓存：技能池+Schema 的指纹 → 渲染结果（App 生命周期内有效；技能增删/开关后自动失效）
+    nonisolated(unsafe) private static var cachedStaticBlock: (fingerprint: String, rendered: String)? = nil
+    private static let cacheLock = NSLock()
+
     public static func build(
         with fileItems: [FileItem],
         tools: [[String: Any]]? = nil,
         installedSkills: [SkillMetadata] = SkillManager.shared.allSkills
     ) -> String {
         let metadataJSON = FileMetadataEngine.shared.generateLLMContextJSON(items: fileItems)
-        
-        // 组装所有已安装/启用技能的说明清单
-        var skillsDescriptionBlock = ""
+
+        // 静态块（技能池 + Schema）：内容指纹缓存，未变化直接复用
         let enabledSkills = installedSkills.filter { $0.isEnabled }
-        if !enabledSkills.isEmpty {
+        let fingerprint = staticFingerprint(skills: enabledSkills, tools: tools)
+        cacheLock.lock()
+        let cached = cachedStaticBlock
+        cacheLock.unlock()
+
+        let staticBlock: String
+        if let cached = cached, cached.fingerprint == fingerprint {
+            staticBlock = cached.rendered
+        } else {
+            staticBlock = renderStaticBlock(skills: enabledSkills, tools: tools)
+            cacheLock.lock()
+            cachedStaticBlock = (fingerprint, staticBlock)
+            cacheLock.unlock()
+        }
+
+        return """
+        \(staticRulesBlock)
+        \(staticBlock)
+
+        【当前选中的文件元数据清单 (JSON)】:
+        \(metadataJSON)
+        """
+    }
+
+    // MARK: - 静态块渲染与指纹
+
+    /// 指纹 = 技能 id/开关/Schema 工具数 的哈希；任一变化即失效缓存
+    private static func staticFingerprint(skills: [SkillMetadata], tools: [[String: Any]]?) -> String {
+        let skillPart = skills.map { "\($0.id):\($0.isEnabled)" }.joined(separator: ",")
+        let toolPart = "\(tools?.count ?? 0)"
+        return "\(skillPart)|tools=\(toolPart)"
+    }
+
+    private static func renderStaticBlock(skills: [SkillMetadata], tools: [[String: Any]]?) -> String {
+        var parts: [String] = []
+
+        if !skills.isEmpty {
             var lines: [String] = []
-            for (idx, skill) in enabledSkills.enumerated() {
+            for (idx, skill) in skills.enumerated() {
                 lines.append("\(idx + 1). 【\(skill.name)】(ID: \(skill.id), 分类: \(skill.categoryDisplayName))")
                 lines.append("   - 功能描述: \(skill.summary)")
                 if !skill.supportedExtensions.isEmpty {
@@ -29,26 +71,27 @@ public struct SystemPromptBuilder: Sendable {
                     lines.append("   - 参数说明: \(paramsStr)")
                 }
             }
-            skillsDescriptionBlock = """
-            
+            parts.append("""
             【系统当前已安装并启用的全部可用技能池 (Skills)】:
             \(lines.joined(separator: "\n"))
-            """
+            """)
         }
-        
-        // 组装 Tools JSON Schema 约束说明
-        var toolsSchemaBlock = ""
+
         if let tools = tools, !tools.isEmpty,
-           let data = try? JSONSerialization.data(withJSONObject: tools, options: [.prettyPrinted]),
+           let data = try? JSONSerialization.data(withJSONObject: tools, options: [.sortedKeys]), // 紧凑无缩进，体积较 prettyPrinted 减约 40%
            let schemaString = String(data: data, encoding: .utf8) {
-            toolsSchemaBlock = """
-            
+            parts.append("""
             【可用 Tool Calling 函数定义与 JSON Schema】:
             \(schemaString)
-            """
+            """)
         }
-        
-        return """
+
+        return parts.joined(separator: "\n")
+    }
+
+    // MARK: - 规划法则（纯静态文本）
+
+    private static let staticRulesBlock: String = """
         你是一个专业的 macOS 原生文件批处理与自动化 Agent 调度器。
         
         【工作准则与任务规划核心法则】
@@ -107,14 +150,8 @@ public struct SystemPromptBuilder: Sendable {
         7. 【自主编写与持久化新技能规范 (Autonomous Skill Synthesis & Persistence)】：
            - 当用户需求无法由现有技能池覆盖时（如数据分析生成图表、信息图概括等），必须调用 `create_skill` 自主编写新技能。系统将自动把新技能**持久化存储为本地技能库中的独立 .md 文件**；
            - 【脚本编写铁律】：
-             · 若编写 Python 脚本：`scriptEngine` 填 `"python3"`，`executableScript` 必须是**真实完整的 Python 3 源代码**（通过 `sys.argv[1:]` 获取输入文件路径，可直接使用 `openpyxl`, `PIL` (Pillow) 等读取数据并绘制保存 PNG 图像，严禁加 `python3 -c` 命令行包装！）；
-             · 若编写 Shell 脚本：`scriptEngine` 填 `"bash"`，`executableScript` 必须是标准 Bash 脚本；
-             · 若生成汇总图表/单个目标文件，`batchMode` 必须填 `"aggregate"`。
-        \(skillsDescriptionBlock)
-        \(toolsSchemaBlock)
-        
-        【当前选中的文件元数据清单 (JSON)】:
-        \(metadataJSON)
+              · 若编写 Python 脚本：`scriptEngine` 填 `"python3"`，`executableScript` 必须是**真实完整的 Python 3 源代码**（通过 `sys.argv[1:]` 获取输入文件路径，可直接使用 `openpyxl`, `PIL` (Pillow) 等读取数据并绘制保存 PNG 图像，严禁加 `python3 -c` 命令行包装！）；
+              · 若编写 Shell 脚本：`scriptEngine` 填 `"bash"`，`executableScript` 必须是标准 Bash 脚本；
+              · 若生成汇总图表/单个目标文件，`batchMode` 必须填 `"aggregate"`。
         """
     }
-}
