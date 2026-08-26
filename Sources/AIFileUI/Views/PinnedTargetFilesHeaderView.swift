@@ -135,6 +135,15 @@ public struct PinnedTargetFilesHeaderView: View {
             .buttonStyle(.bordered)
             .controlSize(.mini)
             .help(L10n.t("重新从当前前台访达抓取选中的文件与目录"))
+            
+            // 诊断按钮：常驻标题栏（Finder 抓取问题排查，弹窗展示最近一次诊断详情）
+            Button(action: { viewModel.isShowingDiagnosticsSheet = true }) {
+                Image(systemName: "stethoscope")
+                    .font(.system(size: 8.5))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .help(L10n.t("查看 Finder 抓取诊断详情"))
         }
         .fixedSize(horizontal: true, vertical: false)
     }

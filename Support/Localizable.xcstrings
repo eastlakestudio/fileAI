@@ -6462,6 +6462,7 @@
       }
     },
     "暂无诊断记录（请先点 ↻ 抓取一次）": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6801,6 +6802,7 @@
       }
     },
     "未获取到选中文件（诊断信息已复制到剪贴板，可粘贴反馈）": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -6817,6 +6819,7 @@
       }
     },
     "未获取到选中文件，点击右侧「诊断」查看详情": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -7015,6 +7018,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "查看 %@ 官方开发文档与 API Key 申请"
+          }
+        }
+      }
+    },
+    "查看 Finder 抓取诊断详情": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Finder fetch diagnostics"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看 Finder 抓取诊断详情"
           }
         }
       }
@@ -8227,6 +8246,7 @@
       }
     },
     "诊断": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {
@@ -10181,6 +10201,7 @@
       }
     },
     "🔍 Finder 抓取诊断": {
+      "extractionState": "stale",
       "localizations": {
         "en": {
           "stringUnit": {

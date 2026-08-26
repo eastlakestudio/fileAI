@@ -213,15 +213,6 @@ public struct MainFloatingPanel: View {
                                     .foregroundColor(msg.contains("✅") ? .green : (msg.contains("❌") ? .red : .primary))
                                     .lineLimit(1)
                                 
-                                if viewModel.lastFinderDiagnostics != nil {
-                                    Button(L10n.t("诊断")) {
-                                        viewModel.isShowingDiagnosticsSheet = true
-                                    }
-                                    .font(.system(size: 9.5, weight: .semibold))
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.mini)
-                                }
-                                
                                 Spacer()
                                 
                                 if !viewModel.latestOutputURLs.isEmpty {
