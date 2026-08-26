@@ -47,17 +47,6 @@ public final class SkillIntentClassifier: Sendable {
     ) -> IntentClassificationResult {
         let lowerPrompt = userPrompt.lowercased()
         
-        // 0. 闲聊/问候短路（语义判定）：仅在【无目标文件 + 命中问候语义词库 + 无操作动词】时触发，
-        //    避免 "压缩" 等短指令被误杀；命中则跳过 LLM 规划直接本地回复
-        if fileItems.isEmpty && Self.isCasualGreeting(lowerPrompt) {
-            return IntentClassificationResult(
-                type: .casualChat,
-                matchedSkills: [],
-                confidenceScore: 0.98,
-                reasoningNote: "greeting-pattern"
-            )
-        }
-        
         // 1. 扫描匹配具有高度领域特征的专属技能（如飞书、企业微信、钉钉、OCR识别、邮箱发送等）
         var matchedDomainSkills: [SkillMetadata] = []
         for skill in availableSkills {
@@ -123,21 +112,4 @@ public final class SkillIntentClassifier: Sendable {
         }
     }
 
-    /// 闲聊/问候语义判定：问候词库匹配 + 操作动词排除（与字符数无关）
-    static func isCasualGreeting(_ lowerPrompt: String) -> Bool {
-        let trimmed = lowerPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        // 问候词库（整词或短语级匹配）
-        let greetings: Set<String> = [
-            "hi", "hello", "hey", "yo", "hiya", "howdy",
-            "你好", "您好", "哈喽", "嗨", "在吗", "在么", "早上好", "中午好", "下午好", "晚上好",
-            "thanks", "thank you", "谢谢", "多谢", "辛苦了", "ok", "okay", "好的", "嗯", "哦", "哈哈", "哈喽呀"
-        ]
-        let isGreeting = greetings.contains(trimmed)
-            || greetings.contains { trimmed.hasPrefix($0) && trimmed.count <= $0.count + 4 && !trimmed.contains(where: { "，。！？,.!?:：;；".contains($0) }) }
-        guard isGreeting else { return false }
-        // 操作动词排除：含文件操作/任务语义的一律不当闲聊
-        let actionKeywords = ["压缩", "转换", "转成", "重命名", "改名", "删除", "移动", "复制", "发送", "发给", "合并", "拆分", "识别", "提取", "下载", "上传", "转换", "处理", "整理", "分析", "生成", "创建", "新建", "打开", "convert", "compress", "rename", "delete", "move", "send", "merge", "split", "ocr", "email", "help", "怎么", "如何", "帮", "请"]
-        return !actionKeywords.contains { trimmed.contains($0) }
-    }
 }

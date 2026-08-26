@@ -15,6 +15,44 @@ public final class AgentDispatcher: Sendable {
         self.registry = registry
     }
     
+    /// 轻量意图探测（完全由 CLI/LLM 判断，本地零规则）：
+    /// 判断输入是否与文件操作/任务执行相关。输出单 token：FILE_RELATED / CASUAL / QUESTION
+    /// - returns: ("CASUAL", reply?) 闲聊 → UI 本地展示回复；其余走完整规划
+    public func detectIntentViaLLM(userPrompt: String) async -> (isCasual: Bool, reply: String?) {
+        let systemPrompt = """
+        你是 macOS 文件助手「文件魔法棒」的意图分类与接待模块。用户会输入一段文本，请你判断：
+        - CASUAL：闲聊/问候/感谢/应答（与文件操作、任务执行无关）
+        - TASK：与文件操作/批处理/任务执行相关（压缩、转换、重命名、发送、分析文件等）
+        - QUESTION：一般提问（与文件无关的知识问答）
+        对 CASUAL：用一行简短友好中文回应问候，并自然引导用户选中文件后下达指令。
+        只输出 JSON：{"type":"CASUAL|TASK|QUESTION","reply":"CASUAL 时的一句话回应，其余为空字符串"}
+        不要输出 JSON 以外的任何内容。
+        """
+        let messages = [
+            ["role": "system", "content": systemPrompt],
+            ["role": "user", "content": userPrompt]
+        ]
+        do {
+            let response = try await provider.sendChat(messages: messages, tools: nil)
+            let raw = (response.textContent ?? response.rawOutput ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            // 宽松 JSON 提取
+            var jsonText = raw
+            if let s = jsonText.range(of: "{"), let e = jsonText.range(of: "}", range: s.upperBound..<jsonText.endIndex) {
+                jsonText = String(jsonText[s.lowerBound..<e.upperBound])
+            }
+            if let data = jsonText.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let type = obj["type"] as? String {
+                let reply = obj["reply"] as? String
+                return (type.uppercased() == "CASUAL", reply)
+            }
+            // 解析失败保守当 TASK（完整规划兜底）
+            return (false, nil)
+        } catch {
+            return (false, nil)
+        }
+    }
+
     /// 模式二：全权委托 CLI 自主端到端执行（若配置了本地 CLI 引擎）
     public func executeAutonomously(
         userPrompt: String,

@@ -226,6 +226,13 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     
     /// 提交用户自然语言指令
     public func submitInstruction(_ text: String? = nil) {
+        Task { @MainActor in
+            await submitInstructionAsync(text)
+        }
+    }
+    
+    @MainActor
+    private func submitInstructionAsync(_ text: String? = nil) async {
         let prompt = (text ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
         
@@ -238,34 +245,35 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
             return
         }
         
-        if fileItems.isEmpty {
-            statusMessage = L10n.t("⚠️ 请先在 Finder 中选择文件或点击「手动选取」")
-            return
-        }
-        
+        // 无目标文件不再拦截：闲聊→本地秒回；提问/任务→完整规划（LLM Direct Answer 模式回答）
         self.inputText = "" // 发送后清空输入框
         self.mainTab = .chatTimeline // 发送指令后自动聚焦到对话任务流
         
-        // 0. 闲聊短路（语义判定，非字符数）：问候/确认类输入直接本地秒回，不发起 LLM 调用
-        if SkillIntentClassifier.shared.classify(userPrompt: prompt, fileItems: fileItems).type == .casualChat {
-            let reply = L10n.t("你好！我是文件魔法棒 ✨ 在 Finder 选中文件后，直接告诉我你想做什么（如「压缩后发飞书」「转成 PDF」「批量重命名」），我立刻处理。")
-            let casualPlan = ExecutionPlan(summary: reply, actions: [])
-            var casualTask = TaskExecutionRecord(
-                prompt: prompt,
-                status: .completed,
-                plan: casualPlan,
-                targetFilePaths: []
-            )
-            casualTask.completedAt = Date()
-            casualTask.walkthroughReport = reply
-            self.sessionTasks.removeAll(where: { $0.id == casualTask.id })
-            self.sessionTasks.insert(casualTask, at: 0)
-            self.taskHistory.removeAll(where: { $0.id == casualTask.id })
-            self.taskHistory.insert(casualTask, at: 0)
-            self.activeTask = nil
-            self.statusMessage = nil
-            Task { await TaskManager.shared.recordTask(casualTask) }
-            return
+        // 0. 意图探测（完全由 CLI/LLM 判断，本地零规则）：CASUAL → 展示模型回复；TASK/QUESTION → 完整规划
+        if fileItems.isEmpty {
+            isThinking = true
+            statusMessage = L10n.t("AI 正在分析意图...")
+            let probe = await dispatcher.detectIntentViaLLM(userPrompt: prompt)
+            self.isThinking = false
+            if probe.isCasual {
+                let reply = probe.reply?.isEmpty == false ? probe.reply! : L10n.t("你好！我是文件魔法棒 ✨ 在 Finder 选中文件后，直接告诉我你想做什么（如「压缩后发飞书」「转成 PDF」「批量重命名」），我立刻处理。")
+                var casualTask = TaskExecutionRecord(
+                    prompt: prompt,
+                    status: .completed,
+                    plan: ExecutionPlan(summary: reply, actions: []),
+                    targetFilePaths: []
+                )
+                casualTask.completedAt = Date()
+                casualTask.walkthroughReport = reply
+                self.sessionTasks.removeAll(where: { $0.id == casualTask.id })
+                self.sessionTasks.insert(casualTask, at: 0)
+                self.taskHistory.removeAll(where: { $0.id == casualTask.id })
+                self.taskHistory.insert(casualTask, at: 0)
+                self.activeTask = nil
+                self.statusMessage = nil
+                Task { await TaskManager.shared.recordTask(casualTask) }
+                return
+            }
         }
         
         isThinking = true
