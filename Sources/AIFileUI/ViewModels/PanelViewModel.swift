@@ -250,7 +250,8 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         self.mainTab = .chatTimeline // 发送指令后自动聚焦到对话任务流
         
         // 0. 意图探测（完全由 CLI/LLM 判断，本地零规则）：CASUAL → 展示模型回复；TASK/QUESTION → 完整规划
-        if fileItems.isEmpty {
+        //    无论是否有目标文件都探测（有文件时用户也可能只是打招呼）
+        doProbe: do {
             isThinking = true
             statusMessage = L10n.t("AI 正在分析意图...")
             let probe = await dispatcher.detectIntentViaLLM(userPrompt: prompt)

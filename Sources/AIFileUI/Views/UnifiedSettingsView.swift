@@ -1,6 +1,7 @@
 import SwiftUI
 import ServiceManagement
 import AIFileCore
+import AIFileAgent
 import AIFileFinderIntegration
 
 /// 配置管理主导航 Tab 枚举 (本地 CLI 纯净模式)
@@ -1486,6 +1487,8 @@ public struct UnifiedSettingsView: View {
     private func reloadSkills() {
         SkillManager.shared.reloadLocalSkills()
         self.localSkills = SkillManager.shared.allSkills
+        // 技能池变化：失效 codebuddy 会话与静态提示词缓存（下次调用重建，确保新技能被模型感知）
+        CLIModelClient.resetCodebuddySession()
     }
     
     private func selectProvider(_ provider: ProviderDefinition) {

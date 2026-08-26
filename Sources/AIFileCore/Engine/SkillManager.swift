@@ -178,6 +178,7 @@ public final class SkillManager: @unchecked Sendable {
             self.localLoadedSkills = []
             return
         }
+        // 技能池变化：失效静态提示词缓存（AIFileAgent 侧在 UI 层触发，此处仅数据层）
         
         var loaded: [SkillMetadata] = []
         for file in files where file.hasSuffix(".md") && file != "README.md" {

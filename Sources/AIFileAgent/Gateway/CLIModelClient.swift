@@ -7,6 +7,10 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
     public let modelName: String
     public let timeoutSeconds: TimeInterval
     
+    /// codebuddy 会话复用：会话建立后记录目录，后续调用加 -c 续会话（系统提示词/技能池只需传输一次）
+    nonisolated(unsafe) private static var codebuddySessionEstablished: Bool = false
+    private static let sessionLock = NSLock()
+    
     public var providerName: String {
         return tool.name
     }
@@ -122,6 +126,13 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
         return response
     }
     
+    /// 重置 codebuddy 会话（技能池/系统提示词变化后调用，下次调用将重建会话）
+    public static func resetCodebuddySession() {
+        sessionLock.lock()
+        codebuddySessionEstablished = false
+        sessionLock.unlock()
+    }
+    
     // MARK: - Private Execution & Parsing
     
     private func executeSubprocess(executablePath: String, promptPayload: String) async throws -> String {
@@ -147,6 +158,14 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
             toolArgs = "-p -y"
             if !modelName.isEmpty && modelName != "auto" && modelName != "default" {
                 toolArgs += " --model \(modelName)"
+            }
+            // 会话复用：已建立会话后续用 -c（continue），系统提示词与技能池仅在首会话传输；
+            // 技能清单变化时由 resetCodebuddySession 失效
+            Self.sessionLock.lock()
+            let hasSession = Self.codebuddySessionEstablished
+            Self.sessionLock.unlock()
+            if hasSession {
+                toolArgs += " -c"
             }
             toolArgs += " \"$CLI_PROMPT\""
         case .claude:
@@ -219,6 +238,11 @@ public final class CLIModelClient: LLMProviderProtocol, @unchecked Sendable {
                 guard latch.tryResume() else { return }
                 
                 if proc.terminationStatus == 0 && !output.isEmpty {
+                    if self.tool.type == .codebuddy {
+                        Self.sessionLock.lock()
+                        Self.codebuddySessionEstablished = true
+                        Self.sessionLock.unlock()
+                    }
                     continuation.resume(returning: output)
                 } else {
                     continuation.resume(throwing: NSError(
