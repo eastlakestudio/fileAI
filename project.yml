@@ -89,6 +89,7 @@ targets:
         LSUIElement: false
         NSHighResolutionCapable: true
         NSPrincipalClass: "NSApplication"
+        NSAppleEventsUsageDescription: "用于读取 Finder 当前选中的文件作为 AI 批处理目标，以及在授权目录内调度本地 CLI 工具。"
     settings:
       PRODUCT_NAME: "文件魔法棒"
       CODE_SIGN_ENTITLEMENTS: Support/AIFileApp.entitlements
