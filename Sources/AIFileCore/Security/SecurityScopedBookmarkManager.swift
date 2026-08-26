@@ -82,29 +82,43 @@ public final class SecurityScopedBookmarkManager: @unchecked Sendable {
         }
     }
     
-    /// 沙箱引导式授权（分步降级）：先试 HOME → 被拒/取消则引导 ~/.local 等具体 CLI 目录 → 再试 /opt/homebrew
-    /// 返回最终是否成功授权了至少一个目录
+    /// 沙箱引导式授权（分步）：HOME（部分系统对 HOME 根授权有限制）→ npm-global → .local → .claude → Homebrew
+    /// 每授权一个就继续，直到收集到覆盖常见 CLI 的授权集；返回是否授权了至少一个目录
     @MainActor
     public func requestCLIAuthorizationWizard() async -> Bool {
-        let candidates: [(path: String, message: String)] = [
-            (NSString(string: "~").expandingTildeInPath,
-             L10n.t("授权访问您的用户目录，以识别本地已安装的 CLI 工具（如 ~/.local/bin/agy、~/.npm-global/bin 等）及其登录凭据。")),
-            ((NSString(string: "~/.local").expandingTildeInPath),
-             L10n.t("未授权用户目录。请选择 ~/.local 目录（包含 agy 等 CLI）。")),
+        let home = NSString(string: "~").expandingTildeInPath
+        let candidates: [(path: String, message: String, optional: Bool)] = [
+            (home,
+             L10n.t("授权访问您的用户目录，以识别本地已安装的 CLI 工具（如 ~/.local/bin/agy、~/.npm-global/bin 等）及其登录凭据。若系统不允许选择整个用户目录，请依次授权后续的 ~/.npm-global 与 ~/.local 目录。"),
+             false),
+            ((home as NSString).appendingPathComponent(".npm-global"),
+             L10n.t("请选择 ~/.npm-global 目录（codebuddy 等 npm 全局 CLI 及其 node_modules 运行时位于此处）。"),
+             false),
+            ((home as NSString).appendingPathComponent(".local"),
+             L10n.t("请选择 ~/.local 目录（agy 等 CLI 位于 ~/.local/bin）。"),
+             false),
+            ((home as NSString).appendingPathComponent(".claude"),
+             L10n.t("请选择 ~/.claude 目录（Claude Code CLI 及其登录凭据位于此处）。"),
+             true),
             ("/opt/homebrew",
-             L10n.t("仍未发现 CLI。Homebrew 安装的 CLI 位于 /opt/homebrew，请授权该目录。"))
+             L10n.t("Homebrew 安装的 CLI 位于 /opt/homebrew，请授权该目录。"),
+             true)
         ]
+        var grantedCount = 0
         for candidate in candidates {
-            let grantedURL = await requestDirectoryAuthorization(
+            if grantedCount > 0 && candidate.optional {
+                // 已有核心授权，可选目录直接跳过（避免弹窗疲劳）
+                continue
+            }
+            if await requestDirectoryAuthorization(
                 initialPath: candidate.path,
                 prompt: L10n.t("授权此目录"),
                 message: candidate.message
-            )
-            if grantedURL != nil {
-                return true
+            ) != nil {
+                grantedCount += 1
             }
         }
-        return false
+        return grantedCount > 0
     }
     
     /// 为给定的目录 URL 生成安全作用域书签并持久化（沙箱 App 使用 withSecurityScope，由 app-scope entitlement 支撑）
