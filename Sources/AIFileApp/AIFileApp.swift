@@ -261,7 +261,8 @@ struct AIFileApplication {
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
-        app.setActivationPolicy(.regular) // TEMP-DEBUG: 测试 TCC 弹窗是否需要 regular policy
+        // accessory 模式：无 Dock 图标，窗口收起(orderOut)后不在任务栏留任何痕迹，仅状态栏常驻
+        app.setActivationPolicy(.accessory)
         app.run()
     }
 }
