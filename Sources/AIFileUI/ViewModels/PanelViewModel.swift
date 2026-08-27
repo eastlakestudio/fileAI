@@ -44,6 +44,10 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var isThinking: Bool = false
     @Published public var thinkingElapsedSeconds: Double = 0
     @Published public var statusMessage: String? = nil
+    /// 桌面钉住模式：窗口常驻所有空间、不抢焦点，像桌面小组件一样贴在桌面
+    @Published public var isPinnedToDesktop: Bool = UserDefaults.standard.bool(forKey: "aifiles.pinnedToDesktop") {
+        didSet { UserDefaults.standard.set(isPinnedToDesktop, forKey: "aifiles.pinnedToDesktop") }
+    }
     /// Finder 自动化权限缺失时的引导横幅
     @Published public var isShowingAutomationGuide: Bool = false
     /// 最近一次 Finder 抓取的诊断信息（界面弹窗展示）

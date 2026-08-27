@@ -87,6 +87,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StatusBarManager.shared.onUndoClicked = { [weak self] in
             self?.viewModel.undoLastOperation()
         }
+        StatusBarManager.shared.onToggleDesktopPin = { [weak self] current in
+            guard let self = self else { return current }
+            self.viewModel.isPinnedToDesktop.toggle()
+            return self.viewModel.isPinnedToDesktop
+        }
         StatusBarManager.shared.onOpenSettings = { [weak self] in
             self?.viewModel.currentPage = .settings(initialTab: .cliModel)
             self?.showWindow()
@@ -113,6 +118,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.handleWindowModeChange(isMini: isMini)
             }
             .store(in: &cancellables)
+        
+        // 6. 监听桌面钉住模式：常驻所有空间 + 不抢焦点（桌面小组件形态）
+        viewModel.$isPinnedToDesktop
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] pinned in
+                self?.applyDesktopPin(pinned: pinned)
+            }
+            .store(in: &cancellables)
+        
+        // 启动时恢复上次钉住状态
+        if viewModel.isPinnedToDesktop {
+            applyDesktopPin(pinned: true)
+        }
+    }
+    
+    /// 桌面钉住模式：窗口在所有 Space/显示器可见、不参与 Cmd+Tab 循环、点击不抢其他 App 焦点
+    private func applyDesktopPin(pinned: Bool) {
+        guard let window = window else { return }
+        if pinned {
+            window.level = .floating
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
+            window.becomesKeyOnlyIfNeeded = true
+            window.hidesOnDeactivate = false
+            window.isMovableByWindowBackground = true
+        } else {
+            window.level = .normal
+            window.collectionBehavior = [.fullScreenPrimary, .canJoinAllSpaces]
+            window.becomesKeyOnlyIfNeeded = false
+        }
     }
     
     func applicationWillTerminate(_ notification: Notification) {

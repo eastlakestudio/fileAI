@@ -59,7 +59,20 @@ public struct PinnedTargetFilesHeaderView: View {
             .cornerRadius(10)
             .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
             
-            // 3. 卡片外部（右侧）：小窗口模式时展示独立的还原大窗按钮
+            // 3. 卡片外部（右侧）：钉住桌面切换 + 小窗口模式还原按钮
+            Button(action: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    viewModel.isPinnedToDesktop.toggle()
+                }
+            }) {
+                Image(systemName: viewModel.isPinnedToDesktop ? "pin.fill" : "pin")
+                    .font(.system(size: 8.5))
+                    .foregroundColor(viewModel.isPinnedToDesktop ? .accentColor : .secondary)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            .help(viewModel.isPinnedToDesktop ? L10n.t("取消桌面钉住（恢复普通窗口）") : L10n.t("钉住到桌面：常驻所有空间、不抢焦点"))
+            
             if viewModel.isMiniMode {
                 restoreWindowButton
             }

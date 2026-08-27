@@ -3451,6 +3451,22 @@
         }
       }
     },
+    "取消桌面钉住（恢复普通窗口）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unpin from desktop (restore normal window)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消桌面钉住（恢复普通窗口）"
+          }
+        }
+      }
+    },
     "合并 %@ 个 PDF 为 %@": {
       "extractionState": "stale",
       "localizations": {
@@ -9210,6 +9226,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "重试"
+          }
+        }
+      }
+    },
+    "钉住到桌面：常驻所有空间、不抢焦点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pin to desktop: visible on all Spaces, non-focus-stealing"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "钉住到桌面：常驻所有空间、不抢焦点"
+          }
+        }
+      }
+    },
+    "钉住聊天窗到桌面": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pin chat window to desktop"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "钉住聊天窗到桌面"
           }
         }
       }

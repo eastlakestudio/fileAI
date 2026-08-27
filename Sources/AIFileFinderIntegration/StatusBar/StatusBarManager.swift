@@ -12,6 +12,12 @@ public final class StatusBarManager: NSObject, ObservableObject {
     public var onFilesDropped: (([URL]) -> Void)?
     public var onUndoClicked: (() -> Void)?
     public var onOpenSettings: (() -> Void)?
+    /// 桌面钉住切换：返回切换后的状态用于菜单打勾
+    public var onToggleDesktopPin: ((Bool) -> Bool)?
+    
+    @objc private func toggleDesktopPin() {
+        _ = onToggleDesktopPin?(UserDefaults.standard.bool(forKey: "aifiles.pinnedToDesktop") ?? false)
+    }
     
     public override init() {
         super.init()
@@ -59,6 +65,11 @@ public final class StatusBarManager: NSObject, ObservableObject {
         let openItem = NSMenuItem(title: L10n.t("显示文件魔法棒 (%@)", GlobalHotKeyManager.shared.hotKeySymbol), action: #selector(openPanel), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
+        
+        let pinItem = NSMenuItem(title: L10n.t("钉住聊天窗到桌面"), action: #selector(toggleDesktopPin), keyEquivalent: "")
+        pinItem.target = self
+        pinItem.state = (UserDefaults.standard.bool(forKey: "aifiles.pinnedToDesktop")) ? .on : .off
+        menu.addItem(pinItem)
         
         let undoItem = NSMenuItem(title: L10n.t("撤销上次操作 (⌘Z)"), action: #selector(triggerUndo), keyEquivalent: "")
         undoItem.target = self
