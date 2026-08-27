@@ -187,6 +187,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 强制 safeAreaInsets 为 0，确保 SwiftUI 内容绝对贴顶 (y: 0)
         let hostingView = ZeroInsetHostingView(rootView: MainFloatingPanel(viewModel: viewModel))
+        // 透明穿透：hosting 层不绘制底色，玻璃效果完全由 SwiftUI 背景层负责
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hostingView
         panel.center()
         
