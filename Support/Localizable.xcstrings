@@ -2998,7 +2998,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "About AI File Assistant"
+            "value": "About FileWand"
           }
         },
         "zh-Hans": {
@@ -3712,7 +3712,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show/hide AI File Assistant:"
+            "value": "Show/hide FileWand:"
           }
         },
         "zh-Hans": {
@@ -6109,7 +6109,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "AI File Assistant"
+            "value": "FileWand"
           }
         },
         "zh-Hans": {
@@ -6432,7 +6432,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show AI File Assistant (%@)"
+            "value": "Show FileWand (%@)"
           }
         },
         "zh-Hans": {
@@ -6449,7 +6449,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Show AI File Assistant (⌥M)"
+            "value": "Show FileWand (⌥M)"
           }
         },
         "zh-Hans": {
@@ -8761,7 +8761,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quit AI File Assistant"
+            "value": "Quit FileWand"
           }
         },
         "zh-Hans": {
@@ -8795,7 +8795,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quit AI File Assistant"
+            "value": "Quit FileWand"
           }
         },
         "zh-Hans": {
@@ -8812,7 +8812,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quit AI File Assistant (⌘Q)"
+            "value": "Quit FileWand (⌘Q)"
           }
         },
         "zh-Hans": {
@@ -9237,7 +9237,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hide AI File Assistant"
+            "value": "Hide FileWand"
           }
         },
         "zh-Hans": {

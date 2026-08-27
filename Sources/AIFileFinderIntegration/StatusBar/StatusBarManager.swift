@@ -22,7 +22,7 @@ public final class StatusBarManager: NSObject, ObservableObject {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem?.button {
-            if let image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: "AI File Assistant") {
+            if let image = NSImage(systemSymbolName: "wand.and.stars", accessibilityDescription: "FileWand") {
                 image.isTemplate = true
                 button.image = image
             } else {

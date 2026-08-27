@@ -5,7 +5,7 @@
 **用一句话，让 AI 批量处理你的文件**
 **Batch-process your files with one sentence**
 
-[![Download](https://img.shields.io/badge/⬇_Download-DMG_v1.0.0-blue)](https://github.com/eastlakestudio/fileAI/releases/download/v1.0.0/AIFileAssistant-1.0.0-arm64.dmg)
+[![Download](https://img.shields.io/badge/⬇_Download-DMG_v1.0.0-blue)](https://github.com/eastlakestudio/fileAI/releases/download/v1.1.1/FileWand-1.1.1-arm64.dmg)
 [![Release](https://img.shields.io/badge/release-v1.0.0-green)](https://github.com/eastlakestudio/fileAI/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS_14%2B_Apple_Silicon-silver)]( )
 [![Notarized](https://img.shields.io/badge/%E2%9C%93_Apple_Notarized-Developer_ID-success)]( )
@@ -70,7 +70,7 @@ Select files in Finder ➔ ⌥M ➔ "Compress and send to John on Feishu" ➔ �
 
 | 来源 Source | 链接 Link |
 |---|---|
-| ⭐ 直接下载 Direct | [AIFileAssistant-1.0.0-arm64.dmg](https://github.com/eastlakestudio/fileAI/releases/download/v1.0.0/AIFileAssistant-1.0.0-arm64.dmg) |
+| ⭐ 直接下载 Direct | [FileWand-1.1.1-arm64.dmg](https://github.com/eastlakestudio/fileAI/releases/download/v1.1.1/FileWand-1.1.1-arm64.dmg) |
 | 🌐 官网页面 Homepage | [eastlakestudio.github.io/fileAI](https://eastlakestudio.github.io/fileAI/) |
 | 📦 全部版本 All releases | [GitHub Releases](https://github.com/eastlakestudio/fileAI/releases) |
 
