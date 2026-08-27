@@ -22,20 +22,11 @@ public struct ModernChatInputCardView: View {
         .padding(10)
         .background(
             ZStack {
-                // 与主窗口一致的亮色玻璃：材料模糊 + 低透明度渐变叠层
+                // 与主窗口一致的均匀玻璃半透（无渐变）
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.50),
-                                Color(nsColor: .controlBackgroundColor).opacity(0.20)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .fill(Color.white.opacity(0.25))
             }
         )
         .overlay(

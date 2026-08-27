@@ -34,17 +34,11 @@ public struct PinnedTargetFilesHeaderView: View {
             .padding(.vertical, 6)
             .background(
                 ZStack {
+                    // 与主窗/聊天框一致的均匀玻璃半透（无渐变）
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(.ultraThinMaterial)
-                    LinearGradient(
-                        colors: [
-                            Color.accentColor.opacity(0.16),
-                            Color.blue.opacity(0.08),
-                            Color(nsColor: .controlBackgroundColor).opacity(0.70)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.white.opacity(0.25))
                 }
             )
             .overlay(
@@ -241,7 +235,7 @@ public struct PinnedTargetFilesHeaderView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 3.5)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+            .background(Color.white.opacity(0.22))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.orange.opacity(0.35), lineWidth: 0.9)
@@ -280,7 +274,7 @@ public struct PinnedTargetFilesHeaderView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 3.5)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.75))
+            .background(Color.white.opacity(0.22))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color.accentColor.opacity(0.35), lineWidth: 0.9)

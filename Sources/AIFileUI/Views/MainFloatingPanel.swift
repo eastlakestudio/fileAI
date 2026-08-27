@@ -54,24 +54,15 @@ public struct MainFloatingPanel: View {
         .frame(minWidth: 640, maxWidth: .infinity, minHeight: viewModel.isMiniMode ? 160 : 450, maxHeight: viewModel.isMiniMode ? 235 : .infinity, alignment: .top)
         .background(
             ZStack {
-                // 亮色玻璃：材料实时模糊 + 极低透明度亮色叠层，保持通透与整体提亮
+                // 均匀玻璃半透：材料实时模糊 + 低透明度单色叠层，无渐变
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.55),
-                                Color(nsColor: .windowBackgroundColor).opacity(0.22)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .fill(Color.white.opacity(0.30))
 
                 // 次表面流动微光层
                 RadialGradient(
-                    gradient: Gradient(colors: [Color.white.opacity(0.12), Color.clear]),
+                    gradient: Gradient(colors: [Color.white.opacity(0.10), Color.clear]),
                     center: .topLeading,
                     startRadius: 20,
                     endRadius: 400
