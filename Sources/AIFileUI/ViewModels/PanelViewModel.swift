@@ -125,8 +125,9 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         return AgentDispatcher(provider: MockLLMClient(), registry: registry)
     }
     
-    /// 从 Finder 抓取最新选中的文件（异步非阻塞；未授权时由 osascript 触发 TCC 授权弹窗）
-    public func fetchFromFinderAsync() {
+    /// 从 Finder 抓取最新选中的文件（异步非阻塞）
+    /// - Parameter silent: 静默模式（启动/onAppear 自动抓取用）——为空时不提示，避免刷屏
+    public func fetchFromFinderAsync(silent: Bool = false) {
         Task { [weak self] in
             let urls = await FinderContextReader.shared.getSelectedFinderItemsAsync(
                 onPermissionDenied: {
@@ -142,9 +143,10 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 }
             )
             await MainActor.run {
-                // 诊断模式：结果为空时在状态栏显示可查看诊断弹窗
-                if urls.isEmpty {
-                    self?.statusMessage = L10n.t("未获取到选中文件，点击右侧「诊断」查看详情")
+                // 抓取为空：静默保持现状（Finder 本就无选中是正常场景，不弹提示刷屏）；
+                // 仅当已有文件列表被清空时提示。诊断可随时通过标题栏 🩺 按钮查看。
+                if !silent && urls.isEmpty && !(self?.fileItems.isEmpty ?? true) {
+                    self?.statusMessage = L10n.t("Finder 当前无选中项（诊断详情见标题栏 🩺 按钮）")
                 }
                 self?.setTargetURLs(urls)
             }
@@ -154,6 +156,11 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     /// 从 Finder 抓取最新选中的文件（历史同步接口：内部改走异步，避免 AppleScript 阻塞主线程）
     public func fetchFromFinder() {
         fetchFromFinderAsync()
+    }
+    
+    /// 静默抓取（启动/onAppear 自动场景：无选中不提示）
+    public func fetchFromFinderSilently() {
+        fetchFromFinderAsync(silent: true)
     }
     
     /// 手动打开文件选择器
