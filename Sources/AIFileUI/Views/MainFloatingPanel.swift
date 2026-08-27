@@ -58,7 +58,7 @@ public struct MainFloatingPanel: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(0.30))
+                    .fill(Color.white.opacity(0.15))
 
                 // 次表面流动微光层
                 RadialGradient(

@@ -26,7 +26,7 @@ public struct ModernChatInputCardView: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(.ultraThinMaterial)
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.25))
+                    .fill(Color.white.opacity(0.12))
             }
         )
         .overlay(
