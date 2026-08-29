@@ -89,6 +89,24 @@ public struct SystemPromptBuilder: Sendable {
         return parts.joined(separator: "\n")
     }
 
+    // MARK: - 待办提炼提示词
+
+    /// 待办提炼系统提示词：从近期聊天任务摘要中抽取前瞻性行动项，严格 JSON 数组输出
+    public static func buildTodoExtractionPrompt(transcript: String) -> String {
+        """
+        你是 macOS 文件助手「文件魔法棒」的待办提炼模块。阅读下面的近期对话与任务记录，提取其中【尚未完成、需要用户后续跟进或适合下一步执行】的行动项。
+        
+        【提炼法则】
+        1. 只输出机器可读 JSON 数组，不要输出任何其他内容：[{"title":"动词开头的一句话","detail":"可选补充说明"}]
+        2. 每条 title 控制在 20 字以内，具体可执行，禁止编造对话中未提到的内容。
+        3. 已明确执行完成的操作不要再列为待办；纯寒暄/问候/闲聊输出空数组 []。
+        4. 按建议执行的先后顺序排列，最多 5 条。
+        
+        【近期对话与任务记录】:
+        \(transcript)
+        """
+    }
+
     // MARK: - 规划法则（纯静态文本）
 
     private static let staticRulesBlock: String = """

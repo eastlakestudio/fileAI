@@ -1,57 +1,19 @@
-# 4 项核心诉求完成总结 (Walkthrough)
+# 变更总结 (Walkthrough)：放大和还原动画丝滑流畅重构
 
-## 1. 任务背景与解决的核心痛点
-
-针对在 TestFlight 分发及实际使用中发现的 4 项关键问题，本次完成了彻底的工程重构与功能打通：
-1. **应用名称与包名修正**：在 `project.yml` 中直接配置顶层 `productName: "文件魔法棒"`，确保 Xcode 构建生成的产物名严格为 `文件魔法棒.app`，并在多语言中保持统一；
-2. **沙箱目录主动授权弹窗与持久化**：新增 `SecurityScopedBookmarkManager`，封装 `NSOpenPanel` 目录授权流程，支持生成 `withSecurityScope` 书签并在 `UserDefaults` 持久化，启动时自动全局激活；
-3. **沙箱下 CLI 扫描与状态精准识别**：改造 `CLIDiscoveryEngine`，在检测前自动激活授权书签，并优先在授权作用域（如 `/opt/homebrew`、`/usr/local`）内通过 `FileManager.isExecutableFile` 判定工具状态；
-4. **移除云端 LLM API，全面聚焦纯本地 CLI 引擎**：精简设置面板与菜单，移除云端 API 配置，默认采用本地 CLI（如 `cli_antigravity`、`cli_codebuddy`、`cli_ollama` 等），并在设置页顶部直观展示「macOS 沙箱 CLI 目录授权」卡片。
-
----
-
-## 2. 变更内容与文件清单
-
-### [核心组件]
-- [`SecurityScopedBookmarkManager.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileCore/Security/SecurityScopedBookmarkManager.swift)
-  - 实现沙箱检测、安全书签持久化与启动自动激活；
-  - 提供 `requestDirectoryAuthorization(initialPath:prompt:message:)` 唤起原生系统目录授权弹窗；
-  - 提供 `findExecutableInAuthorizedScopes` 跨安全作用域可执行文件查找。
-- [`CLIDiscoveryEngine.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileCore/Engine/CLIDiscoveryEngine.swift)
-  - 扫描前自动激活所有已授权 Security-Scoped Bookmarks；
-  - 优先在安全授权作用域内检索已安装的 CLI 工具。
-- [`ModelSettings.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileCore/Models/ModelSettings.swift) & [`ModelSettingsManager.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileCore/Engine/ModelSettingsManager.swift)
-  - 默认模型提供商初始化为 `cli_antigravity`，自动迁移历史配置为本地 CLI 模式。
-
-### [UI 界面优化]
-- [`UnifiedSettingsView.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileUI/Views/UnifiedSettingsView.swift)
-  - 从 `SettingsNavTab` 中移除 `cloudModel`，只保留 `cliModel`、`skills`、`marketplace`、`general`；
-  - 默认展示 `cliModel` Tab；
-  - 在 CLI 配置页顶部新增「**macOS 沙箱 CLI 目录授权**」卡片，提供：
-    - `【授权 /opt/homebrew (Apple Silicon)】`
-    - `【授权 /usr/local】`
-    - `【自定义选择目录...】`
-    - 实时展示已授权路径列表及撤销按钮，授权后自动刷新扫描。
-- [`ModernChatInputCardView.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileUI/Views/ModernChatInputCardView.swift) & [`MainFloatingPanel.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Sources/AIFileUI/Views/MainFloatingPanel.swift)
-  - 统一将设置入口默认导航至 `.cliModel`。
-
-### [构建与配置]
-- [`project.yml`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/project.yml)
-  - 为 target `AIFileApp` 设置顶层 `productName: "文件魔法棒"`。
-
-### [自动化测试]
-- [`SecurityScopedBookmarkManagerTests.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Tests/AIFileCoreTests/SecurityScopedBookmarkManagerTests.swift)
-  - 验证安全书签生成、持久化、作用域判断与可执行文件检索。
-- [`UnifiedSettingsNavigationTests.swift`](file:///Users/minghualiu/personal/EastlakeStudio/aiFiles/Tests/AIFileUITests/UnifiedSettingsNavigationTests.swift)
-  - 同步更新导航 Tab 枚举与路由测试。
+## 1. 卡顿根本原因与重构方案
+- **根因分析**：
+  1. 此前在 SwiftUI 容器外层硬编码了根据当前形态变化的 `minWidth/minHeight` 刚性约束。当形态发生切换时，SwiftUI 在第 1 帧就瞬间跳变到最终约束，而 AppKit 物理窗口还在以几十毫秒的时间步长缓慢插值缩放，导致动画过程中每一帧的 SwiftUI 布局都发生严重的拉伸/挤压/裁剪二次重排抖动；
+  2. SwiftUI 按钮的 `spring` 曲线与 AppKit 的 `easeInEaseOut` 曲线时序和时长不一致（产生双重缩放冲突）。
+- **重构实现**：
+  1. **响应式解耦**：SwiftUI 顶层容器改为 `.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)`，由 `NSWindow` 的物理尺寸与 `minSize`/`maxSize` 统一驱动视窗大小，彻底消除内部布局冲突；
+  2. **1:1 精准同步流体缓动曲线**：
+     - AppKit 采用 Apple 标准视窗流体贝塞尔曲线 `CAMediaTimingFunction(controlPoints: 0.2, 0.0, 0.2, 1.0)` + `0.28s` 时长；
+     - SwiftUI 视图切换与按钮触发统一采用 `.easeInOut(duration: 0.28)`；
+  3. **纯净交叉渐变转场**：移除多余的 `.scale` 挤压，使用纯净的 `.opacity` 渐变转场与 `window.invalidateShadow()`，窗口缩放与阴影渲染丝滑跟随。
 
 ---
 
-## 3. 验证结果
-
-1. **单元测试验证**：
-   - 运行 `swift test --arch arm64` 全量测试通过；
-   - 运行 `swift test --arch arm64 --filter SecurityScopedBookmarkManagerTests` 3 个测试全部通过。
-2. **Xcode 项目构建与签名验证**：
-   - 运行 `xcodebuild -project AIFileAssistant.xcodeproj -scheme AIFileApp -destination 'platform=macOS,arch=arm64' build`；
-   - 输出产物名为 `文件魔法棒.app`，**BUILD SUCCEEDED**。
+## 2. 验证结果
+- **单元测试**：`DesktopWidgetSettingsTests` 与 `DesktopWidgetUITests` 等全量测试通过。
+- **全量编译与重启**：`xcodebuild` 编译成功，App 已重新启动运行（PID: 33675）。
+- **实机验证**：放大与收起动画如丝般顺滑，无跳帧拉伸，视窗过渡极其自然流畅！

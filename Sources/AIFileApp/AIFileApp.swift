@@ -11,6 +11,39 @@ final class ZeroInsetHostingView<Content: View>: NSHostingView<Content> {
     }
 }
 
+/// 专属桌面小组件悬浮面板：强制允许获取键盘与主窗口焦点，并在点击时自动激活前台焦点，屏蔽 Esc 键关闭窗口行为
+final class AIFileWidgetPanel: NSPanel {
+    override var canBecomeKey: Bool {
+        return true
+    }
+    
+    override var canBecomeMain: Bool {
+        return true
+    }
+    
+    override func mouseDown(with event: NSEvent) {
+        if !self.isKeyWindow {
+            self.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        super.mouseDown(with: event)
+    }
+    
+    /// 屏蔽 NSPanel 默认的 Esc 键关闭/隐藏窗口行为
+    override func cancelOperation(_ sender: Any?) {
+        // 作为常驻桌面小组件，按 Esc 键绝不关闭窗口
+    }
+    
+    /// 拦截按键事件中的 Esc 键（KeyCode 53），防止系统默认的快捷键关闭动作
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.keyCode == 53 {
+            // 返回 true 表示已消费该事件，防止触发任何系统关闭路由
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 private let singleInstanceNotificationName = "com.eastlakestudio.aifiles.activate"
 
 /// 单进程文件锁句柄（保持打开以维持锁）
@@ -78,7 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 1. 设置状态栏
         StatusBarManager.shared.setupStatusBar()
         StatusBarManager.shared.onToggleWindow = { [weak self] in
-            self?.toggleWindow()
+            self?.showWindow()
+            self?.viewModel.fetchFromFinderAsync()
         }
         StatusBarManager.shared.onFilesDropped = { [weak self] urls in
             self?.viewModel.setTargetURLs(urls)
@@ -91,6 +125,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return current }
             self.viewModel.isPinnedToDesktop.toggle()
             return self.viewModel.isPinnedToDesktop
+        }
+        StatusBarManager.shared.onSelectWidgetMode = { [weak self] mode in
+            self?.viewModel.widgetPresentationMode = mode
+            self?.showWindow()
+        }
+        StatusBarManager.shared.onSelectWidgetLevel = { [weak self] level in
+            self?.viewModel.widgetLevelMode = level
         }
         StatusBarManager.shared.onOpenSettings = { [weak self] in
             self?.viewModel.currentPage = .settings(initialTab: .cliModel)
@@ -110,42 +151,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 4. 构建悬浮 Panel
         setupFloatingPanel()
         
-        // 5. 监听 Mini 模式切换并平滑缩放物理窗口尺寸 (Spotlight 极简质感)
-        viewModel.$isMiniMode
-            .dropFirst()
+        // 5. 监听桌面组件形态切换并平滑缩放物理窗口尺寸 (.pillCapsule, .widgetCard, .fullWindow)
+        viewModel.$widgetPresentationMode
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] isMini in
-                self?.handleWindowModeChange(isMini: isMini)
+            .sink { [weak self] mode in
+                self?.handleWidgetPresentationModeChange(mode: mode)
             }
             .store(in: &cancellables)
         
-        // 6. 监听桌面钉住模式：常驻所有空间 + 不抢焦点（桌面小组件形态）
-        viewModel.$isPinnedToDesktop
+        // 6. 监听桌面小组件层级模式：置顶悬浮 / 贴合桌面
+        viewModel.$widgetLevelMode
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] pinned in
-                self?.applyDesktopPin(pinned: pinned)
+            .sink { [weak self] level in
+                self?.applyWidgetLevel(level: level)
             }
             .store(in: &cancellables)
         
-        // 启动时恢复上次钉住状态
-        if viewModel.isPinnedToDesktop {
-            applyDesktopPin(pinned: true)
-        }
+        // 启动时初始化形态与层级
+        handleWidgetPresentationModeChange(mode: viewModel.widgetPresentationMode)
+        applyWidgetLevel(level: viewModel.widgetLevelMode)
     }
     
-    /// 桌面钉住模式：窗口在所有 Space/显示器可见、不参与 Cmd+Tab 循环、点击不抢其他 App 焦点
-    private func applyDesktopPin(pinned: Bool) {
+    /// 应用桌面小组件层级
+    private func applyWidgetLevel(level: WidgetLevelMode) {
         guard let window = window else { return }
-        if pinned {
+        switch level {
+        case .floating:
             window.level = .floating
             window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-            window.becomesKeyOnlyIfNeeded = true
+            window.becomesKeyOnlyIfNeeded = false
             window.hidesOnDeactivate = false
             window.isMovableByWindowBackground = true
-        } else {
+        case .desktopLevel:
+            // 贴合桌面层级：设为普通窗口层（.normal），配合 stationary 和 canJoinAllSpaces。
+            // 当其他普通 App 激活时，其他 App 窗口自然覆盖在小组件上方（保持桌面贴合形态）；
+            // 当用户点击小组件时，立即获取 Key 焦点支持打字输入！
             window.level = .normal
-            window.collectionBehavior = [.fullScreenPrimary, .canJoinAllSpaces]
+            window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
             window.becomesKeyOnlyIfNeeded = false
+            window.hidesOnDeactivate = false
+            window.isMovableByWindowBackground = true
         }
     }
     
@@ -199,14 +244,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func setupFloatingPanel() {
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 768, height: 530),
+        let panel = AIFileWidgetPanel(
+            contentRect: NSRect(x: 0, y: 0, width: DesktopWidgetSettings.standardWidgetWidth, height: DesktopWidgetSettings.standardWidgetHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         panel.isFloatingPanel = false
-        panel.level = .normal
+        panel.level = .floating
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.becomesKeyOnlyIfNeeded = false
@@ -216,8 +261,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.minSize = NSSize(width: 640, height: 450)
-        panel.collectionBehavior = [.fullScreenPrimary, .canJoinAllSpaces]
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         
         // 强制 safeAreaInsets 为 0，确保 SwiftUI 内容绝对贴顶 (y: 0)
         let hostingView = ZeroInsetHostingView(rootView: MainFloatingPanel(viewModel: viewModel))
@@ -225,63 +269,173 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingView.wantsLayer = true
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = hostingView
-        panel.center()
+        
+        // 监听窗口移动，实现边缘智能吸附与桌面坐标记忆
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: panel,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleWindowDidMove()
+        }
+        
+        // 恢复上次保存的桌面位置或居中
+        if let savedX = viewModel.widgetSettings.lastSavedOriginX,
+           let savedY = viewModel.widgetSettings.lastSavedOriginY {
+            panel.setFrameOrigin(NSPoint(x: savedX, y: savedY))
+        } else {
+            panel.center()
+        }
         
         self.window = panel
     }
     
-    private func handleWindowModeChange(isMini: Bool) {
-        guard let window = window else { return }
+    /// 记忆桌面小组件卡片态下的原始坐标 (切换为大窗前记录，用于原位收回)
+    private var lastWidgetOrigin: NSPoint?
+    
+    private func handleWindowDidMove() {
+        guard let window = window, let screen = window.screen ?? NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame
+        var windowFrame = window.frame
+        let snapThreshold: CGFloat = 22
+        var didSnap = false
+        
+        // 仅在小组件卡片模式下执行边缘智能吸附与小窗坐标记忆
+        if viewModel.widgetPresentationMode == .widgetCard {
+            // 左边缘吸附
+            if abs(windowFrame.minX - screenFrame.minX) < snapThreshold {
+                windowFrame.origin.x = screenFrame.minX + 8
+                didSnap = true
+            }
+            // 右边缘吸附
+            if abs(windowFrame.maxX - screenFrame.maxX) < snapThreshold {
+                windowFrame.origin.x = screenFrame.maxX - windowFrame.width - 8
+                didSnap = true
+            }
+            // 下边缘吸附
+            if abs(windowFrame.minY - screenFrame.minY) < snapThreshold {
+                windowFrame.origin.y = screenFrame.minY + 8
+                didSnap = true
+            }
+            // 上边缘吸附
+            if abs(windowFrame.maxY - screenFrame.maxY) < snapThreshold {
+                windowFrame.origin.y = screenFrame.maxY - windowFrame.height - 8
+                didSnap = true
+            }
+            
+            if didSnap {
+                window.setFrameOrigin(windowFrame.origin)
+            }
+            
+            // 实时记忆与持久化小组件桌面位置
+            lastWidgetOrigin = window.frame.origin
+            viewModel.widgetSettings.lastSavedOriginX = Double(window.frame.origin.x)
+            viewModel.widgetSettings.lastSavedOriginY = Double(window.frame.origin.y)
+            viewModel.widgetSettings.save()
+        }
+    }
+    
+    private func handleWidgetPresentationModeChange(mode: WidgetPresentationMode) {
+        guard let window = window, let screen = window.screen ?? NSScreen.main else { return }
+        let screenFrame = screen.visibleFrame
         let currentFrame = window.frame
-        let targetHeight: CGFloat = isMini ? 200 : 530
-        let targetWidth: CGFloat = currentFrame.width
-        let targetY = currentFrame.origin.y + (currentFrame.height - targetHeight)
-        let newFrame = NSRect(x: currentFrame.origin.x, y: targetY, width: targetWidth, height: targetHeight)
         
-        updateTrafficLightButtons(isMini: isMini)
+        let targetWidth: CGFloat
+        let targetHeight: CGFloat
+        let isMini = (mode != .fullWindow)
+        var targetOrigin: NSPoint
         
-        if isMini {
-            window.minSize = NSSize(width: 640, height: 160)
-            window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: 235)
-        } else {
-            window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        switch mode {
+        case .fullWindow:
+            // 1. 放大前：先记录小组件当前的精确原点位置
+            lastWidgetOrigin = currentFrame.origin
+            
+            targetWidth = max(currentFrame.width, 768)
+            targetHeight = 530
             window.minSize = NSSize(width: 640, height: 450)
+            window.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+            
+            // 计算默认顶部对齐向下展开的目标原点
+            var calculatedOriginX = currentFrame.origin.x
+            var calculatedOriginY = currentFrame.origin.y + (currentFrame.height - targetHeight)
+            
+            // 边界防护：确保大窗整体处于 screen.visibleFrame 内部，绝不出界或被 Dock 遮挡
+            let margin: CGFloat = 12
+            if calculatedOriginX + targetWidth > screenFrame.maxX - margin {
+                calculatedOriginX = screenFrame.maxX - targetWidth - margin
+            }
+            if calculatedOriginX < screenFrame.minX + margin {
+                calculatedOriginX = screenFrame.minX + margin
+            }
+            if calculatedOriginY < screenFrame.minY + margin {
+                calculatedOriginY = screenFrame.minY + margin
+            }
+            if calculatedOriginY + targetHeight > screenFrame.maxY - margin {
+                calculatedOriginY = screenFrame.maxY - targetHeight - margin
+            }
+            
+            targetOrigin = NSPoint(x: calculatedOriginX, y: calculatedOriginY)
+            
+        case .widgetCard:
+            targetWidth = DesktopWidgetSettings.standardWidgetWidth
+            targetHeight = DesktopWidgetSettings.standardWidgetHeight
+            window.minSize = NSSize(width: DesktopWidgetSettings.standardWidgetWidth, height: DesktopWidgetSettings.minWidgetHeight)
+            window.maxSize = NSSize(width: DesktopWidgetSettings.standardWidgetWidth, height: 245)
+            
+            // 2. 缩小时：精准还原到之前记忆的小组件原点位置
+            var restoreOrigin = lastWidgetOrigin ?? NSPoint(
+                x: viewModel.widgetSettings.lastSavedOriginX ?? Double(currentFrame.origin.x),
+                y: viewModel.widgetSettings.lastSavedOriginY ?? Double(currentFrame.origin.y + (currentFrame.height - targetHeight))
+            )
+            
+            // 边界防护：确保恢复时同样安全处于屏幕内
+            let margin: CGFloat = 8
+            if restoreOrigin.x + targetWidth > screenFrame.maxX - margin {
+                restoreOrigin.x = screenFrame.maxX - targetWidth - margin
+            }
+            if restoreOrigin.x < screenFrame.minX + margin {
+                restoreOrigin.x = screenFrame.minX + margin
+            }
+            if restoreOrigin.y < screenFrame.minY + margin {
+                restoreOrigin.y = screenFrame.minY + margin
+            }
+            if restoreOrigin.y + targetHeight > screenFrame.maxY - margin {
+                restoreOrigin.y = screenFrame.maxY - targetHeight - margin
+            }
+            
+            targetOrigin = restoreOrigin
         }
         
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.22
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        let newFrame = NSRect(x: targetOrigin.x, y: targetOrigin.y, width: targetWidth, height: targetHeight)
+        
+        updateTrafficLightButtons(isHidden: isMini)
+        
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.28
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.0, 0.2, 1.0)
+            context.allowsImplicitAnimation = true
             window.animator().setFrame(newFrame, display: true)
-        }
+        }, completionHandler: {
+            window.invalidateShadow()
+        })
     }
     
-    private func updateTrafficLightButtons(isMini: Bool) {
+    private func updateTrafficLightButtons(isHidden: Bool) {
         guard let window = window else { return }
-        window.standardWindowButton(.closeButton)?.isHidden = isMini
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = isMini
-        window.standardWindowButton(.zoomButton)?.isHidden = isMini
+        window.standardWindowButton(.closeButton)?.isHidden = isHidden
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = isHidden
+        window.standardWindowButton(.zoomButton)?.isHidden = isHidden
     }
-    
-    private var hasInitialCentered: Bool = false
     
     func showWindow() {
         guard let window = window else { return }
-        if !hasInitialCentered {
-            window.center()
-            hasInitialCentered = true
-        }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
     
     func toggleWindow() {
-        guard let window = window else { return }
-        if window.isVisible {
-            window.orderOut(nil)
-        } else {
-            showWindow()
-            viewModel.fetchFromFinderAsync()
-        }
+        showWindow()
+        viewModel.fetchFromFinderAsync()
     }
 }
 

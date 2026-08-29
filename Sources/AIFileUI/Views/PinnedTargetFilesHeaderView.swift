@@ -1,84 +1,76 @@
 import SwiftUI
 import AIFileCore
 
-/// 聊天面板顶部常驻展示的「当前目标文件与目录」一体化大胶囊卡片（不可关闭，高对比度突出背景色）
+/// 聊天面板顶部常驻展示的「当前目标文件与目录」一体化大胶囊卡片（支持大窗明暗双模式自适应 + 小组件水晶白字）
 public struct PinnedTargetFilesHeaderView: View {
     @ObservedObject var viewModel: PanelViewModel
+    @Environment(\.colorScheme) var colorScheme
     
     public init(viewModel: PanelViewModel) {
         self.viewModel = viewModel
     }
     
+    private var isWidgetMode: Bool {
+        viewModel.widgetPresentationMode != .fullWindow
+    }
+    
+    private var isDark: Bool {
+        isWidgetMode || colorScheme == .dark
+    }
+    
+    private var primaryTextColor: Color {
+        isDark ? .white : .primary
+    }
+    
+    private var secondaryTextColor: Color {
+        isDark ? Color.white.opacity(0.70) : .secondary
+    }
+    
     public var body: some View {
+        // 一体化大胶囊容器（目标文件标题 + 选取/刷新 + 文件信息）
         HStack(alignment: .center, spacing: 8) {
-            // 一体化大胶囊容器（目标文件标题 + 选取/刷新 + 文件信息）
-            HStack(alignment: .center, spacing: 8) {
-                // 1. 左侧：目标文件标题 + 选取文件与刷新操作
-                HStack(spacing: 6) {
-                    headerSummaryView
-                    leftActionButtons
-                }
-                
-                verticalDivider
-                
-                // 2. 中间：选中的文件 / 目录 详细信息（单文件撑满头部省略，多文件支持横向滑动）
-                if viewModel.fileItems.isEmpty {
-                    emptyContextPlaceholder
-                } else {
-                    fileCapsulesArea
-                }
-                
-                Spacer(minLength: 4)
+            // 1. 左侧：目标文件标题 + 选取文件与刷新操作
+            HStack(spacing: 6) {
+                headerSummaryView
+                leftActionButtons
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                ZStack {
-                    // 与主窗/聊天框一致的均匀玻璃半透（无渐变）
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.white.opacity(0.15))
-                }
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.40),
-                                Color.accentColor.opacity(0.30),
-                                Color.white.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            )
-            .cornerRadius(10)
-            .shadow(color: Color.black.opacity(0.08), radius: 6, x: 0, y: 2)
             
-            // 3. 卡片外部（右侧）：钉住桌面切换 + 小窗口模式还原按钮
-            Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    viewModel.isPinnedToDesktop.toggle()
-                }
-            }) {
-                Image(systemName: viewModel.isPinnedToDesktop ? "pin.fill" : "pin")
-                    .font(.system(size: 8.5))
-                    .foregroundColor(viewModel.isPinnedToDesktop ? .accentColor : .secondary)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
-            .help(viewModel.isPinnedToDesktop ? L10n.t("取消桌面钉住（恢复普通窗口）") : L10n.t("钉住到桌面：常驻所有空间、不抢焦点"))
+            verticalDivider
             
-            if viewModel.isMiniMode {
-                restoreWindowButton
+            // 2. 中间：选中的文件 / 目录 详细信息（单文件撑满头部省略，多文件支持横向滑动）
+            if viewModel.fileItems.isEmpty {
+                emptyContextPlaceholder
+            } else {
+                fileCapsulesArea
             }
+            
+            Spacer(minLength: 4)
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isDark ? Color.white.opacity(0.04) : Color.primary.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: isDark ? [
+                            Color.white.opacity(0.35),
+                            Color.white.opacity(0.08)
+                        ] : [
+                            Color.primary.opacity(0.18),
+                            Color.primary.opacity(0.06)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
         .padding(.horizontal, 14)
-        .padding(.top, 8)
+        .padding(.top, 6)
         .padding(.bottom, 6)
     }
     
@@ -86,7 +78,7 @@ public struct PinnedTargetFilesHeaderView: View {
     
     private var verticalDivider: some View {
         Rectangle()
-            .fill(Color.accentColor.opacity(0.25))
+            .fill(isDark ? Color.white.opacity(0.18) : Color.primary.opacity(0.12))
             .frame(width: 1, height: 22)
             .padding(.horizontal, 2)
     }
@@ -98,7 +90,7 @@ public struct PinnedTargetFilesHeaderView: View {
             if viewModel.fileItems.isEmpty {
                 Text("未选择文件")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(secondaryTextColor)
             } else {
                 let totalFiles = viewModel.fileItems.reduce(0) { sum, item in
                     sum + (item.isDirectory ? (item.childFileCount ?? 0) : 1)
@@ -110,11 +102,11 @@ public struct PinnedTargetFilesHeaderView: View {
                 if totalDirs > 0 {
                     Text(L10n.t("选中 %@ 个文件 • %@ 目录", "\(totalFiles)", "\(totalDirs)"))
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.primary)
+                        .foregroundColor(primaryTextColor)
                 } else {
                     Text(L10n.t("选中 %@ 个文件", "\(totalFiles)"))
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.primary)
+                        .foregroundColor(primaryTextColor)
                 }
             }
         }
@@ -122,43 +114,27 @@ public struct PinnedTargetFilesHeaderView: View {
     }
     
     private var leftActionButtons: some View {
-        HStack(spacing: 4) {
+        VStack(spacing: 3) {
             Button(action: { viewModel.pickFilesManually() }) {
-                HStack(spacing: 2.5) {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 8.5))
-                    Text("选取")
-                        .font(.system(size: 9.5, weight: .medium))
-                }
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundColor(primaryTextColor)
+                    .frame(width: 18, height: 18)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(isDark ? Color.white.opacity(0.16) : Color.primary.opacity(0.08)))
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.mini)
+            .buttonStyle(.plain)
             .help(L10n.t("手动选取更多文件或目录"))
             
             Button(action: { viewModel.fetchFromFinder() }) {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 8.5))
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundColor(primaryTextColor)
+                    .frame(width: 18, height: 18)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(isDark ? Color.white.opacity(0.12) : Color.primary.opacity(0.06)))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.mini)
+            .buttonStyle(.plain)
             .help(L10n.t("重新从当前前台访达抓取选中的文件与目录"))
-            
         }
-        .fixedSize(horizontal: true, vertical: false)
-    }
-    
-    private var restoreWindowButton: some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                viewModel.isMiniMode = false
-            }
-        }) {
-            Image(systemName: "rectangle.expand.vertical")
-                .font(.system(size: 8.5))
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.mini)
-        .help(L10n.t("还原为标准完整大窗"))
         .fixedSize(horizontal: true, vertical: false)
     }
     
@@ -171,7 +147,7 @@ public struct PinnedTargetFilesHeaderView: View {
             Text("尚未选择文件 (在访达中选中或点击右侧选取)")
                 .font(.system(size: 10.5))
         }
-        .foregroundColor(.secondary.opacity(0.85))
+        .foregroundColor(secondaryTextColor)
         .padding(.horizontal, 6)
     }
     
@@ -210,7 +186,7 @@ public struct PinnedTargetFilesHeaderView: View {
                     HStack(spacing: 3) {
                         Text(item.prettyPath)
                             .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                            .foregroundColor(.primary)
+                            .foregroundColor(primaryTextColor)
                             .lineLimit(1)
                             .truncationMode(.head)
                             .layoutPriority(1)
@@ -219,8 +195,8 @@ public struct PinnedTargetFilesHeaderView: View {
                             .font(.system(size: 7.5, weight: .bold))
                             .padding(.horizontal, 3)
                             .padding(.vertical, 0.5)
-                            .background(Color.orange.opacity(0.3))
-                            .foregroundColor(.orange)
+                            .background(Color.orange.opacity(0.35))
+                            .foregroundColor(.white)
                             .cornerRadius(2.5)
                             .fixedSize()
                     }
@@ -233,17 +209,17 @@ public struct PinnedTargetFilesHeaderView: View {
                         Text("• \(item.formattedSize)")
                     }
                     .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(secondaryTextColor)
                     .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 3.5)
-            .background(Color.white.opacity(0.18))
+            .background(isDark ? Color.white.opacity(0.12) : Color.primary.opacity(0.06))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.orange.opacity(0.35), lineWidth: 0.9)
+                    .stroke(isDark ? Color.white.opacity(0.20) : Color.primary.opacity(0.12), lineWidth: 0.9)
             )
             .cornerRadius(6)
             .help(L10n.t("完整路径: %@", item.path))
@@ -253,12 +229,12 @@ public struct PinnedTargetFilesHeaderView: View {
             HStack(spacing: 5) {
                 Image(systemName: fileIcon(for: item.fileExtension))
                     .font(.system(size: 11))
-                    .foregroundColor(.accentColor)
+                    .foregroundColor(isDark ? .white : .accentColor)
                 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(item.prettyPath)
                         .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                        .foregroundColor(.primary)
+                        .foregroundColor(primaryTextColor)
                         .lineLimit(1)
                         .truncationMode(.head)
                         .layoutPriority(1)
@@ -272,24 +248,22 @@ public struct PinnedTargetFilesHeaderView: View {
                         }
                     }
                     .font(.system(size: 9))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(secondaryTextColor)
                     .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 3.5)
-            .background(Color.white.opacity(0.18))
+            .background(isDark ? Color.white.opacity(0.12) : Color.primary.opacity(0.06))
             .overlay(
                 RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.accentColor.opacity(0.35), lineWidth: 0.9)
+                    .stroke(isDark ? Color.white.opacity(0.20) : Color.primary.opacity(0.12), lineWidth: 0.9)
             )
             .cornerRadius(6)
             .help(L10n.t("完整路径: %@", item.path))
         }
     }
-    
-
     
     private func fileIcon(for ext: String) -> String {
         let e = ext.lowercased()

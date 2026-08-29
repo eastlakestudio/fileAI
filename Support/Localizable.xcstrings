@@ -2006,6 +2006,22 @@
         }
       }
     },
+    "✅ 执行完成 (共 %@ 项操作) • 已把 %@ 条待办导入待办面板": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✅ Done (%@ ops) • imported %@ to-dos into the To-do panel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✅ 执行完成 (共 %@ 项操作) • 已把 %@ 条待办导入待办面板"
+          }
+        }
+      }
+    },
     "✅ 本地 CLI 运行就绪：%@%@ [%@]": {
       "extractionState": "stale",
       "localizations": {
@@ -2172,6 +2188,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "✨ 已启用技能"
+          }
+        }
+      }
+    },
+    "✨ 已提炼 %@ 条新待办": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ Extracted %@ new to-dos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✨ 已提炼 %@ 条新待办"
           }
         }
       }
@@ -2682,6 +2714,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "仍未发现 CLI。Homebrew 安装的 CLI 位于 /opt/homebrew，请授权该目录。"
+          }
+        }
+      }
+    },
+    "从最近对话生成待办": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generate to-dos from recent chats"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从最近对话生成待办"
           }
         }
       }
@@ -5031,6 +5079,22 @@
         }
       }
     },
+    "待办 · %@ 项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ to-dos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待办 · %@ 项"
+          }
+        }
+      }
+    },
     "待执行的操作列表为空，未进行任何物理变动": {
       "extractionState": "stale",
       "localizations": {
@@ -5078,6 +5142,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "待用户确认"
+          }
+        }
+      }
+    },
+    "忽略此待办": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss this to-do"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "忽略此待办"
           }
         }
       }
@@ -6493,6 +6573,38 @@
         }
       }
     },
+    "暂无可提炼的已完成对话记录": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No completed chats to extract from yet"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无可提炼的已完成对话记录"
+          }
+        }
+      }
+    },
+    "暂无待办，AI 会在任务完成后自动提炼行动项": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No to-dos yet. AI extracts action items after tasks complete."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无待办，AI 会在任务完成后自动提炼行动项"
+          }
+        }
+      }
+    },
     "暂无日志流水记录": {
       "extractionState": "stale",
       "localizations": {
@@ -7071,6 +7183,22 @@
         }
       }
     },
+    "查看 AI 提炼的待办清单": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View to-dos extracted by AI"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "查看 AI 提炼的待办清单"
+          }
+        }
+      }
+    },
     "查看 Finder 抓取诊断详情": {
       "extractionState": "stale",
       "localizations": {
@@ -7101,6 +7229,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "查看已执行/正在执行的任务记录"
+          }
+        }
+      }
+    },
+    "标记为已完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as done"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标记为已完成"
+          }
+        }
+      }
+    },
+    "标记为未完成": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark as not done"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标记为未完成"
           }
         }
       }
@@ -7445,6 +7605,22 @@
         }
       }
     },
+    "没有提炼出新的待办": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No new to-dos extracted"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有提炼出新的待办"
+          }
+        }
+      }
+    },
     "测试连通性": {
       "extractionState": "stale",
       "localizations": {
@@ -7526,6 +7702,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "清空所有历史任务记录"
+          }
+        }
+      }
+    },
+    "清除已完成与已忽略的待办": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear completed and dismissed to-dos"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除已完成与已忽略的待办"
           }
         }
       }
@@ -7866,6 +8058,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "立即安装保存"
+          }
+        }
+      }
+    },
+    "立即执行此待办": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Run this to-do now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即执行此待办"
           }
         }
       }
@@ -8716,6 +8924,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "返回主页"
+          }
+        }
+      }
+    },
+    "返回聊天面板": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back to chat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回聊天面板"
           }
         }
       }
@@ -9989,6 +10213,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "📂 设定工作目录: %@"
+          }
+        }
+      }
+    },
+    "📄 %@ (新产物)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📄 %@ (new output)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "📄 %@ (新产物)"
           }
         }
       }

@@ -12,11 +12,28 @@ public final class StatusBarManager: NSObject, ObservableObject {
     public var onFilesDropped: (([URL]) -> Void)?
     public var onUndoClicked: (() -> Void)?
     public var onOpenSettings: (() -> Void)?
-    /// 桌面钉住切换：返回切换后的状态用于菜单打勾
     public var onToggleDesktopPin: ((Bool) -> Bool)?
+    public var onSelectWidgetMode: ((WidgetPresentationMode) -> Void)?
+    public var onSelectWidgetLevel: ((WidgetLevelMode) -> Void)?
     
     @objc private func toggleDesktopPin() {
         _ = onToggleDesktopPin?(UserDefaults.standard.bool(forKey: "aifiles.pinnedToDesktop") ?? false)
+    }
+    
+    @objc private func switchToCard() {
+        onSelectWidgetMode?(.widgetCard)
+    }
+    
+    @objc private func switchToFull() {
+        onSelectWidgetMode?(.fullWindow)
+    }
+    
+    @objc private func switchLevelFloating() {
+        onSelectWidgetLevel?(.floating)
+    }
+    
+    @objc private func switchLevelDesktop() {
+        onSelectWidgetLevel?(.desktopLevel)
     }
     
     public override init() {
@@ -66,10 +83,40 @@ public final class StatusBarManager: NSObject, ObservableObject {
         openItem.target = self
         menu.addItem(openItem)
         
-        let pinItem = NSMenuItem(title: L10n.t("钉住聊天窗到桌面"), action: #selector(toggleDesktopPin), keyEquivalent: "")
-        pinItem.target = self
-        pinItem.state = (UserDefaults.standard.bool(forKey: "aifiles.pinnedToDesktop")) ? .on : .off
-        menu.addItem(pinItem)
+        // 桌面小组件形态子菜单
+        let currentMode = DesktopWidgetSettings.load().presentationMode
+        let widgetMenu = NSMenu(title: L10n.t("桌面组件形态"))
+        
+        let cardItem = NSMenuItem(title: L10n.t("桌面卡片态 (小组件)"), action: #selector(switchToCard), keyEquivalent: "1")
+        cardItem.target = self
+        cardItem.state = (currentMode == .widgetCard) ? .on : .off
+        widgetMenu.addItem(cardItem)
+        
+        let fullItem = NSMenuItem(title: L10n.t("标准完整大窗"), action: #selector(switchToFull), keyEquivalent: "2")
+        fullItem.target = self
+        fullItem.state = (currentMode == .fullWindow) ? .on : .off
+        widgetMenu.addItem(fullItem)
+        
+        let widgetSubMenuItem = NSMenuItem(title: L10n.t("桌面组件形态"), action: nil, keyEquivalent: "")
+        widgetSubMenuItem.submenu = widgetMenu
+        menu.addItem(widgetSubMenuItem)
+        
+        // 层级子菜单
+        let currentLevel = DesktopWidgetSettings.load().levelMode
+        let levelMenu = NSMenu(title: L10n.t("窗口层级"))
+        let floatingItem = NSMenuItem(title: L10n.t("始终置顶 (悬浮小组件)"), action: #selector(switchLevelFloating), keyEquivalent: "")
+        floatingItem.target = self
+        floatingItem.state = (currentLevel == .floating) ? .on : .off
+        levelMenu.addItem(floatingItem)
+        
+        let desktopItem = NSMenuItem(title: L10n.t("贴合桌面壁纸"), action: #selector(switchLevelDesktop), keyEquivalent: "")
+        desktopItem.target = self
+        desktopItem.state = (currentLevel == .desktopLevel) ? .on : .off
+        levelMenu.addItem(desktopItem)
+        
+        let levelSubMenuItem = NSMenuItem(title: L10n.t("窗口层级"), action: nil, keyEquivalent: "")
+        levelSubMenuItem.submenu = levelMenu
+        menu.addItem(levelSubMenuItem)
         
         let undoItem = NSMenuItem(title: L10n.t("撤销上次操作 (⌘Z)"), action: #selector(triggerUndo), keyEquivalent: "")
         undoItem.target = self

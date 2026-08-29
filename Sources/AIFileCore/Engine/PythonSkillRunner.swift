@@ -72,7 +72,15 @@ public final class PythonSkillRunner: Sendable {
             )
         }
         
-        let outDir = outputDirectory ?? inputFiles.first?.deletingLastPathComponent() ?? FileManager.default.temporaryDirectory
+        // 输出目录兜底：显式指定 > 首个输入文件所在目录（非目录型）> 可写用户工作区；
+        // 从 Finder 启动时进程 cwd 是只读根目录，绝不能作为默认输出位置
+        var outDir = outputDirectory ?? inputFiles.first.flatMap { url -> URL? in
+            url.hasDirectoryPath ? nil : url.deletingLastPathComponent()
+        } ?? AppWorkspace.defaultDirectory
+
+        if !FileManager.default.isWritableFile(atPath: outDir.path) {
+            outDir = AppWorkspace.defaultDirectory
+        }
         
         // 1. 记录执行前目录下的文件快照（用于探测新生成的文件）
         let beforeFiles = Set((try? FileManager.default.contentsOfDirectory(atPath: outDir.path)) ?? [])

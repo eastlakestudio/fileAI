@@ -53,6 +53,35 @@ public final class AgentDispatcher: Sendable {
         }
     }
 
+    /// 从近期对话记录中提炼待办行动项（独立轻量调用，失败静默返回空数组，不干扰主流程）
+    public func extractTodos(fromTranscript transcript: String) async -> [(title: String, detail: String?)] {
+        let systemPrompt = SystemPromptBuilder.buildTodoExtractionPrompt(transcript: transcript)
+        let messages = [
+            ["role": "system", "content": systemPrompt],
+            ["role": "user", "content": "请提炼待办"]
+        ]
+        do {
+            let response = try await provider.sendChat(messages: messages, tools: nil)
+            let raw = (response.textContent ?? response.rawOutput ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { return [] }
+            // 宽松 JSON 数组提取：截取首个 '[' 到最后一个 ']'
+            guard let s = raw.range(of: "["), let e = raw.range(of: "]", options: .backwards) else {
+                return []
+            }
+            let jsonText = String(raw[s.lowerBound..<e.upperBound])
+            guard let data = jsonText.data(using: .utf8),
+                  let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return []
+            }
+            return array.compactMap { item in
+                guard let title = item["title"] as? String, !title.isEmpty else { return nil }
+                return (title, (item["detail"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+            }
+        } catch {
+            return []
+        }
+    }
+
     /// 模式二：全权委托 CLI 自主端到端执行（若配置了本地 CLI 引擎）
     public func executeAutonomously(
         userPrompt: String,
@@ -215,12 +244,15 @@ public final class AgentDispatcher: Sendable {
                 // 2. 检查后续是否有显式调用该新技能的 ToolCall。若有，则此处不生成重复 Action
                 let hasSubsequentCall = effectiveToolCalls.contains(where: { $0.functionName == id || $0.functionName == name })
                 if !hasSubsequentCall {
-                    // 推断或解析动态技能目标产物路径
+                    // 推断或解析动态技能目标产物路径（模型给的名称先经中文/转义清洗）
                     var dynamicTargetURL: URL? = nil
                     let specifiedName = (call.argumentsDict["outputFileName"] ?? call.argumentsDict["outputImage"] ?? call.argumentsDict["outputZip"] ?? call.argumentsDict["output_file"] ?? call.argumentsDict["targetFile"] ?? call.argumentsDict["targetZip"]) as? String
                     if let nameStr = specifiedName {
-                        let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                        dynamicTargetURL = baseDir.appendingPathComponent(nameStr)
+                        let cleanName = FileNameSanitizer.clean(nameStr)
+                        if !cleanName.isEmpty {
+                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? AppWorkspace.defaultDirectory
+                            dynamicTargetURL = baseDir.appendingPathComponent(cleanName)
+                        }
                     }
                     
                     switch newMeta.batchMode {
@@ -228,7 +260,7 @@ public final class AgentDispatcher: Sendable {
                         // 模式 A: 纯生成 / 资讯抓取 / 系统查询，完全不挂载用户选中的无关文件
                         let action = FileActionItem(
                             operationType: .custom,
-                            sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            sourceURL: AppWorkspace.defaultDirectory,
                             inputURLs: [],
                             targetURL: dynamicTargetURL,
                             detailDescription: L10n.t("【%@】%@", newMeta.name, newMeta.summary),
@@ -244,7 +276,7 @@ public final class AgentDispatcher: Sendable {
                         
                     case .aggregate:
                         // 模式 B: 多文件聚合处理 (如打包/汇总)
-                        let firstURL = currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                        let firstURL = currentPipelineFiles.first?.url ?? AppWorkspace.defaultDirectory
                         let allURLs = currentPipelineFiles.map { $0.url }
                         
                         let action = FileActionItem(
@@ -267,7 +299,7 @@ public final class AgentDispatcher: Sendable {
                         if currentPipelineFiles.isEmpty {
                             let action = FileActionItem(
                                 operationType: .custom,
-                                sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                                sourceURL: AppWorkspace.defaultDirectory,
                                 targetURL: dynamicTargetURL,
                                 detailDescription: L10n.t("【%@】执行处理", newMeta.name),
                                 customScript: script,
@@ -327,11 +359,11 @@ public final class AgentDispatcher: Sendable {
                 case .zeroInput:
                     // 模式 A: 无输入文件直接生成/查询 (如拉取消息)
                     let targetFileName = (call.argumentsDict["outputFileName"] ?? call.argumentsDict["targetFile"] ?? call.argumentsDict["output_file"]) as? String
-                    let targetURL = targetFileName != nil ? URL(fileURLWithPath: FileManager.default.currentDirectoryPath).appendingPathComponent(targetFileName!) : nil
+                    let targetURL = targetFileName != nil ? AppWorkspace.defaultDirectory.appendingPathComponent(FileNameSanitizer.clean(targetFileName!)) : nil
                     
                     let action = FileActionItem(
                         operationType: .custom,
-                        sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                        sourceURL: AppWorkspace.defaultDirectory,
                         inputURLs: [],
                         targetURL: targetURL,
                         detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
@@ -341,6 +373,10 @@ public final class AgentDispatcher: Sendable {
                     combinedActions.append(action)
                     if let newTarget = targetURL {
                         currentPipelineFiles = [FileItem(url: newTarget, isDirectory: false)]
+                    } else {
+                        // Zero-Input 无可推断产物时必须清空流水线，
+                        // 否则上一次任务遗留的选中文件会被下游步骤误当作输入
+                        currentPipelineFiles = []
                     }
                     summaryNotes.append(L10n.t("计划调用【%@】执行：%@", installed.name, installed.summary))
                     logs.append(L10n.t("📂 成功为【%@】生成独立执行任务", installed.name))
@@ -350,7 +386,7 @@ public final class AgentDispatcher: Sendable {
                     if currentPipelineFiles.isEmpty {
                         let action = FileActionItem(
                             operationType: .custom,
-                            sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            sourceURL: AppWorkspace.defaultDirectory,
                             inputURLs: [],
                             targetURL: nil,
                             detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
@@ -363,15 +399,15 @@ public final class AgentDispatcher: Sendable {
                         var targetZipURL: URL? = nil
                         if installed.id.contains("zip") || installed.name.contains("ZIP") {
                             let specifiedName = (call.argumentsDict["zipFileName"] ?? call.argumentsDict["outputZip"] ?? call.argumentsDict["outputFileName"] ?? call.argumentsDict["zipName"] ?? call.argumentsDict["output_file"] ?? call.argumentsDict["targetZip"]) as? String
-                            let zipName = specifiedName ?? "archive.zip"
-                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                            targetZipURL = baseDir.appendingPathComponent(zipName)
+                            let zipName = FileNameSanitizer.clean(specifiedName ?? "archive.zip")
+                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? AppWorkspace.defaultDirectory
+                            targetZipURL = baseDir.appendingPathComponent(zipName.isEmpty ? "archive.zip" : zipName)
                         } else if installed.id.contains("merge") || installed.name.contains("合并") {
-                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                            let baseDir = currentPipelineFiles.first?.url.deletingLastPathComponent() ?? AppWorkspace.defaultDirectory
                             targetZipURL = baseDir.appendingPathComponent("合并文档.pdf")
                         }
                         
-                        let firstURL = currentPipelineFiles.first?.url ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                        let firstURL = currentPipelineFiles.first?.url ?? AppWorkspace.defaultDirectory
                         let allURLs = currentPipelineFiles.map { $0.url }
                         
                         let action = FileActionItem(
@@ -397,7 +433,8 @@ public final class AgentDispatcher: Sendable {
                     if currentPipelineFiles.isEmpty {
                         let action = FileActionItem(
                             operationType: .custom,
-                            sourceURL: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+                            sourceURL: AppWorkspace.defaultDirectory,
+                            inputURLs: [],
                             targetURL: nil,
                             detailDescription: "【\(installed.name)】\(installed.summary)\(paramsSummary)",
                             customScript: installed.executableScript,
@@ -471,7 +508,17 @@ public final class AgentDispatcher: Sendable {
                 // 1. 如果携带了可执行脚本内容，通过 PythonSkillRunner 统一安全执行 (传入全部有效输入文件列表)
                 if let script = action.customScript, !script.isEmpty {
                     let engine: ScriptEngineType = action.scriptEngine ?? AgentDispatcher.detectScriptEngine(script: script)
-                    let inputFilesToRun = action.effectiveInputURLs
+                    // 输入传参规则：显式声明的 inputURLs 优先（含空数组=纯生成，不向 $@ 传文件）；
+                    // 未声明时仅传单个非目录源文件——目录型占位（如兜底工作区）绝不能被当作待处理文件
+                    var inputFilesToRun: [URL]
+                    if let declared = action.inputURLs {
+                        inputFilesToRun = declared
+                    } else if action.sourceURL.hasDirectoryPath {
+                        inputFilesToRun = []
+                    } else {
+                        inputFilesToRun = [action.sourceURL]
+                    }
+                    inputFilesToRun.removeAll { $0.path == "/" }
                     let result = try await PythonSkillRunner.shared.runScript(
                         script: script,
                         engine: engine,

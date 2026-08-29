@@ -123,16 +123,13 @@ public struct TaskBoardView: View {
     private var topHeaderControlBar: some View {
         HStack(spacing: 10) {
             Button(action: onBack) {
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("返回主页")
-                        .font(.system(size: 12, weight: .medium))
-                }
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .bold))
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
             .keyboardShortcut(.cancelAction)
+            .help(L10n.t("返回主页"))
             
             Text("任务看板")
                 .font(.system(size: 13, weight: .bold))

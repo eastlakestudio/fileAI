@@ -25,6 +25,13 @@ public enum MainViewContentTab: String, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+/// 迷你窗口内容区切换：聊天（现状布局） / 待办清单（AI 从聊天任务提炼）
+public enum MiniContentTab: String, CaseIterable, Identifiable {
+    case chat = "聊天"
+    case todoList = "待办"
+    public var id: String { rawValue }
+}
+
 @MainActor
 public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var rawURLs: [URL] = []
@@ -73,11 +80,58 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
     @Published public var smartSuggestions: [SkillSuggestion] = []
     @Published public var executionMode: String = "Agent 模式"
     @Published public var reasoningEffort: String = "High"
-    @Published public var isMiniMode: Bool = false
+    @Published public var isMiniMode: Bool = false {
+        didSet {
+            if isMiniMode && widgetPresentationMode == .fullWindow {
+                widgetPresentationMode = .widgetCard
+            } else if !isMiniMode && widgetPresentationMode != .fullWindow {
+                widgetPresentationMode = .fullWindow
+            }
+        }
+    }
+    
+    /// 桌面小组件展现形态 (.pillCapsule 灵动胶囊 / .widgetCard 桌面卡片 / .fullWindow 标准大窗)
+    @Published public var widgetPresentationMode: WidgetPresentationMode = .widgetCard {
+        didSet {
+            isMiniMode = (widgetPresentationMode != .fullWindow)
+            widgetSettings.presentationMode = widgetPresentationMode
+            widgetSettings.save()
+        }
+    }
+    
+    /// 桌面小组件层级 (.floating 始终置顶 / .desktopLevel 贴合桌面)
+    @Published public var widgetLevelMode: WidgetLevelMode = .floating {
+        didSet {
+            isPinnedToDesktop = (widgetLevelMode == .desktopLevel || isPinnedToDesktop)
+            widgetSettings.levelMode = widgetLevelMode
+            widgetSettings.save()
+        }
+    }
+    
+    /// 桌面小组件持久化配置
+    @Published public var widgetSettings: DesktopWidgetSettings
+    
+    /// 外部拖拽文件悬停高亮标识
+    @Published public var isDraggingFilesOver: Bool = false
+    
+    /// 聊天 / 待办 面板切换（迷你窗=底部区域切换；标准窗=主内容区切换）
+    @Published public var contentTab: MiniContentTab = .chat
+    /// 待办清单（由模型从聊天任务提炼，跨启动持久化）
+    @Published public var todos: [TodoItem] = []
+    /// 正在调用模型提炼待办（UI 指示与防重入）
+    @Published public var isExtractingTodos: Bool = false
+    /// 任务 id → 关联待办 id 映射：执行完成后自动勾选待办，失败/取消则还原为待处理
+    private var linkedTodosByTaskId: [UUID: UUID] = [:]
     
     private let customDispatcher: AgentDispatcher?
     
     public init(dispatcher: AgentDispatcher? = nil) {
+        let savedSettings = DesktopWidgetSettings.load()
+        self.widgetSettings = savedSettings
+        self.widgetPresentationMode = savedSettings.presentationMode
+        self.widgetLevelMode = savedSettings.levelMode
+        self.isMiniMode = (savedSettings.presentationMode != .fullWindow)
+        
         let registry = SkillRegistry.shared
         registry.register(ImageResizeSkill())
         registry.register(ImageConvertSkill())
@@ -90,6 +144,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         ContentConsentGate.shared.delegate = self
         updateSuggestions()
         loadTaskHistory()
+        loadTodos()
     }
     
     public var dispatcher: AgentDispatcher {
@@ -200,6 +255,23 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         refreshFiles()
     }
     
+    /// 响应外部文件直接拖拽投放至桌面组件
+    public func handleDroppedURLs(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        setTargetURLs(urls)
+        statusMessage = "⚡ \(L10n.t("已接收 %@ 个拖放文件", "\(urls.count)"))"
+    }
+    
+    /// 切换小组件形态 (卡片 ↔ 大窗)
+    public func cycleWidgetPresentationMode() {
+        switch widgetPresentationMode {
+        case .widgetCard:
+            widgetPresentationMode = .fullWindow
+        case .fullWindow:
+            widgetPresentationMode = .widgetCard
+        }
+    }
+    
     /// 刷新元数据提取结果
     public func refreshFiles() {
         var allowedExts: Set<String>? = nil
@@ -235,15 +307,15 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         return Array(Set(allExts)).sorted()
     }
     
-    /// 提交用户自然语言指令
-    public func submitInstruction(_ text: String? = nil) {
+    /// 提交用户自然语言指令（linkedTodoId：由待办清单发起的执行，完成后自动勾选该待办）
+    public func submitInstruction(_ text: String? = nil, linkedTodoId: UUID? = nil) {
         Task { @MainActor in
-            await submitInstructionAsync(text)
+            await submitInstructionAsync(text, linkedTodoId: linkedTodoId)
         }
     }
     
     @MainActor
-    private func submitInstructionAsync(_ text: String? = nil) async {
+    private func submitInstructionAsync(_ text: String? = nil, linkedTodoId: UUID? = nil) async {
         let prompt = (text ?? inputText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return }
         
@@ -307,6 +379,12 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         self.taskHistory.removeAll(where: { $0.id == taskRecord.id })
         self.taskHistory.insert(taskRecord, at: 0)
         
+        // 待办发起的执行：登记映射并标记为进行中（完成/失败时回写）
+        if let todoId = linkedTodoId {
+            linkedTodosByTaskId[taskRecord.id] = todoId
+            setTodoStatus(id: todoId, .inProgress)
+        }
+        
         // 启动实时秒表计时器
         let startTime = Date()
         thinkingTimerCancellable = Timer.publish(every: 0.1, on: .main, in: .common)
@@ -363,7 +441,9 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                         task.walkthroughReport = plan.summary
                     }
                     await TaskManager.shared.completeTask(id: taskRecord.id, transactionId: nil, walkthrough: plan.summary)
+                    self.completeLinkedTodo(forTaskId: taskRecord.id)
                     await self.loadTaskHistory()
+                    self.generateTodosFromRecentChats(manual: false)
                     self.activeTask = nil
                 } else {
                     self.statusMessage = L10n.t("💡 未匹配到需要变动的文件，请尝试调整指令或参考上方推荐 Skill (⏱️ %@)", String(format: "%.2fs", elapsed))
@@ -373,6 +453,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                         task.errorMessage = L10n.t("未匹配到需要变动的文件")
                     }
                     await TaskManager.shared.failTask(id: taskRecord.id, error: L10n.t("未匹配到需要变动的文件"))
+                    self.revertLinkedTodo(forTaskId: taskRecord.id)
                     await self.loadTaskHistory()
                     self.activeTask = nil
                 }
@@ -388,6 +469,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                     task.errorMessage = error.localizedDescription
                 }
                 await TaskManager.shared.failTask(id: taskRecord.id, error: error.localizedDescription)
+                self.revertLinkedTodo(forTaskId: taskRecord.id)
                 await self.loadTaskHistory()
                 self.activeTask = nil
             }
@@ -409,10 +491,17 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 
                 let createdReverses = record.reverseActions.filter { $0.kind == .deleteCreated || $0.kind == .renameBack }
                 if !createdReverses.isEmpty {
+                    let cwdPath = FileManager.default.currentDirectoryPath
                     for rev in createdReverses {
                         if !producedURLs.contains(rev.currentURL) {
                             producedURLs.append(rev.currentURL)
-                            fileSummaryLines.append(L10n.t("📄 %@ (源: %@)", rev.currentURL.lastPathComponent, rev.originalURL.lastPathComponent))
+                            let originalPath = rev.originalURL.path
+                            // 纯生成型产物（无实质输入文件）不伪标来源，避免误导
+                            if rev.kind == .deleteCreated && (originalPath == "/" || originalPath == cwdPath || !FileManager.default.fileExists(atPath: originalPath)) {
+                                fileSummaryLines.append(L10n.t("📄 %@ (新产物)", rev.currentURL.lastPathComponent))
+                            } else {
+                                fileSummaryLines.append(L10n.t("📄 %@ (源: %@)", rev.currentURL.lastPathComponent, rev.originalURL.lastPathComponent))
+                            }
                         }
                     }
                 } else {
@@ -429,17 +518,26 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                     }
                 }
                 self.latestOutputURLs = producedURLs
-                
+
+                // 待办清单类产物（文件名含 待办/todo/checklist）直接解析并导入 App 的待办面板，可勾选完成；
+                // 导入成功后无需再走通用提炼（避免重复）
+                var importedTodoCount = 0
+                if let sourceTaskId = self.activeTask?.id {
+                    for url in producedURLs {
+                        importedTodoCount += await TodoImporter.importIfNeeded(url: url, sourceTaskId: sourceTaskId)
+                    }
+                }
+
                 let count = record.reverseActions.count > 0 ? record.reverseActions.count : plan.actions.count
                 let filesBlock = fileSummaryLines.joined(separator: "\n")
                 let walkthrough = L10n.t("✅ 成功完成 %@ 项操作\n变更概览: %@\n\n📂 生成结果文件列表:\n%@", "\(count)", plan.summary, filesBlock)
-                
+
                 if let task = self.activeTask {
                     var execLogs = task.executionLogs.isEmpty ? task.plan.executionLogs : task.executionLogs
                     execLogs.append(L10n.t("⚡ 安全沙盒开始执行 %@ 个文件物理操作...", "\(plan.actions.count)"))
                     execLogs.append(L10n.t("💾 写入事务安全日志 (ID: %@)", "\(record.id.uuidString.prefix(8))"))
                     execLogs.append(L10n.t("✅ 全部文件物理变更执行完成"))
-                    
+
                     self.updateSessionTask(id: task.id) { item in
                         item.status = .completed
                         item.completedAt = Date()
@@ -448,12 +546,21 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                         item.executionLogs = execLogs
                     }
                     await TaskManager.shared.completeTask(id: task.id, transactionId: record.id, walkthrough: walkthrough)
+                    self.completeLinkedTodo(forTaskId: task.id)
                     await self.loadTaskHistory()
+                    if importedTodoCount == 0 {
+                        self.generateTodosFromRecentChats(manual: false)
+                    }
                 }
                 
                 self.currentPlan = nil
                 self.activeTask = nil
-                self.statusMessage = L10n.t("✅ 执行完成 (共 %@ 项操作)", "\(count)")
+                if importedTodoCount > 0 {
+                    self.loadTodos()
+                    self.statusMessage = L10n.t("✅ 执行完成 (共 %@ 项操作) • 已把 %@ 条待办导入待办面板", "\(count)", "\(importedTodoCount)")
+                } else {
+                    self.statusMessage = L10n.t("✅ 执行完成 (共 %@ 项操作)", "\(count)")
+                }
                 refreshFiles()
                 currentPlan = nil
                 activeTask = nil
@@ -465,6 +572,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                         item.errorMessage = error.localizedDescription
                     }
                     await TaskManager.shared.failTask(id: task.id, error: error.localizedDescription)
+                    self.revertLinkedTodo(forTaskId: task.id)
                     await self.loadTaskHistory()
                 }
                 statusMessage = L10n.t("❌ 执行失败: %@", error.localizedDescription)
@@ -502,6 +610,7 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
                 item.completedAt = Date()
                 item.errorMessage = L10n.t("用户取消了执行确认")
             }
+            revertLinkedTodo(forTaskId: task.id)
             Task {
                 await TaskManager.shared.cancelTask(id: task.id)
                 await self.loadTaskHistory()
@@ -623,6 +732,106 @@ public final class PanelViewModel: ObservableObject, ConsentGateDelegate {
         }
     }
     
+    // MARK: - 待办清单（AI 从聊天任务提炼）
+
+    public func loadTodos() {
+        Task {
+            self.todos = await TodoStore.shared.displayOrdered
+        }
+    }
+
+    /// 点击勾选/取消勾选一条待办
+    public func toggleTodoDone(_ id: UUID) {
+        guard let item = todos.first(where: { $0.id == id }) else { return }
+        setTodoStatus(id: id, item.status == .done ? .pending : .done)
+    }
+
+    /// 忽略一条待办（不再展示在上半区，可从清除按钮回收）
+    public func dismissTodo(id: UUID) {
+        setTodoStatus(id: id, .dismissed)
+    }
+
+    public func deleteTodo(id: UUID) {
+        todos.removeAll(where: { $0.id == id })
+        Task { await TodoStore.shared.remove(id: id) }
+    }
+
+    /// 清除全部已完成/已忽略条目
+    public func clearFinishedTodos() {
+        todos.removeAll(where: { !$0.status.isActive })
+        Task { await TodoStore.shared.clearFinished() }
+    }
+
+    /// 执行一条待办：以标题为指令发起真实执行流程，并建立关联以便完成后自动勾选；
+    /// 同时切回聊天面板让用户看到执行进度
+    public func executeTodo(_ todo: TodoItem) {
+        guard todo.status.isActive else { return }
+        withAnimationIfPossible { contentTab = .chat }
+        submitInstruction(todo.title, linkedTodoId: todo.id)
+    }
+
+    /// 触发 UI 动画的辅助（VM 层不持有动画参数时的轻量包装）
+    private func withAnimationIfPossible(_ body: () -> Void) {
+        withAnimation(.easeInOut(duration: 0.18), body)
+    }
+
+    /// 从最近已完成的对话/任务记录中提炼待办行动项；
+    /// manual=true 为用户手动触发（带结果提示），false 为任务完成后的静默后台提炼
+    public func generateTodosFromRecentChats(manual: Bool) {
+        guard !isExtractingTodos else { return }
+        let recent = Array(taskHistory.filter { $0.status == .completed }.prefix(6))
+        guard !recent.isEmpty else {
+            if manual { statusMessage = L10n.t("暂无可提炼的已完成对话记录") }
+            return
+        }
+        let transcript = recent.map { task -> String in
+            let reply = String((task.walkthroughReport ?? task.plan.summary).prefix(200))
+            return "用户: \(task.prompt)\n助手: \(reply)"
+        }.joined(separator: "\n---\n")
+
+        isExtractingTodos = true
+        Task { [weak self] in
+            defer { self?.isExtractingTodos = false }
+            guard let items = await self?.dispatcher.extractTodos(fromTranscript: transcript), !items.isEmpty else {
+                if manual { self?.statusMessage = L10n.t("没有提炼出新的待办") }
+                return
+            }
+            let added = await TodoStore.shared.addNew(
+                titlesWithDetail: items.map { ($0.title, $0.detail, nil) }
+            )
+            await MainActor.run { [weak self] in
+                self?.loadTodos()
+                if manual {
+                    if added > 0 {
+                        self?.statusMessage = L10n.t("✨ 已提炼 %@ 条新待办", "\(added)")
+                    } else {
+                        self?.statusMessage = L10n.t("没有提炼出新的待办")
+                    }
+                }
+            }
+        }
+    }
+
+    private func setTodoStatus(id: UUID, _ status: TodoStatus) {
+        if let index = todos.firstIndex(where: { $0.id == id }) {
+            todos[index].status = status
+        }
+        Task { await TodoStore.shared.setStatus(id: id, status) }
+    }
+
+    /// 关联任务执行完成：自动勾选待办并回写生成的任务 id
+    private func completeLinkedTodo(forTaskId taskId: UUID) {
+        guard let todoId = linkedTodosByTaskId.removeValue(forKey: taskId) else { return }
+        setTodoStatus(id: todoId, .done)
+        Task { await TodoStore.shared.linkGeneratedTask(id: todoId, generatedTaskId: taskId) }
+    }
+
+    /// 关联任务失败/取消：待办还原为待处理，允许重试
+    private func revertLinkedTodo(forTaskId taskId: UUID) {
+        guard let todoId = linkedTodosByTaskId.removeValue(forKey: taskId) else { return }
+        setTodoStatus(id: todoId, .pending)
+    }
+
     // MARK: - Consent Gate Delegate
     public func presentConsentModal(for request: ConsentRequest) async -> ConsentDecision {
         self.consentRequest = request

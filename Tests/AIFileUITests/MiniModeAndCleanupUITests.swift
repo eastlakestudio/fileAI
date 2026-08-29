@@ -7,6 +7,7 @@ final class MiniModeAndCleanupUITests: XCTestCase {
     @MainActor
     func testPanelViewModelMiniModeAndTaskCleanup() {
         let vm = PanelViewModel()
+        vm.widgetPresentationMode = .fullWindow
         XCTAssertFalse(vm.isMiniMode)
         
         vm.isMiniMode = true

@@ -1,14 +1,35 @@
 import SwiftUI
 import AIFileCore
 
-/// 现代 AI IDE 风格的一体化智能聊天输入卡片组件
+/// 现代 AI IDE 风格的一体化智能聊天输入卡片组件（支持大窗明暗自适应 + 小组件深邃水晶）
 public struct ModernChatInputCardView: View {
     @ObservedObject var viewModel: PanelViewModel
+    @Environment(\.colorScheme) var colorScheme
     
     @State private var isHoveringSend = false
     
     public init(viewModel: PanelViewModel) {
         self.viewModel = viewModel
+    }
+    
+    private var isWidgetMode: Bool {
+        viewModel.widgetPresentationMode != .fullWindow
+    }
+    
+    private var isDark: Bool {
+        isWidgetMode || colorScheme == .dark
+    }
+    
+    private var primaryTextColor: Color {
+        isDark ? .white : .primary
+    }
+    
+    private var secondaryTextColor: Color {
+        isDark ? Color.white.opacity(0.60) : .secondary
+    }
+    
+    private var placeholderColor: Color {
+        isDark ? Color.white.opacity(0.40) : Color.secondary.opacity(0.70)
     }
     
     public var body: some View {
@@ -21,21 +42,19 @@ public struct ModernChatInputCardView: View {
         }
         .padding(10)
         .background(
-            ZStack {
-                // 与主窗口一致的均匀玻璃半透（无渐变）
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.white.opacity(0.12))
-            }
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isDark ? Color.white.opacity(0.04) : Color.primary.opacity(0.03))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(
                     LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.40),
-                            Color.white.opacity(0.10)
+                        colors: isDark ? [
+                            Color.white.opacity(0.35),
+                            Color.white.opacity(0.08)
+                        ] : [
+                            Color.primary.opacity(0.18),
+                            Color.primary.opacity(0.06)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -43,24 +62,33 @@ public struct ModernChatInputCardView: View {
                     lineWidth: 1
                 )
         )
-        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 3.5)
     }
     
     // MARK: - 2. 自然语言输入区
     
     private var mainTextInputArea: some View {
-        TextField(
-            "",
-            text: $viewModel.inputText,
-            axis: .vertical
-        )
-        .lineLimit(2...4)
-        .textFieldStyle(.plain)
-        .font(.system(size: 12.5))
-        .padding(.vertical, 2)
-        .onSubmit {
-            if !NSEvent.modifierFlags.contains(.shift) {
-                viewModel.submitInstruction()
+        ZStack(alignment: .topLeading) {
+            if viewModel.inputText.isEmpty {
+                Text(L10n.t("输入指令（如：把选中文件压缩为 zip、重命名...）"))
+                    .font(.system(size: 12.5))
+                    .foregroundColor(placeholderColor)
+                    .padding(.vertical, 2)
+            }
+            
+            TextField(
+                "",
+                text: $viewModel.inputText,
+                axis: .vertical
+            )
+            .lineLimit(2...4)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12.5))
+            .foregroundColor(primaryTextColor)
+            .padding(.vertical, 2)
+            .onSubmit {
+                if !NSEvent.modifierFlags.contains(.shift) {
+                    viewModel.submitInstruction()
+                }
             }
         }
     }
@@ -121,11 +149,11 @@ public struct ModernChatInputCardView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 11, weight: .bold))
-                .foregroundColor(.secondary)
+                .foregroundColor(primaryTextColor)
                 .frame(width: 22, height: 22)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
-                        .fill(Color.primary.opacity(0.06))
+                        .fill(isDark ? Color.white.opacity(0.14) : Color.primary.opacity(0.06))
                 )
         }
         .menuIndicator(.hidden)
@@ -178,22 +206,22 @@ public struct ModernChatInputCardView: View {
             HStack(spacing: 3) {
                 Image(systemName: isCLI ? "terminal.fill" : "sparkles")
                     .font(.system(size: 10))
-                    .foregroundColor(isCLI ? .accentColor : .purple.opacity(0.9))
+                    .foregroundColor(isDark ? .white : (isCLI ? .accentColor : .purple))
                 
                 Text(viewModel.activeModelDisplayName)
                     .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundColor(.primary.opacity(0.85))
+                    .foregroundColor(primaryTextColor.opacity(0.90))
                     .lineLimit(1)
                 
                 Image(systemName: "chevron.down")
                     .font(.system(size: 7.5, weight: .bold))
-                    .foregroundColor(.secondary.opacity(0.6))
+                    .foregroundColor(secondaryTextColor)
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2.5)
             .background(
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.primary.opacity(0.04))
+                    .fill(isDark ? Color.white.opacity(0.10) : Color.primary.opacity(0.05))
             )
         }
         .menuStyle(.borderlessButton)
@@ -209,11 +237,11 @@ public struct ModernChatInputCardView: View {
                         .scaleEffect(0.55)
                     Text(String(format: "%.1fs", viewModel.thinkingElapsedSeconds))
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundColor(.accentColor)
+                        .foregroundColor(isDark ? .white : .accentColor)
                 }
                 .padding(.horizontal, 6)
                 .frame(height: 24)
-                .background(Color.accentColor.opacity(0.12))
+                .background(isDark ? Color.white.opacity(0.20) : Color.accentColor.opacity(0.12))
                 .cornerRadius(6)
             } else {
                 let hasInput = !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -222,11 +250,15 @@ public struct ModernChatInputCardView: View {
                 }) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(hasInput ? .white : .secondary.opacity(0.4))
+                        .foregroundColor(hasInput ? .white : (isDark ? Color.white.opacity(0.40) : Color.secondary.opacity(0.45)))
                         .frame(width: 24, height: 24)
                         .background(
                             RoundedRectangle(cornerRadius: 6)
-                                .fill(hasInput ? Color.accentColor : Color.primary.opacity(0.08))
+                                .fill(hasInput ? (isDark ? Color.white.opacity(0.30) : Color.accentColor) : (isDark ? Color.white.opacity(0.10) : Color.primary.opacity(0.06)))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(isDark ? Color.white.opacity(hasInput ? 0.50 : 0.15) : Color.primary.opacity(hasInput ? 0.20 : 0.08), lineWidth: 0.8)
                         )
                 }
                 .buttonStyle(.plain)

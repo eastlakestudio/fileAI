@@ -20,7 +20,7 @@ public final class AutonomousCLIExecutor: @unchecked Sendable {
         }
         
         let targetURLs = fileItems.map { $0.url }
-        let baseDir = targetURLs.first?.deletingLastPathComponent() ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let baseDir = targetURLs.first?.deletingLastPathComponent() ?? AppWorkspace.defaultDirectory
         
         // 记录执行前的目录快照，用于自动探测新增/产物文件
         let initialFiles = Set(snapshotDirectoryFiles(at: baseDir))
